@@ -18,12 +18,14 @@ from app.schemas.injury import (
     EpisodeOut,
     PhaseAttemptOut,
     PhaseGateOut,
+    ProgressOut,
     SignoffIn,
     SignoffOut,
 )
 from app.schemas.protocol import PhaseOut, ProtocolOut
 from app.schemas.session import MetricSampleOut, PainLogIn, PainLogOut, TestResultIn
 from app.services.criteria.engine import evaluate_phase
+from app.services.progress import build_report
 from app.services.progression import advance_if_ready, assign_protocol
 
 router = APIRouter(prefix="/injuries", tags=["injuries"])
@@ -266,6 +268,16 @@ def record_test(payload: TestResultIn, episode: Episode, db: DbSession) -> Metri
     db.commit()
     db.refresh(sample)
     return sample
+
+
+@router.get("/{episode_id}/progress", response_model=ProgressOut)
+def get_progress(episode: Episode, db: DbSession) -> object:
+    """Everything the Progress screen draws.
+
+    Derived on read from completed sessions and the current gate, so it can
+    never disagree with the testing screen or with what the camera recorded.
+    """
+    return build_report(db, episode)
 
 
 @router.get("/{episode_id}/metrics", response_model=list[MetricSampleOut])

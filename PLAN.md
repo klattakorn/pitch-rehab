@@ -1,4 +1,4 @@
-# RehabFootball — plan to Sunday 6 September
+# Pitch Rehab — plan to Sunday 6 September
 
 15 days. One unit of work below = **a half day, about 3 hours.** Some days are one
 unit, some are two. If you only get one unit done on a two-unit day, use the buffer

@@ -1,8 +1,8 @@
-# RehabFootball — Rehab. Return. Perform.
+# Pitch Rehab — Smart Rehab. Stronger Comeback.
 
-> Renamed from คืนสู่สนาม / Return-To-Pitch. The interface is English only; the
-> backend still carries `*_th` columns so a Thai edition stays possible without a
-> schema change.
+> Renamed twice: คืนสู่สนาม / Return-To-Pitch → RehabFootball → **Pitch Rehab**. The
+> interface is English only; the backend still carries `*_th` columns so a Thai edition
+> stays possible without a schema change.
 
 
 Position-specific football rehabilitation. A player logs an injury, gets a programme
@@ -104,8 +104,20 @@ ruff check app tests
 cd web && npm install && node scripts/vendor-assets.mjs && npm run dev
 ```
 
-Open <http://localhost:5173> with the backend running in another terminal. Pick an
-exercise, and the webcam scores your form live.
+Open <https://localhost:5173> with the backend running in another terminal.
+
+**Five tabs, once you are in.**
+
+| Tab | What it is |
+|---|---|
+| **Home** | Current plan, today's session, the week at a glance |
+| **Plan** | All four phases as tabs — drills, doses, and which need the camera |
+| **Progress** | Overall percentage, accuracy over time, sessions per day, milestones |
+| **Test** | The exit-criteria gate: what still stands between you and the next phase |
+| **Profile** | Position, injury, connected apps, and what this is not |
+
+Before that there is a short linear onboarding — welcome → **position** → **injury** —
+because a programme cannot exist until both are known.
 
 **No internet needed.** MediaPipe's wasm and the pose model are copied into
 `web/public`, so nothing is fetched from a CDN at run time. Presentation wifi fails;
@@ -114,6 +126,17 @@ this removes that risk.
 A generated copy of the exercise library also sits in `web/src/fallback.ts` for the day
 the *backend* dies mid-demo — but nothing imports it yet, so today the app still needs
 the API. Wiring it up is task 3 in [PLAN.md](PLAN.md).
+
+### Pointing at the injury instead of naming it
+
+Seven medical names in a list is a quiz. The injury step shows a front and a back
+silhouette with a marker on each site, and the list beside it stays in step — tap
+either. The front/back split does real work: the two most common injuries here sit on
+opposite sides of the leg, a hamstring behind the thigh and an ACL in front of the knee.
+
+`bodymap.test.ts` pins the parts that would fail silently — every site the server has a
+protocol for has a marker, no two markers overlap enough to catch the wrong tap, and the
+hamstring is on the back.
 
 **It works on a phone**, which took more than a media query — see
 [Running it on a phone](#running-it-on-a-phone) below.
@@ -514,6 +537,7 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 | Method | Path | |
 |---|---|---|
 | `GET` | `/catalog/positions` | The six roles and what each one changes — powers the role picker |
+| `GET` | `/injuries/{id}/progress` | The Progress tab, derived on read — never stored |
 | `GET` | `/catalog/exercises` | Includes each `pose_rule` for on-device scoring |
 | `GET` | `/catalog/protocols` | All 30, filterable by position / injury site |
 | `GET` | `/catalog/protocols/{position}/{injury_site}` | Full 4-phase programme |
@@ -578,7 +602,7 @@ them, only derived numbers persist.
 
 ## Tests
 
-**76 on the server, 184 in the browser.** They cover what actually matters rather than
+**78 on the server, 206 in the browser.** They cover what actually matters rather than
 line count:
 
 - `test_pose.py` — angles match the pose they were built from; depth failures coach but
@@ -607,6 +631,10 @@ In `web/`:
   contract is pinned in a test rather than left to a visual check.
 - `render.test.ts` — the skeleton lands on the body whichever camera is in use, and the
   live readout is in English. Both are failures you would only catch by looking.
+- `bodymap.test.ts` — every injury the server has a protocol for has a marker on the
+  body, markers do not overlap, and the hamstring is on the back.
+- `charts.test.ts` — a day with no session is a gap in the line, never a zero. A chart
+  that plots "did not train" as 0% accuracy tells a player they failed.
 
 `tests/factories.py` builds synthetic 33-landmark traces, so the pose engine is tested
 without a camera.
@@ -654,14 +682,18 @@ app/
     criteria/  spec, resolver, engine
     health/    platform mapping, ingest
     progression.py
+    progress.py  what the Progress tab draws, derived from completed sessions
   data/        exercises, protocols, position norms   ← edit the library here
   api/routers/ auth, players, catalog, injuries, sessions, health
 tests/
 web/src/
-  main.ts      screen router: sign in → position → injury → home → session → camera
+  main.ts      the shell and every screen: onboarding, then five tabs
   roles.ts     the role picker: what choosing a position changes
+  bodymap.ts   front/back silhouettes with a marker per injury site
+  charts.ts    the accuracy line and the sessions bars, as plain SVG
   mediapipe.ts model choice, camera (front/rear, mirroring), screen wake lock
   motion.ts    entrances, counters, bars and rings — all reduced-motion aware
+  ui.ts        the mark, the icon set, the ring and bar
   pose/        the browser copy of the pose maths
   demo/        the animated how-to figure
   styles.css   palette, components, one motion language, and the phone rules

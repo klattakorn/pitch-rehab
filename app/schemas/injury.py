@@ -136,3 +136,60 @@ class BaselineOut(ORMModel):
     side: Side
     origin: str
     note: str | None
+
+
+# --------------------------------------------------------------------------
+# progress screen
+# --------------------------------------------------------------------------
+class TrendPointOut(BaseModel):
+    day: date
+    sessions: int
+    exercises: int
+    mean_form_score: float | None
+
+
+class TopExerciseOut(BaseModel):
+    key: str
+    name_en: str
+    sets: int
+    mean_form_score: float
+
+
+class MilestoneOut(BaseModel):
+    label_en: str
+    detail_en: str
+    reached: bool
+
+
+class SymmetryOut(BaseModel):
+    value: float
+    metric: str
+    label_en: str
+    samples: int
+
+
+class ProgressOut(BaseModel):
+    """Everything the Progress screen draws, derived from what the player did.
+
+    Nothing here is stored. It is recomputed from the same completed sessions
+    the camera wrote and the same gate the testing screen reads, so the two
+    screens cannot drift apart.
+    """
+
+    overall_pct: float
+    phase_key: PhaseKey
+    phase_order: int
+    phase_pct: float
+    criteria_passed: int
+    criteria_total: int
+    week_of: int
+    weeks_total: int
+    sessions_completed: int
+    exercises_completed: int
+    #: ``None`` rather than 0 when nothing has been scored yet -- a player three
+    #: days in has no accuracy, and 0% would read as failure.
+    mean_form_score: float | None
+    symmetry: SymmetryOut | None
+    trend: list[TrendPointOut]
+    top_exercises: list[TopExerciseOut]
+    milestones: list[MilestoneOut]

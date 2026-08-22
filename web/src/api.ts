@@ -1,4 +1,4 @@
-/** Client for the RehabFootball backend. Same-origin via the Vite proxy. */
+/** Client for the Pitch Rehab backend. Same-origin via the Vite proxy. */
 import type { Exercise, ExerciseRule } from "./pose/rules";
 
 const BASE = "/api/v1";
@@ -68,6 +68,7 @@ export interface Prescription {
   sets: number;
   reps: number | null;
   hold_seconds: number | null;
+  rest_seconds: number | null;
   tempo: string | null;
   side_mode: string;
   exercise: Exercise;
@@ -228,3 +229,80 @@ export const advancePhase = (episodeId: number) =>
 export function ruleFor(exercise: Exercise): ExerciseRule | null {
   return exercise.pose_rule;
 }
+
+// --------------------------------------------------------------- progress
+export interface TrendPoint {
+  day: string;
+  sessions: number;
+  exercises: number;
+  mean_form_score: number | null;
+}
+
+export interface TopExercise {
+  key: string;
+  name_en: string;
+  sets: number;
+  mean_form_score: number;
+}
+
+export interface Milestone {
+  label_en: string;
+  detail_en: string;
+  reached: boolean;
+}
+
+export interface Symmetry {
+  value: number;
+  metric: string;
+  label_en: string;
+  samples: number;
+}
+
+/** Derived on read from completed sessions and the live gate — never stored. */
+export interface Progress {
+  overall_pct: number;
+  phase_key: string;
+  phase_order: number;
+  phase_pct: number;
+  criteria_passed: number;
+  criteria_total: number;
+  week_of: number;
+  weeks_total: number;
+  sessions_completed: number;
+  exercises_completed: number;
+  /** null, not 0, when nothing has been scored yet. */
+  mean_form_score: number | null;
+  symmetry: Symmetry | null;
+  trend: TrendPoint[];
+  top_exercises: TopExercise[];
+  milestones: Milestone[];
+}
+
+export const progress = (episodeId: number) =>
+  request<Progress>(`/injuries/${episodeId}/progress`);
+
+/** The whole programme: four phases, each with its drills and its gate. */
+export interface Protocol {
+  id: number;
+  key: string;
+  position: string;
+  injury_site: string;
+  title_en: string;
+  summary_en: string | null;
+  phases: Phase[];
+}
+
+export const protocolFor = (episodeId: number) =>
+  request<Protocol>(`/injuries/${episodeId}/protocol`);
+
+/** What the health-sync path can actually take in, per platform. */
+export interface SupportedMetrics {
+  apple_health: Record<string, string>;
+  health_connect: Record<string, string>;
+  canonical_units: Record<string, string>;
+  derived: string[];
+  note: string;
+}
+
+export const supportedMetrics = () =>
+  request<SupportedMetrics>("/health/supported-metrics");

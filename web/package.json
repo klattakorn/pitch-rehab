@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "RehabFootball demo front end. Runs MediaPipe live in the browser.",
+  "description": "Pitch Rehab demo front end. Runs MediaPipe live in the browser.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

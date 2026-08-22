@@ -458,6 +458,77 @@ def test_setting_the_same_position_again_changes_nothing(
     assert after["protocol_id"] == before["protocol_id"]
     assert after["current_phase"] == before["current_phase"]
 
+def test_progress_is_derived_and_never_disagrees_with_the_testing_screen(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """The dashboard and the gate read the same source, so they cannot drift.
+
+    Nothing on the progress screen is stored -- it is recomputed from completed
+    sessions and the live gate every time it is asked for.
+    """
+    progress = client.get(f"{API}/injuries/{episode_id}/progress", headers=headers).json()
+    gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
+
+    assert progress["criteria_passed"] == gate["required_passed"]
+    assert progress["criteria_total"] == gate["required_total"]
+    assert progress["phase_key"] == gate["phase_key"]
+
+    # A fresh episode has done nothing. Those are zeroes; the accuracy is not --
+    # it is unmeasured, and 0% would read as failure rather than as no data.
+    assert progress["sessions_completed"] == 0
+    assert progress["exercises_completed"] == 0
+    assert progress["mean_form_score"] is None
+    assert progress["symmetry"] is None
+
+    # Overall progress spans the four phases, not just the current one.
+    assert progress["phase_order"] == 1
+    assert 0 <= progress["overall_pct"] <= 25
+
+    # The chart always has a full window, so it never renders as a stub.
+    assert len(progress["trend"]) == 28
+    assert all(point["mean_form_score"] is None for point in progress["trend"])
+
+    # Milestones say so plainly rather than showing an empty box.
+    assert progress["milestones"] and progress["milestones"][0]["reached"] is False
+
+
+def test_progress_counts_a_real_session(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    session_id = client.post(
+        f"{API}/injuries/{episode_id}/sessions", headers=headers, json={}
+    ).json()["id"]
+    uploaded = client.post(
+        f"{API}/sessions/{session_id}/sets",
+        headers=headers,
+        json={
+            "exercise_key": "prone_hamstring_curl",
+            "side": "left",
+            "image_width": 1280,
+            "image_height": 720,
+            "frames": frames_to_payload(
+                squat_trace(
+                    reps=3,
+                    peak_flexion=130.0,
+                    sagittal_axis="x",
+                    thigh_fixed=True,
+                    seconds_per_rep=3.0,
+                )
+            ),
+        },
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    client.post(f"{API}/sessions/{session_id}/complete", headers=headers, json={"rpe": 5})
+
+    progress = client.get(f"{API}/injuries/{episode_id}/progress", headers=headers).json()
+    assert progress["sessions_completed"] == 1
+    assert progress["exercises_completed"] == 1
+    assert progress["mean_form_score"] is not None
+
+    # Today is the last point in the window, and it is where the work landed.
+    assert progress["trend"][-1]["sessions"] == 1
+    assert progress["top_exercises"][0]["key"] == "prone_hamstring_curl"
+
 def test_a_tendinopathy_is_not_treated_like_a_torn_ligament(client: TestClient) -> None:
     """The two used to share one "knee" programme. They need opposite handling:
     a reconstructed ligament is protected early, a painful tendon is loaded."""

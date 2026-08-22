@@ -21,7 +21,7 @@ and the generated MediaPipe copies.
 What is left is putting it somewhere shared:
 
 ```bash
-gh repo create RehabFootball --private --source=. --push
+gh repo create pitch-rehab --private --source=. --push
 ```
 
 Then the other two clone it and work in branches. **Only one person edits a given file

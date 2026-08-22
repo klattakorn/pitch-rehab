@@ -1,14 +1,14 @@
 @echo off
 REM ===================================================================
-REM  RehabFootball - start everything.
+REM  Pitch Rehab - start everything.
 REM  Double-click this file, or run  start.bat  from a terminal.
 REM ===================================================================
 setlocal
 cd /d "%~dp0"
 
 echo.
-echo   REHABFOOTBALL
-echo   Rehab. Return. Perform.
+echo   PITCH REHAB
+echo   Smart Rehab. Stronger Comeback.
 echo.
 
 REM --- one-time setup, skipped once it has been done ------------------
@@ -51,10 +51,10 @@ if exist "web\.cert\cert.pem" set "SCHEME=https"
 
 REM --- start both servers in their own windows -------------------------
 echo   Starting the API on http://localhost:8000
-start "RehabFootball API" cmd /k "python -m uvicorn app.main:app --port 8000 --reload"
+start "Pitch Rehab API" cmd /k "python -m uvicorn app.main:app --port 8000 --reload"
 
 echo   Starting the app on %SCHEME%://localhost:5173
-start "RehabFootball Web" cmd /k "cd web && npx vite --port 5173"
+start "Pitch Rehab Web" cmd /k "cd web && npx vite --port 5173"
 
 echo.
 echo   Waiting for the app to come up...
