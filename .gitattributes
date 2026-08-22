@@ -1,0 +1,5 @@
+# Keep line endings identical for everyone, so a teammate's editor
+# does not show every file as changed.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.task binary

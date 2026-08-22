@@ -1,0 +1,538 @@
+# RehabFootball — Rehab. Return. Perform.
+
+> Renamed from คืนสู่สนาม / Return-To-Pitch. The interface is English only; the
+> backend still carries `*_th` columns so a Thai edition stays possible without a
+> schema change.
+
+
+Position-specific football rehabilitation. A player logs an injury, gets a programme
+built for **their position and their injury site**, does the exercises in front of
+their phone camera while MediaPipe scores their form, and only leaves a phase when
+every **exit criterion** actually passes — measured, not felt.
+
+```
+6 positions  ×  7 injury sites  =  42 protocols  ×  4 phases  ·  33 MediaPipe landmarks
+```
+
+Python/FastAPI backend plus a browser front end that runs MediaPipe live.
+
+---
+
+## Running it
+
+**Double-click `start.bat`.**
+
+That is the whole thing. It installs anything missing the first time, opens two
+server windows, waits until the app is up, and opens your browser at
+<http://localhost:5173>. To stop, close the two server windows.
+
+From a terminal it is the same:
+
+```bash
+start.bat
+```
+
+If you would rather run the two halves yourself, in two terminals:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+```bash
+cd web && npm run dev
+```
+
+First boot creates the SQLite schema and seeds all 42 protocols.
+
+| | |
+|---|---|
+| App | <http://localhost:5173> |
+| API docs | <http://localhost:8000/docs> |
+| Health check | <http://localhost:8000/healthz> |
+
+**Demo from the laptop, not a phone.** Browsers only hand over a camera on a secure
+origin — `localhost` counts, a plain `http://192.168.x.x` address does not.
+
+**Not sure where to start?** With the server running, in a second terminal:
+
+```bash
+python scripts/walkthrough.py
+```
+
+It creates a winger with a hamstring tear and drives the whole journey — assigns the
+protocol, scores a camera session, logs pain, syncs health data, and prints the exit
+criteria gate before and after so you can watch it unlock. Every step prints the
+endpoint it called, so you can repeat any of it by hand in `/docs`. Safe to re-run.
+
+### Checking the pose engine against a real video
+
+Everything in the test suite runs on skeletons generated in code. To find out
+whether it works on an actual body, film yourself doing an exercise and run:
+
+```bash
+python scripts/check_video.py squat.mp4 single_leg_squat --side left --out marked.mp4
+```
+
+It prints how often MediaPipe found you, how many reps it counted, the angles for
+each rep, and why any rep was rejected. `--out` writes a copy of your video with the
+skeleton and the live angles drawn on top — watch that back, because it shows
+immediately whether the numbers match what your body did.
+
+First run offers to download the MediaPipe pose model (~9 MB, from Google's official
+model host) into `models/`. Nothing is fetched until you say yes.
+
+```bash
+pytest
+```
+
+```bash
+ruff check app tests
+```
+
+---
+
+## The demo front end
+
+```bash
+cd web && npm install && node scripts/vendor-assets.mjs && npm run dev
+```
+
+Open <http://localhost:5173> with the backend running in another terminal. Pick an
+exercise, and the webcam scores your form live.
+
+**It runs offline.** MediaPipe's wasm and the pose model are copied into `web/public`,
+and a generated copy of the exercise library lives in `web/src/fallback.ts`, so nothing
+is fetched from the internet and the app still works if the backend is down.
+Presentation wifi fails; this removes the risk.
+
+**Camera permission needs a secure origin.** `localhost` counts as secure, a plain
+`http://192.168.x.x` address does not — so the laptop is the reliable demo, and opening
+it on a phone over wifi needs https.
+
+### Showing the player what "correct" looks like
+
+Before the camera starts, each exercise demonstrates itself: an animated figure, a
+diagram of where to put the phone, the coaching cue, and the list
+of what will actually be measured. There is also a "common mistake" toggle, so the
+fault the app is about to flag can be seen before it happens.
+
+The animation is **generated from the exercise's own scoring rule** — `web/src/demo/`
+reads `pose_rule`, takes the movement from `detection.signal` and the depth from the
+target threshold, and animates a figure that hits exactly that. So the demonstration
+cannot drift from the marking: change `knee_flexion ≥ 60` in `app/data/exercises.py`
+and the figure squats deeper. That also means no video needs filming for 24 exercises,
+and nothing is copied from anyone.
+
+If a real clip is ever recorded, `Exercise.demo_url` is already on the model and takes
+precedence.
+
+**One library, two runtimes.** The browser does not have its own copy of the
+thresholds: it fetches each `pose_rule` from `GET /catalog/exercises` and scores against
+that. The maths, though, is implemented twice — Python on the server, TypeScript in the
+browser — because live feedback cannot wait for a round trip. Two implementations is a
+real risk, so `web/src/pose/crosscheck.test.ts` pins them together against a fixture
+generated from the Python: identical joint angles on every frame, identical rep counts,
+identical fault codes. Regenerate it whenever `app/services/pose` changes:
+
+```bash
+python scripts/make_crosscheck_fixture.py
+```
+
+The live guards in `web/src/pose/live.ts` are the streaming version of the server's
+batch checks — the server compares each frame against the median of the whole set,
+which is not available at frame thirty, so the browser compares against a rolling
+three-second window instead.
+
+## How the pieces fit
+
+```
+  phone (MediaPipe Pose, 33 landmarks)        Apple Health / Health Connect
+                │  landmark frames                       │  records
+                ▼                                        ▼
+        POST /sessions/{id}/sets                 POST /health/sync
+                │                                        │
+       ┌────────▼─────────┐                     ┌────────▼─────────┐
+       │  pose engine     │                     │  health ingest   │
+       │  angles, reps,   │                     │  map + convert   │
+       │  form score      │                     │  + dedupe        │
+       └────────┬─────────┘                     └────────┬─────────┘
+                │                                        │
+                └──────────────► metric_sample ◄─────────┘
+                                      ▲   ▲
+                pain logs / PROs ─────┘   └───── field tests (hop, sprint, dyno)
+                                      │
+                          ┌───────────▼────────────┐
+                          │  exit-criteria engine  │  ← per-position targets
+                          └───────────┬────────────┘
+                                      ▼
+                              phase gate: pass / fail
+```
+
+Everything measurable lands in one table (`metric_sample`) under a namespaced key,
+and the criteria engine only ever reads from there. That is why a criterion can be
+written once and satisfied by a watch, a phone camera, a stopwatch, or a
+dynamometer without the engine caring which.
+
+---
+
+## The three engines
+
+### 1. Pose — `app/services/pose/`
+
+MediaPipe runs **on the device** (real-time coaching, works offline, no video leaves
+the phone). The app streams landmarks; the server **recomputes every angle from those
+landmarks** rather than trusting numbers the client calculated.
+
+| File | What it does |
+|---|---|
+| `landmarks.py` | The 33 MediaPipe landmarks, and `sided("knee", Side.LEFT)` lookups |
+| `geometry.py` | Joint angles, trunk lean, pelvic drop, knee valgus, heel raise, weight shift |
+| `rules.py` | `ExerciseRule` — what "good form" means for one movement |
+| `analyzer.py` | Rep segmentation, per-rep scoring, violations, form score, metric emission |
+
+An `ExerciseRule` is data, stored as JSON on `exercise.pose_rule`, so the app can
+fetch it and run the *same* thresholds live on-device:
+
+```jsonc
+{
+  "mode": "rep",
+  "view": "front",
+  "detection": { "signal": "knee_flexion", "enter": 30, "exit": 15, "min_amplitude": 20 },
+  "targets": [
+    { "metric": "knee_flexion", "aggregate": "peak", "min": 60, "code": "depth_insufficient" },
+    { "metric": "knee_valgus",  "aggregate": "peak", "max": 8, "critical": true,
+      "code": "knee_valgus", "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง" }
+  ],
+  "emit": [ { "metric": "knee_flexion", "as_key": "pose.slsq_knee_flexion" } ]
+}
+```
+
+Two things worth knowing:
+
+- **`critical: true` invalidates the rep** (it does not count toward the prescribed
+  reps). Non-critical targets only cost form-score points — depth is coaching, knee
+  collapse is a safety stop.
+- **Rep detection uses hysteresis** (`enter` above `exit`), so a signal hovering at the
+  threshold cannot produce a burst of phantom reps.
+
+**Camera placement matters, and the rule says which.** From the front, knee flexion
+happens along the camera axis and is invisible in 2D, so front-view rules use
+MediaPipe's depth estimate (`use_z` defaults to `view == "front"`). Knee valgus is the
+opposite — it is measured strictly as horizontal deviation from the hip–ankle line,
+never as a 3-point angle, because in a 2D projection that angle is just knee flexion
+in disguise.
+
+### What real footage taught us
+
+The first video ever put through this engine produced garbage: one 15-second "rep",
+90° of knee collapse, a trunk leaning 175°. Three separate defects, all now fixed and
+covered by tests:
+
+**1. Normalized coordinates are not square.** MediaPipe divides x by the image width
+and y by the image height *separately*, so on a 1080×1920 phone video one x unit is a
+much shorter distance than one y unit. Every angle computed from raw coordinates is
+skewed — knee flexion read 21° too high. `Frame.from_payload` now takes an `aspect`,
+and `POST /sessions/{id}/sets` takes `image_width` / `image_height`. **Send them.**
+Without them the server assumes a square image and quietly gets everything wrong.
+
+**2. The camera was in the wrong place.** The clip was filmed side-on; the split-squat
+rule expects head-on. Angles measured from the wrong plane are not slightly off, they
+are meaningless, so `analyze_set` now detects the view (from how wide the shoulders and
+hips look — side-on measured 0.17, head-on 0.64) and raises `WrongCameraView`. The API
+turns that into a `422` with a bilingual "move the phone" message rather than a bad
+score. Those two things mean different things to a player and must not be blurred.
+
+**3. MediaPipe lies with total confidence.** When the player's head left the top of the
+shot, it returned a scrambled skeleton — body shrunk to 4% of normal height, shoulders
+below hips — while reporting 0.99 confidence on every landmark. Confidence scores
+cannot catch this. `implausible_frames` compares each frame against the rest of the set
+on apparent body size and torso direction, and drops the ones that disagree. Comparing
+against the set rather than against an anatomical rule keeps it working for lying-down
+exercises.
+
+**4. Some faults are invisible to the wrong camera, and the number is worse than
+nothing.** The player had deliberately let the back knee fall inward on the last two
+reps. Measured from the side, those reps showed +1.9° more valgus on one leg and 11°
+*less* on the other — no signal at all. Meanwhile the figure itself sat at a confident
++24° to +40° on every rep, good and bad alike, because a leg swinging forward gets
+misread as a knee drifting inward. `ExerciseRule` now refuses to build a `view="side"`
+rule that asks for `knee_valgus`, `pelvic_drop` or `weight_shift_ratio`. That guard
+immediately caught two exercises in this library — the glute bridge and the single-leg
+RDL — which had been scoring players on something their camera could not see.
+
+After the fixes, the same video reads 5 reps, 86–100° of knee bend, 12–19° of trunk
+lean — all plausible, with a `frequent_tracking_loss` warning telling the player to
+re-film. Reproduce with `scripts/check_video.py`.
+
+**Still unverified:** valgus detection has never been tested against a real body. It
+needs a front-on video of someone letting the knee collapse on purpose.
+
+### 2. Exit criteria — `app/services/criteria/`
+
+A criterion is declarative JSON. This is the whole vocabulary:
+
+```jsonc
+{
+  "metric": "health.running_speed",
+  "source": "health",
+  "aggregate": "max",          // latest | max | min | mean | median | p95 | sum | count
+  "window_days": 14,           // null = "any time during this injury episode"
+  "comparator": "gte",         // gte | gt | lte | lt | eq | between
+  "target": { "type": "percent_of_baseline", "value": 90 },
+  "scope": "any",              // any | injured | uninjured | both
+  "min_samples": 1             // stops one lucky rep clearing a gate
+}
+```
+
+Four target types:
+
+| Type | Means | Example |
+|---|---|---|
+| `absolute` | A raw threshold | pain ≤ 2/10 |
+| `percent_of_baseline` | % of *this player's own* number | max speed ≥ 90% of pre-injury |
+| `lsi` | Limb symmetry index, injured ÷ healthy × 100 | triple hop ≥ 90% |
+| `delta` | Baseline ± a raw amount | — |
+
+**Baseline resolution order** — stored personal baseline (healthy limb first) →
+90 days of pre-injury history (90th percentile) → position norm → `no_data`. The
+result reports which one it used, in `baseline_origin`, so nothing is silently
+invented.
+
+Evaluation returns per-criterion `status` (`pass` / `fail` / `no_data` /
+`pending_signoff`), the observed value, the target, and a **0–1 progress** number so
+the app can draw the poster's progress bars. `no_data` never counts as a pass, and
+optional criteria never block a phase.
+
+Two things the engine will not let you skip:
+
+- `min_days` per phase is a tissue-healing constraint, enforced regardless of how
+  good the numbers look.
+- Phase 4 always ends in a `manual.rtp_clearance` criterion. The app measures; a
+  human signs the release.
+
+Every gate evaluation that changes a phase is frozen into `phase_attempt.snapshot`,
+so a clinician can always answer *"why was this player cleared?"*.
+
+### 3. Health data — `app/services/health/`
+
+Neither HealthKit nor Health Connect has a server API — only the device can read the
+store. So the flow is:
+
+1. App requests read permission for the metrics its protocol actually uses.
+2. App queries with its saved anchor (`HKQueryAnchor` / Health Connect changes token).
+3. App `POST`s the delta to `/health/sync` with the platform's own record UUIDs.
+4. Backend maps type → canonical metric, converts units, **deduplicates on the UUID**,
+   and echoes the anchor back to store.
+
+Re-sending a window you already sent is a no-op, so a phone cannot double-count a run.
+
+`GET /health/supported-metrics` lists every type the backend understands, so the app
+can send a whole batch unfiltered and let the server ignore what it does not use.
+
+The two metrics most worth wiring up for rehab are Apple's
+`WalkingAsymmetryPercentage` and `WalkingDoubleSupportPercentage` — they expose a limp
+days before the player reports one. **High-speed running distance is derived** by the
+backend (neither platform exposes it): `sum(speed × duration)` for every sample above
+5.5 m/s, rolled up per day.
+
+---
+
+## Metric namespaces
+
+| Prefix | Written by | Examples |
+|---|---|---|
+| `pose.*` | The pose engine, on set upload | `pose.slsq_knee_flexion`, `pose.knee_flexion_rom`, `pose.landing_knee_valgus`, `pose.copenhagen_hold` |
+| `health.*` | `/health/sync`, or a manual entry | `health.running_speed`, `health.walking_asymmetry`, `health.distance_high_speed` |
+| `test.*` | `POST /injuries/{id}/tests` | `test.hop_triple`, `test.sprint_30m`, `test.iso_hamstring`, `test.heel_raise_reps` |
+| `pro.*` | Pain logs and session completion | `pro.pain_rest`, `pro.pain_activity`, `pro.confidence`, `pro.rpe` |
+| `session.*` | Computed on the fly, never stored | `session.days_in_phase`, `session.adherence_pct`, `session.pain_free_days`, `session.mean_form_score` |
+| `manual.*` | Clinician sign-off | `manual.rtp_clearance` |
+
+A criterion's `metric` **must** be namespaced with its own `source` — the schema
+rejects mismatches, so a typo cannot silently create a gate that never fires.
+
+---
+
+## The protocol library
+
+42 protocols are **composed**, not hand-written:
+
+```
+injury template (what the tissue needs)  +  position profile (what the job needs)
+```
+
+Edit these three files and re-seed — never the database by hand:
+
+| File | Holds |
+|---|---|
+| `app/data/exercises.py` | 27 exercises with their MediaPipe rules and Thai/English cues |
+| `app/data/protocols.py` | 7 injury templates × 4 phases, 6 position profiles, and the composer |
+| `app/data/position_norms.py` | Fallback reference values per position |
+
+The position profile is what makes the poster's claim real. Same hamstring tear:
+
+| Position | Speed to leave phase 3 | Speed to be cleared | Extra work |
+|---|---:|---:|---|
+| Winger | 90% | 97% | lateral bounds, repeated sprint, sprint-decrement gate |
+| Full back | 88% | 96% | repeated sprint, weekly distance gate |
+| Striker | 88% | 95% | heading jumps, CMJ symmetry |
+| Centre midfield | 85% | 93% | weekly distance gate |
+| Centre back | 85% | 92% | heading jumps, CMJ symmetry ≥ 92% |
+| Goalkeeper | 75% | 85% | dive landings, lateral landing-control gate |
+
+All percentages are of the **player's own** baseline, so the same rule means something
+different for every player as well as every position.
+
+Re-seeding replaces protocols wholesale (phases, prescriptions and criteria cascade),
+so the data files stay the single source of truth.
+
+---
+
+## API
+
+Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
+
+**Auth & player**
+
+| Method | Path | |
+|---|---|---|
+| `POST` | `/auth/register` | Players must pick a position — it decides their protocol |
+| `POST` | `/auth/login` | Same 401 for unknown email and wrong password |
+| `GET` | `/auth/me` | |
+| `PATCH` | `/players/me/profile` | |
+| `GET` `PUT` | `/players/me/baselines` | Personal reference values for `percent_of_baseline` |
+| `GET` | `/players/me/reference-values` | What the engine would use with no baseline stored |
+
+**Catalog**
+
+| Method | Path | |
+|---|---|---|
+| `GET` | `/catalog/exercises` | Includes each `pose_rule` for on-device scoring |
+| `GET` | `/catalog/protocols` | All 30, filterable by position / injury site |
+| `GET` | `/catalog/protocols/{position}/{injury_site}` | Full 4-phase programme |
+| `GET` | `/catalog/phases` | |
+
+**Injury episode**
+
+| Method | Path | |
+|---|---|---|
+| `POST` | `/injuries` | Opens an episode and auto-assigns the position × injury protocol |
+| `GET` | `/injuries` · `/injuries/{id}` | |
+| `GET` | `/injuries/{id}/today` | The exercises for the current phase |
+| `GET` | `/injuries/{id}/protocol` | |
+| `GET` | `/injuries/{id}/exit-criteria` | **The pass/fail screen.** `?phase=` to preview another |
+| `POST` | `/injuries/{id}/advance` | Moves on only if every required gate passed |
+| `GET` | `/injuries/{id}/attempts` | Frozen audit trail of every gate decision |
+| `POST` | `/injuries/{id}/signoff` | Clinician only (403 for players) |
+| `POST` `GET` | `/injuries/{id}/pain-logs` | |
+| `POST` | `/injuries/{id}/tests` | Field test results — send `side` for symmetry gates |
+| `GET` | `/injuries/{id}/metrics` | Raw samples |
+
+**Sessions**
+
+| Method | Path | |
+|---|---|---|
+| `POST` | `/injuries/{id}/sessions` | |
+| `POST` | `/sessions/{id}/sets` | Landmark frames in, scored reps + violations out |
+| `POST` | `/sessions/{id}/complete` | |
+
+**Health**
+
+| Method | Path | |
+|---|---|---|
+| `POST` | `/health/sync` | Idempotent batch ingest |
+| `GET` | `/health/supported-metrics` | |
+
+### Uploading a set
+
+```jsonc
+POST /api/v1/sessions/12/sets
+{
+  "exercise_key": "single_leg_squat",
+  "side": "left",
+  "prescribed_reps": 10,
+  "space": "image",              // or "world" for pose_world_landmarks
+  "keep_frames": false,          // true stores a downsampled trace for the physio
+  "frames": [
+    { "t": 0.000, "landmarks": [ {"x":0.51,"y":0.22,"z":-0.10,"visibility":0.99}, /* ×33 */ ] },
+    { "t": 0.033, "landmarks": [ /* ×33 */ ] }
+  ]
+}
+```
+
+Response gives per-rep validity, form score, the violations with **bilingual coaching
+cues**, and the metrics that were pushed to the criteria engine. Drills with no camera
+rule (running, agility) send `completed_reps` instead of frames.
+
+Raw frames are **not** stored by default — the phone streams them, the server scores
+them, only derived numbers persist.
+
+---
+
+## Tests
+
+57 tests, all passing. They cover what actually matters rather than line count:
+
+- `test_pose.py` — angles match the pose they were built from; depth failures coach but
+  still count the rep while knee collapse invalidates it; hysteresis rejects threshold
+  chatter; low visibility is reported, not silently scored; front-view flexion genuinely
+  needs depth.
+- `test_criteria.py` — absolute / percent-of-baseline / LSI targets; injured-limb scope
+  ignores a great number on the healthy side; the same injury gets a different speed
+  target per position; `min_samples`; sign-off gating; `min_days` blocks even with
+  perfect numbers; clearing the last phase closes the episode.
+- `test_health.py` — type mapping, unit conversion, re-sync is a no-op, unmapped types
+  are reported not swallowed, HSR derivation, pre-injury baseline derivation.
+- `test_api_flow.py` — the whole journey the app will make, plus authorisation edges
+  (players cannot sign themselves off, cannot read another player's episode).
+
+`tests/factories.py` builds synthetic 33-landmark traces, so the pose engine is tested
+without a camera.
+
+---
+
+## Read this before it touches a real player
+
+- **This is a training aid, not a medical device.** Nothing here diagnoses. Phase 4
+  always requires a human sign-off, deliberately.
+- **The thresholds are defaults, not clinical truth.** The exit criteria follow common
+  return-to-sport practice (LSI ≥ 90%, pain ≤ 2/10, staged speed exposure), but a
+  physio should review and adjust every one for your setting before use.
+- **`app/data/position_norms.py` is configuration.** Those numbers exist only so a
+  first-time user with no history gets a concrete target instead of a wall. Replace
+  them with your own testing data.
+- **The Thai copy is a first pass.** Have a Thai-speaking physio review the wording —
+  exercise names and coaching cues especially.
+- **MediaPipe's depth estimate is rough.** It is good enough for the flexion thresholds
+  used here; it is not motion capture. Camera placement per `rule.view` matters more
+  than any of the maths.
+
+## Not done yet
+
+- **Alembic.** `create_all` is fine while the schema moves; add migrations before the
+  first real deployment.
+- **Refresh tokens, rate limiting, password reset, email verification.** Auth is a
+  single long-lived access token today.
+- **Postgres.** Everything is Postgres-ready (`RTP_DATABASE_URL`), but it has only been
+  run on SQLite.
+- **`RTP_SECRET_KEY` must be set in production** — the app refuses to boot with the dev
+  key when `RTP_ENV=prod`.
+- The frontend.
+
+## Layout
+
+```
+app/
+  core/        config, enums, JWT + password hashing
+  db/          engine, session, base types, seeding
+  models/      SQLAlchemy tables
+  schemas/     Pydantic request/response models
+  services/
+    pose/      landmarks, geometry, rules, analyzer
+    criteria/  spec, resolver, engine
+    health/    platform mapping, ingest
+    progression.py
+  data/        exercises, protocols, position norms   ← edit the library here
+  api/routers/ auth, players, catalog, injuries, sessions, health
+tests/
+```

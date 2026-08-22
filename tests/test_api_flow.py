@@ -1,0 +1,398 @@
+﻿"""End-to-end walk through the flow the mobile app will actually make."""
+
+from __future__ import annotations
+
+from datetime import UTC, date, datetime, timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+
+from tests.factories import frames_to_payload, squat_trace
+
+API = "/api/v1"
+
+
+def auth_headers(client: TestClient, email: str, position: str = "winger") -> dict[str, str]:
+    client.post(
+        f"{API}/auth/register",
+        json={
+            "email": email,
+            "password": "correct-horse-battery",
+            "full_name": "Test Player",
+            "position": position,
+        },
+    )
+    token = client.post(
+        f"{API}/auth/login", json={"email": email, "password": "correct-horse-battery"}
+    ).json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def headers(client: TestClient) -> dict[str, str]:
+    return auth_headers(client, f"flow-{datetime.now(UTC).timestamp()}@rtpapp.com")
+
+
+@pytest.fixture
+def episode_id(client: TestClient, headers: dict[str, str]) -> int:
+    response = client.post(
+        f"{API}/injuries",
+        headers=headers,
+        json={
+            "injury_site": "hamstring",
+            "side": "left",
+            "injured_on": (date.today() - timedelta(days=20)).isoformat(),
+            "severity": "grade_2",
+        },
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["id"]
+
+
+def test_health_endpoint_needs_no_auth(client: TestClient) -> None:
+    assert client.get("/healthz").json()["status"] == "ok"
+
+
+def test_protected_endpoints_reject_anonymous_callers(client: TestClient) -> None:
+    assert client.get(f"{API}/injuries").status_code == 401
+
+
+def test_registration_requires_a_position_for_players(client: TestClient) -> None:
+    response = client.post(
+        f"{API}/auth/register",
+        json={"email": "nopos@rtpapp.com", "password": "correct-horse-battery",
+              "full_name": "No Position"},
+    )
+    assert response.status_code == 422
+    assert "position" in response.json()["detail"]
+
+
+def test_login_does_not_reveal_whether_an_email_exists(client: TestClient) -> None:
+    unknown = client.post(
+        f"{API}/auth/login", json={"email": "ghost@rtpapp.com", "password": "whatever12"}
+    )
+    auth_headers(client, "known@rtpapp.com")
+    wrong = client.post(
+        f"{API}/auth/login", json={"email": "known@rtpapp.com", "password": "wrong-password"}
+    )
+    assert unknown.status_code == wrong.status_code == 401
+    assert unknown.json()["detail"] == wrong.json()["detail"]
+
+
+def test_creating_an_injury_assigns_the_position_specific_protocol(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    episode = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    assert episode["protocol_id"] is not None
+    assert episode["current_phase"] == "p1_protect"
+
+    protocol = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
+    assert protocol["position"] == "winger"
+    assert protocol["injury_site"] == "hamstring"
+    assert len(protocol["phases"]) == 4
+
+
+def test_reseeding_the_library_does_not_strand_a_player(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """Regression: the seeder used to delete and recreate every protocol, which
+    detached anyone mid-rehab and left them with no programme."""
+    from app.db.seed import seed_all
+    from app.db.session import SessionLocal
+
+    before = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    assert before["protocol_id"] is not None
+
+    with SessionLocal() as db:
+        seed_all(db)
+
+    after = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    assert after["protocol_id"] == before["protocol_id"]
+    # And the plan still resolves rather than 404-ing.
+    assert client.get(f"{API}/injuries/{episode_id}/today", headers=headers).status_code == 200
+
+
+def test_today_returns_the_current_phase_plan(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    plan = client.get(f"{API}/injuries/{episode_id}/today", headers=headers).json()
+    assert plan["phase_key"] == "p1_protect"
+    assert len(plan["prescriptions"]) > 0
+    assert any(c["required"] for c in plan["exit_criteria"])
+    # Every prescription carries the rule the phone needs to score it live.
+    for rx in plan["prescriptions"]:
+        assert "pose_rule" in rx["exercise"]
+
+
+def test_a_full_session_is_scored_and_feeds_the_exit_criteria(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    session_id = client.post(
+        f"{API}/injuries/{episode_id}/sessions",
+        headers=headers,
+        json={"device": "pytest", "app_version": "0.1.0"},
+    ).json()["id"]
+
+    # Phase 1 for a hamstring asks for 120 degrees of pain-free knee flexion.
+    frames = squat_trace(
+        reps=4, peak_flexion=130.0, sagittal_axis="x", thigh_fixed=True, seconds_per_rep=3.0
+    )
+    response = client.post(
+        f"{API}/sessions/{session_id}/sets",
+        headers=headers,
+        json={
+            "exercise_key": "prone_hamstring_curl",
+            "side": "left",
+            "prescribed_reps": 12,
+            "frames": frames_to_payload(frames),
+        },
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["completed_reps"] == 4
+    assert result["valid_reps"] == 4
+    assert result["form_score"] > 90
+    assert {e["key"] for e in result["emitted"]} == {"pose.knee_flexion_rom"}
+
+    completed = client.post(
+        f"{API}/sessions/{session_id}/complete",
+        headers=headers,
+        json={"rpe": 5, "pain_during": 1, "pain_after": 1},
+    )
+    assert completed.json()["status"] == "completed"
+
+    gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
+    rom = next(c for c in gate["criteria"] if c["key"] == "knee_rom")
+    assert rom["status"] == "pass"
+    assert rom["observed"] == pytest.approx(130.0, abs=3.0)
+    assert gate["passed"] is False  # other gates still open
+    assert "knee_rom" not in gate["blocking"]
+
+
+def test_wrong_camera_angle_tells_the_player_to_move_the_phone(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    session_id = client.post(
+        f"{API}/injuries/{episode_id}/sessions", headers=headers, json={}
+    ).json()["id"]
+    # single_leg_squat must be filmed head-on; send footage shot from the side.
+    response = client.post(
+        f"{API}/sessions/{session_id}/sets",
+        headers=headers,
+        json={
+            "exercise_key": "single_leg_squat",
+            "side": "left",
+            "image_width": 1080,
+            "image_height": 1920,
+            "frames": frames_to_payload(
+                squat_trace(reps=4, peak_flexion=80.0, sagittal_axis="x")
+            ),
+        },
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["error"] == "wrong_camera_view"
+    assert detail["expected_view"] == "front"
+    assert detail["detected_view"] == "side"
+    assert detail["message_th"]
+
+    # Nothing was written — a rejected set must not leave half a set behind.
+    metrics = client.get(
+        f"{API}/injuries/{episode_id}/metrics",
+        headers=headers,
+        params={"metric_key": "pose.slsq_knee_flexion"},
+    ).json()
+    assert metrics == []
+
+
+def test_camera_scored_exercises_reject_an_empty_upload(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    session_id = client.post(
+        f"{API}/injuries/{episode_id}/sessions", headers=headers, json={}
+    ).json()["id"]
+    response = client.post(
+        f"{API}/sessions/{session_id}/sets",
+        headers=headers,
+        json={"exercise_key": "prone_hamstring_curl", "side": "left", "frames": []},
+    )
+    assert response.status_code == 422
+    assert "landmark frames" in response.json()["detail"]
+
+
+def test_drills_with_no_camera_rule_are_logged_manually(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    session_id = client.post(
+        f"{API}/injuries/{episode_id}/sessions", headers=headers, json={}
+    ).json()["id"]
+    response = client.post(
+        f"{API}/sessions/{session_id}/sets",
+        headers=headers,
+        json={"exercise_key": "progressive_running", "completed_reps": 1},
+    )
+    assert response.status_code == 200
+    assert response.json()["warnings"] == ["manually_logged"]
+
+
+def test_frame_payloads_must_carry_all_33_landmarks(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    session_id = client.post(
+        f"{API}/injuries/{episode_id}/sessions", headers=headers, json={}
+    ).json()["id"]
+    response = client.post(
+        f"{API}/sessions/{session_id}/sets",
+        headers=headers,
+        json={
+            "exercise_key": "prone_hamstring_curl",
+            "frames": [{"t": 0.0, "landmarks": [{"x": 0.5, "y": 0.5}] * 12}],
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_pain_logs_flow_into_the_pro_criteria(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    for days_ago in range(5):
+        response = client.post(
+            f"{API}/injuries/{episode_id}/pain-logs",
+            headers=headers,
+            json={
+                "recorded_at": (datetime.now(UTC) - timedelta(days=days_ago)).isoformat(),
+                "pain_rest": 0,
+                "pain_activity": 1,
+                "confidence": 88,
+            },
+        )
+        assert response.status_code == 201
+
+    gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
+    pain = next(c for c in gate["criteria"] if c["key"] == "pain_at_rest")
+    assert pain["status"] == "pass"
+    streak = next(c for c in gate["criteria"] if c["key"] == "pain_free_days")
+    assert streak["observed"] >= 3
+
+
+def test_health_sync_is_accepted_and_deduplicated(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    payload = {
+        "platform": "apple_health",
+        "device_id": "iphone-15",
+        "anchor": "anchor-token-1",
+        "records": [
+            {
+                "type": "HKQuantityTypeIdentifierRunningSpeed",
+                "value": 30.6,
+                "unit": "km/h",
+                "start_at": (datetime.now(UTC) - timedelta(hours=2)).isoformat(),
+                "external_id": "hk-uuid-aaa",
+            }
+        ],
+    }
+    first = client.post(f"{API}/health/sync", headers=headers, json=payload).json()
+    second = client.post(f"{API}/health/sync", headers=headers, json=payload).json()
+    assert first["stored"] == 1
+    assert second["stored"] == 0 and second["duplicates"] == 1
+    assert first["anchor"] == "anchor-token-1"
+
+    samples = client.get(
+        f"{API}/injuries/{episode_id}/metrics",
+        headers=headers,
+        params={"metric_key": "health.running_speed"},
+    ).json()
+    assert len(samples) == 1
+    assert samples[0]["value"] == pytest.approx(8.5, abs=0.01)  # converted from km/h
+
+
+def test_players_cannot_sign_themselves_off(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    response = client.post(
+        f"{API}/injuries/{episode_id}/signoff",
+        headers=headers,
+        json={"phase_key": "p4_return", "approved": True},
+    )
+    assert response.status_code == 403
+
+
+def test_a_player_cannot_read_another_players_episode(
+    client: TestClient, episode_id: int
+) -> None:
+    other = auth_headers(client, "intruder@rtpapp.com", position="striker")
+    assert client.get(f"{API}/injuries/{episode_id}", headers=other).status_code == 404
+
+
+def test_advance_refuses_while_gates_are_open(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    response = client.post(f"{API}/injuries/{episode_id}/advance", headers=headers).json()
+    assert response["advanced"] is False
+    assert response["episode"]["current_phase"] == "p1_protect"
+    assert response["gate"]["blocking"]
+
+
+def test_catalog_exposes_every_position_and_injury_combination(
+    client: TestClient,
+) -> None:
+    protocols = client.get(f"{API}/catalog/protocols").json()
+    assert len(protocols) == 42  # 6 positions x 7 injury sites
+    combos = {(p["position"], p["injury_site"]) for p in protocols}
+    assert len(combos) == 42
+
+    winger = client.get(f"{API}/catalog/protocols/winger/hamstring").json()
+    keeper = client.get(f"{API}/catalog/protocols/goalkeeper/hamstring").json()
+
+    def speed_target(protocol: dict) -> float:
+        phase = next(p for p in protocol["phases"] if p["phase_key"] == "p3_running")
+        criterion = next(c for c in phase["exit_criteria"] if c["key"] == "speed_vs_baseline")
+        return criterion["spec"]["target"]["value"]
+
+    # Same injury, different job: the winger has to run faster to be let back.
+    assert speed_target(winger) == 90
+    assert speed_target(keeper) == 75
+
+
+def test_a_tendinopathy_is_not_treated_like_a_torn_ligament(client: TestClient) -> None:
+    """The two used to share one "knee" programme. They need opposite handling:
+    a reconstructed ligament is protected early, a painful tendon is loaded."""
+    acl = client.get(f"{API}/catalog/protocols/winger/acl").json()
+    tendon = client.get(f"{API}/catalog/protocols/winger/patellar_tendinopathy").json()
+
+    def phase_one(protocol: dict) -> dict:
+        return next(p for p in protocol["phases"] if p["phase_key"] == "p1_protect")
+
+    acl_exercises = {rx["exercise"]["key"] for rx in phase_one(acl)["prescriptions"]}
+    tendon_exercises = {rx["exercise"]["key"] for rx in phase_one(tendon)["prescriptions"]}
+    assert acl_exercises != tendon_exercises
+    # The tendon programme loads it from day one.
+    assert "spanish_squat" in tendon_exercises
+
+    # And it tolerates pain that would block an acute injury.
+    tendon_pain = next(
+        c for c in phase_one(tendon)["exit_criteria"] if c["key"] == "tendon_pain_during"
+    )
+    acl_pain = next(
+        c for c in phase_one(acl)["exit_criteria"] if c["key"] == "pain_at_rest"
+    )
+    assert tendon_pain["spec"]["target"]["value"] > acl_pain["spec"]["target"]["value"]
+
+
+def test_every_running_phase_is_gated_on_change_of_direction(client: TestClient) -> None:
+    """Cutting is where knees and groins get hurt, so straight-line speed alone
+    must not clear anyone."""
+    for site in ("hamstring", "acl", "ankle", "adductor", "groin", "calf"):
+        protocol = client.get(f"{API}/catalog/protocols/winger/{site}").json()
+        for key in ("p3_running", "p4_return"):
+            phase = next(p for p in protocol["phases"] if p["phase_key"] == key)
+            keys = {c["key"] for c in phase["exit_criteria"]}
+            assert "change_of_direction" in keys, f"{site} {key}"
+
+
+def test_supported_health_metrics_are_discoverable(client: TestClient) -> None:
+    body = client.get(f"{API}/health/supported-metrics").json()
+    assert "HKQuantityTypeIdentifierRunningSpeed" in body["apple_health"]
+    assert "SpeedRecord" in body["health_connect"]
+    assert body["canonical_units"]["health.running_speed"] == "m/s"

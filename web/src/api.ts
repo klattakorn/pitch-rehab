@@ -1,0 +1,202 @@
+/** Client for the RehabFootball backend. Same-origin via the Vite proxy. */
+import type { Exercise, ExerciseRule } from "./pose/rules";
+
+const BASE = "/api/v1";
+const TOKEN_KEY = "rf_token";
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly detail: unknown,
+  ) {
+    super(typeof detail === "string" ? detail : `request failed (${status})`);
+  }
+}
+
+let token: string | null = localStorage.getItem(TOKEN_KEY);
+
+export const isSignedIn = (): boolean => token !== null;
+
+export function signOut(): void {
+  token = null;
+  localStorage.removeItem(TOKEN_KEY);
+}
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers);
+  headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`${BASE}${path}`, { ...init, headers });
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  if (!response.ok) throw new ApiError(response.status, body?.detail ?? body);
+  return body as T;
+}
+
+const post = <T>(path: string, body: unknown) =>
+  request<T>(path, { method: "POST", body: JSON.stringify(body) });
+
+// ---------------------------------------------------------------- types
+export interface Profile {
+  id: number;
+  position: string;
+  dominant_foot: string;
+}
+
+export interface User {
+  id: number;
+  email: string;
+  full_name: string;
+  role: string;
+  profile: Profile | null;
+}
+
+export interface Episode {
+  id: number;
+  injury_site: string;
+  side: string;
+  severity: string;
+  injured_on: string;
+  status: string;
+  current_phase: string;
+  protocol_id: number | null;
+}
+
+export interface Prescription {
+  id: number;
+  order_index: number;
+  sets: number;
+  reps: number | null;
+  hold_seconds: number | null;
+  tempo: string | null;
+  side_mode: string;
+  exercise: Exercise;
+}
+
+export interface Phase {
+  id: number;
+  phase_key: string;
+  order_index: number;
+  title_en: string;
+  goal_en: string | null;
+  min_days: number;
+  sessions_per_week: number;
+  prescriptions: Prescription[];
+  exit_criteria: { key: string; label_en: string; required: boolean }[];
+}
+
+export interface CriterionResult {
+  key: string;
+  label_en: string;
+  metric: string;
+  source: string;
+  required: boolean;
+  status: "pass" | "fail" | "no_data" | "pending_signoff";
+  observed: number | null;
+  target: number | null;
+  unit: string | null;
+  progress: number;
+  detail_en: string;
+  baseline_origin: string | null;
+}
+
+export interface Gate {
+  episode_id: number;
+  phase_key: string;
+  passed: boolean;
+  progress: number;
+  required_total: number;
+  required_passed: number;
+  next_phase: string | null;
+  criteria: CriterionResult[];
+  blocking: string[];
+}
+
+export interface SetUpload {
+  exercise_key: string;
+  side: string;
+  frames: { t: number; landmarks: unknown[] }[];
+  image_width: number;
+  image_height: number;
+  prescribed_reps?: number | null;
+}
+
+export interface SetResult {
+  set_id: number;
+  completed_reps: number;
+  valid_reps: number;
+  form_score: number;
+  warnings: string[];
+  emitted: { key: string; value: number; unit: string; side: string | null }[];
+}
+
+// ---------------------------------------------------------------- calls
+export async function backendUp(): Promise<boolean> {
+  try {
+    return (await fetch("/healthz")).ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function login(email: string, password: string): Promise<void> {
+  const body = await post<{ access_token: string }>("/auth/login", { email, password });
+  token = body.access_token;
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export async function register(input: {
+  email: string;
+  password: string;
+  full_name: string;
+  position: string;
+}): Promise<void> {
+  await post("/auth/register", input);
+  await login(input.email, input.password);
+}
+
+export const me = () => request<User>("/auth/me");
+export const listExercises = () => request<Exercise[]>("/catalog/exercises");
+export const listEpisodes = () => request<Episode[]>("/injuries?status_filter=active");
+export const todayPlan = (episodeId: number) => request<Phase>(`/injuries/${episodeId}/today`);
+export const exitCriteria = (episodeId: number) =>
+  request<Gate>(`/injuries/${episodeId}/exit-criteria`);
+export interface SessionRow {
+  id: number;
+  status: string;
+  started_at: string;
+  pain_during: number | null;
+  pain_after: number | null;
+}
+
+export const listSessions = (episodeId: number) =>
+  request<SessionRow[]>(`/injuries/${episodeId}/sessions?limit=200`);
+
+export const startSession = (episodeId: number) =>
+  post<{ id: number }>(`/injuries/${episodeId}/sessions`, {
+    device: "web",
+    app_version: "0.1.0",
+  });
+export const uploadSet = (sessionId: number, payload: SetUpload) =>
+  post<SetResult>(`/sessions/${sessionId}/sets`, payload);
+export const completeSession = (sessionId: number, body: Record<string, unknown>) =>
+  post(`/sessions/${sessionId}/complete`, body);
+
+export const createEpisode = (input: {
+  injury_site: string;
+  side: string;
+  injured_on: string;
+  severity?: string;
+  phase_started_at?: string;
+}) => post<Episode>("/injuries", input);
+
+export const logPain = (episodeId: number, body: Record<string, unknown>) =>
+  post(`/injuries/${episodeId}/pain-logs`, body);
+
+export const advancePhase = (episodeId: number) =>
+  post<{ advanced: boolean; gate: Gate }>(`/injuries/${episodeId}/advance`, {});
+
+/** Rules come from the server so the live scoring and the marking cannot diverge. */
+export function ruleFor(exercise: Exercise): ExerciseRule | null {
+  return exercise.pose_rule;
+}

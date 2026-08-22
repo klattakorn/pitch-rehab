@@ -1,0 +1,35 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# --- the database (each person keeps their own; reseed with scripts/) ---
+rtp.db
+rtp.db-shm
+rtp.db-wal
+*.sqlite3
+
+# --- node ---
+web/node_modules/
+web/dist/
+web/.vite/
+
+# --- generated: run `node scripts/vendor-assets.mjs` inside web/ to rebuild ---
+# (both are copies of files already tracked under models/ and node_modules)
+web/public/mediapipe/
+web/public/models/
+
+# --- test footage lives in the shared Drive folder, not in git (too big) ---
+videos/
+*.mp4
+*.mov
+!videos/README.md
+
+# --- editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
