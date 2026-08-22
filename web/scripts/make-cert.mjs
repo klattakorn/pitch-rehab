@@ -32,7 +32,28 @@ export const CERT_DIR = join(web, ".cert");
 const KEY = join(CERT_DIR, "key.pem");
 const CERT = join(CERT_DIR, "cert.pem");
 
-/** Every IPv4 address this machine has on a local network. */
+/**
+ * Is this address on a virtual adapter rather than the real network?
+ *
+ * A laptop with VirtualBox, Docker or a VPN installed reports several IPv4
+ * addresses, and only one of them is the wifi the phone is also on. Printed in
+ * whatever order Windows happens to list them, someone types the wrong one into
+ * their phone and concludes the app is broken.
+ */
+function isVirtual(address) {
+  return (
+    address.startsWith("192.168.56.") || // VirtualBox host-only
+    address.startsWith("169.254.") || // link-local: no DHCP answered
+    /^172\.(1[7-9]|2\d|3[01])\./.test(address) // Docker bridges
+  );
+}
+
+/**
+ * Every IPv4 address this machine has on a local network, most likely first.
+ *
+ * The certificate covers all of them — listing an extra one there costs
+ * nothing. The order only matters for what a person is asked to type.
+ */
 export function localAddresses() {
   const found = [];
   for (const addresses of Object.values(networkInterfaces())) {
@@ -41,7 +62,7 @@ export function localAddresses() {
       found.push(address.address);
     }
   }
-  return found;
+  return found.sort((a, b) => Number(isVirtual(a)) - Number(isVirtual(b)));
 }
 
 function haveOpenssl() {
@@ -63,7 +84,16 @@ function haveOpenssl() {
 function printUrls() {
   const scheme = existsSync(CERT) ? "https" : "http";
   const port = process.env["RTP_PORT"] ?? "5173";
-  for (const address of localAddresses()) console.log(`${scheme}://${address}:${port}`);
+  for (const line of phoneUrls(scheme, port)) console.log(line);
+}
+
+/** One line per address: the likely one first, the rest marked as spares. */
+export function phoneUrls(scheme = "https", port = "5173") {
+  return localAddresses().map((address, index) =>
+    index === 0
+      ? `${scheme}://${address}:${port}`
+      : `${scheme}://${address}:${port}   (spare - try if the first will not load)`,
+  );
 }
 
 async function main() {
@@ -148,7 +178,7 @@ async function main() {
     );
   } else {
     console.log("\nOpen on your phone (same wifi):");
-    for (const address of addresses) console.log(`  https://${address}:5173`);
+    for (const line of phoneUrls()) console.log(`  ${line}`);
     console.log("\nIt will warn about the certificate once. Tap through it.");
   }
 }
