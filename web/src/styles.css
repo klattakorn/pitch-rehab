@@ -149,10 +149,12 @@ h3 {
     transform 0.15s,
     background 0.15s;
 }
-.card:hover {
-  border-color: var(--green-deep);
-  background: var(--panel-2);
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .card:hover {
+    border-color: var(--green-deep);
+    background: var(--panel-2);
+    transform: translateY(-2px);
+  }
 }
 .card:active {
   transform: translateY(-1px) scale(0.995);
@@ -192,10 +194,12 @@ button.primary {
     box-shadow 0.2s;
   box-shadow: 0 6px 20px -14px var(--green);
 }
-button.primary:hover:not(:disabled) {
-  filter: brightness(1.08);
-  transform: translateY(-1px);
-  box-shadow: 0 12px 28px -14px var(--green);
+@media (hover: hover) {
+  button.primary:hover:not(:disabled) {
+    filter: brightness(1.08);
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px -14px var(--green);
+  }
 }
 button.primary:active:not(:disabled) {
   transform: translateY(0) scale(0.985);
@@ -222,9 +226,11 @@ button.ghost {
     border-color 0.16s,
     transform 0.12s var(--ease);
 }
-button.ghost:hover {
-  color: var(--text);
-  border-color: var(--muted);
+@media (hover: hover) {
+  button.ghost:hover {
+    color: var(--text);
+    border-color: var(--muted);
+  }
 }
 button.ghost:active {
   transform: scale(0.985);
@@ -444,7 +450,11 @@ ul.criteria li.optional {
   height: 100%;
   object-fit: cover;
 }
-.stage video {
+/* Mirrored only for the front camera, so the player sees themselves the way a
+   mirror would. A rear camera is already the right way round -- flipping it
+   would put their left leg on the right of the screen. `drawSkeleton` is told
+   the same thing so the overlay stays stuck to the body. */
+.stage.mirrored video {
   transform: scaleX(-1);
 }
 
@@ -868,10 +878,15 @@ main {
     transform 0.18s var(--ease),
     box-shadow 0.24s;
 }
-.role-card:hover {
-  border-color: var(--green-deep);
-  background: var(--panel-2);
-  transform: translateY(-3px);
+@media (hover: hover) {
+  .role-card:hover {
+    border-color: var(--green-deep);
+    background: var(--panel-2);
+    transform: translateY(-3px);
+  }
+  .role-card:hover .tick {
+    border-color: var(--green-deep);
+  }
 }
 .role-card:active {
   transform: translateY(-1px) scale(0.995);
@@ -906,9 +921,6 @@ main {
   transition:
     border-color 0.2s,
     background 0.2s;
-}
-.role-card:hover .tick {
-  border-color: var(--green-deep);
 }
 .role-card.on .tick {
   border-color: var(--green);
@@ -1074,12 +1086,298 @@ ul.role-changes .v {
   padding: 0 9px;
   transition: color 0.18s;
 }
-.tagbtn:hover {
-  border-color: var(--green-deep);
-  background: var(--panel-2);
+@media (hover: hover) {
+  .tagbtn:hover {
+    border-color: var(--green-deep);
+    background: var(--panel-2);
+  }
+  .tagbtn:hover em {
+    color: var(--green);
+  }
 }
-.tagbtn:hover em {
+
+/* ==========================================================================
+   Phones
+   --------------------------------------------------------------------------
+   A phone is not a small laptop. It has a notch, a browser bar that grows and
+   shrinks as you scroll, a keyboard that eats half the screen, and a habit of
+   turning itself off while you are three metres away doing a squat.
+
+   The rules below fix the things that actually break rather than shrinking
+   everything by 10%. Ordered from "affects every screen" to "affects the
+   camera screen", which is the one that matters most.
+   ========================================================================== */
+
+/* --- things that were only ever right on a mouse ------------------------- */
+
+button,
+.card,
+.role-card,
+.tagbtn,
+.chip,
+.step {
+  /* Grey flash on tap, and a long press selecting the label as text. Both look
+     like the app is broken rather than responding. */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+html {
+  /* Stops a double-tap zooming the whole interface, and pull-to-refresh from
+     reloading the page mid-set. */
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: contain;
+}
+
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* --- form fields --------------------------------------------------------- */
+
+input[type="email"],
+input[type="password"],
+input[type="text"],
+input[type="number"] {
+  width: 100%;
+  margin: 8px 0 14px;
+  padding: 13px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: inherit;
+  /* Exactly 16px, not 15. Safari on iOS zooms the page when you focus a field
+     smaller than this, and never zooms back out. */
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+input:last-of-type {
+  margin-bottom: 0;
+}
+input:focus {
+  outline: none;
+  border-color: var(--green-deep);
+}
+
+/* --- the notch and the home indicator ------------------------------------ */
+
+.topbar {
+  padding-top: max(14px, env(safe-area-inset-top));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+}
+
+main {
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-bottom: max(40px, env(safe-area-inset-bottom));
+}
+
+/* --- camera screen ------------------------------------------------------- */
+
+/* The HUD ignores taps so it never blocks the video; anything inside it that is
+   actually a control has to opt back in. */
+.hud-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.iconbtn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px is the smallest target a thumb hits reliably. */
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid rgba(242, 245, 243, 0.22);
+  background: rgba(6, 8, 7, 0.66);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    background 0.16s,
+    border-color 0.16s;
+}
+.iconbtn:active {
+  background: rgba(6, 8, 7, 0.9);
+  border-color: var(--green);
   color: var(--green);
+}
+@media (hover: hover) {
+  .iconbtn:hover {
+    border-color: var(--green-deep);
+    color: var(--green);
+  }
+}
+
+/* Tightened headings, because on a phone the camera should be the screen --
+   not a thing you scroll down to find. */
+h2.tight {
+  font-size: 19px;
+}
+.sub.tight {
+  margin-bottom: 12px;
+}
+
+@media (max-width: 760px) {
+  h2.tight {
+    font-size: 17px;
+  }
+  .sub.tight {
+    /* Two lines of coaching cue at most; the same words are on the how-to
+       screen the player just came from. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+
+  /* A standing player is tall. A 4:3 landscape box crops them at the knees, so
+     portrait phones get a portrait frame. `dvh` rather than `vh` because the
+     browser bar slides away as you scroll and `vh` does not notice. */
+  .stage {
+    aspect-ratio: 3 / 4;
+    max-height: 62dvh;
+  }
+
+  .repbox .count {
+    font-size: 38px;
+  }
+  .readout {
+    font-size: 11px;
+    min-width: 128px;
+  }
+  .cue,
+  .blocker {
+    font-size: 14px;
+    padding: 10px 15px;
+  }
+
+  /* Finish set has to be reachable with a thumb without scrolling, whatever the
+     video did to the page height. */
+  .controls.sticky {
+    position: sticky;
+    bottom: 0;
+    margin-top: 14px;
+    padding: 12px 0 max(12px, env(safe-area-inset-bottom));
+    background: linear-gradient(to top, var(--bg) 62%, transparent);
+  }
+  .controls.sticky button {
+    flex: 1;
+    min-height: 48px;
+  }
+}
+
+/* Propped sideways, the frame should be wide again. */
+@media (max-width: 940px) and (orientation: landscape) {
+  .stage {
+    aspect-ratio: 16 / 9;
+    max-height: 74dvh;
+  }
+}
+
+/* --- everything else, at phone width ------------------------------------- */
+
+@media (max-width: 560px) {
+  main {
+    padding-top: 18px;
+  }
+  h2 {
+    font-size: 21px;
+  }
+  .hello + .name {
+    font-size: 24px;
+  }
+
+  /* One column beats two cramped ones. */
+  .grid,
+  .role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tiles {
+    gap: 8px;
+  }
+  .tile {
+    padding: 12px 6px;
+  }
+  .tile .n {
+    font-size: 21px;
+  }
+  .tile .k {
+    font-size: 10px;
+  }
+
+  /* Buttons go full width and get a real thumb target. */
+  .controls {
+    gap: 10px;
+  }
+  .controls button {
+    flex: 1 1 auto;
+    min-height: 48px;
+  }
+  button.primary,
+  button.ghost {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* The verdict ring and its text stack rather than squeezing side by side. */
+  .result {
+    gap: 16px;
+    padding: 16px;
+    justify-content: center;
+  }
+  .ring {
+    width: 116px;
+    height: 116px;
+  }
+
+  ul.criteria li {
+    gap: 10px;
+    padding: 12px;
+  }
+  ul.criteria .what {
+    font-size: 13px;
+  }
+  ul.criteria .val {
+    font-size: 12px;
+  }
+
+  .reps {
+    font-size: 12px;
+  }
+  .reps .row {
+    gap: 10px;
+    padding: 9px 4px;
+  }
+
+  .brand {
+    font-size: 15px;
+  }
+  .brand small {
+    font-size: 9px;
+  }
+}
+
+/* The how-to figure and its notes stack below the breakpoint the demo panel
+   already declares; the toggle chips just need to stay thumb-sized. */
+@media (max-width: 760px) {
+  .chip {
+    min-height: 44px;
+  }
+  .where {
+    padding: 12px;
+  }
 }
 
 /* ==========================================================================
@@ -1099,7 +1397,10 @@ ul.role-changes .v {
     transition-duration: 0.001ms !important;
   }
   .role-card:hover,
-  .card:hover {
+  .role-card:active,
+  .card:hover,
+  .card:active,
+  button.primary:hover:not(:disabled) {
     transform: none;
   }
 }

@@ -46,12 +46,19 @@ First boot creates the SQLite schema and seeds all 42 protocols.
 
 | | |
 |---|---|
-| App | <http://localhost:5173> |
+| App | <https://localhost:5173> |
 | API docs | <http://localhost:8000/docs> |
 | Health check | <http://localhost:8000/healthz> |
 
-**Demo from the laptop, not a phone.** Browsers only hand over a camera on a secure
-origin — `localhost` counts, a plain `http://192.168.x.x` address does not.
+**On a phone**, `start.bat` prints an address to open — something like
+`https://192.168.0.46:5173`. Same wifi as the laptop. The phone warns about the
+certificate once (Android: *Advanced → Proceed*; iOS: *Show Details → visit this
+website*); tap through and the camera works.
+
+That warning is unavoidable and expected. A browser will not open a camera unless the
+page came from a secure origin — `localhost` is exempt, a plain `http://192.168.x.x`
+address is not — so the dev server signs its own certificate, which no phone has any
+reason to trust. See [Running it on a phone](#running-it-on-a-phone).
 
 **Not sure where to start?** With the server running, in a second terminal:
 
@@ -108,9 +115,63 @@ A generated copy of the exercise library also sits in `web/src/fallback.ts` for 
 the *backend* dies mid-demo — but nothing imports it yet, so today the app still needs
 the API. Wiring it up is task 3 in [PLAN.md](PLAN.md).
 
-**Camera permission needs a secure origin.** `localhost` counts as secure, a plain
-`http://192.168.x.x` address does not — so the laptop is the reliable demo, and opening
-it on a phone over wifi needs https.
+**It works on a phone**, which took more than a media query — see
+[Running it on a phone](#running-it-on-a-phone) below.
+
+### Running it on a phone
+
+The app is meant to be used with a phone propped up while you exercise, so it has to
+actually work on one. Four things were in the way, and all four are handled by
+`start.bat`.
+
+**1. The camera needs https.** A browser will not call `getUserMedia` unless the page
+came from a secure origin. `localhost` is exempt by special case; the
+`http://192.168.x.x` address a phone has to use is not — so on plain http the pose
+detection, which is the entire point of the app, simply cannot run there.
+
+`web/scripts/make-cert.mjs` generates a self-signed certificate covering `localhost`
+and every local network address this machine has, and Vite serves https when it finds
+one. The phone warns once, because nothing has any reason to trust a certificate this
+laptop signed for itself. Tap through it.
+
+```bash
+cd web && node scripts/make-cert.mjs --force
+```
+
+Re-run that with `--force` whenever the laptop's network address changes, or the phone
+will reject the certificate. `RTP_HTTPS=0` forces plain http back on for anything that
+cannot click through the warning.
+
+Only the browser-facing origin has to be secure. The API stays on plain http and Vite
+proxies to it, a hop that never leaves the machine.
+
+**2. The big model is too slow.** `pose_landmarker_full` is what the laptop runs and
+what the cross-check fixtures were generated from. On a mid-range phone it is a
+slideshow. `pose_landmarker_lite` is a little over half the size and several times
+faster, and `mediapipe.ts` picks it on any device with a coarse pointer. This only ever
+downgrades on hardware that cannot run the full model well — smooth bad advice is still
+bad advice.
+
+**3. Phones have two cameras.** The one you want depends on whether you can see the
+screen. A flip button appears when the device reports more than one.
+
+Which one is showing changes more than the picture: a front camera is mirrored so you
+see yourself the way a mirror would, and a rear camera is not. The preview is flipped in
+CSS and the skeleton is flipped in JavaScript, and if those two ever disagree the
+skeleton slides to the wrong side of the screen while every angle it reports stays
+correct — which looks exactly like the pose engine failing. `render.test.ts` pins them
+together.
+
+**4. The screen turns itself off.** You prop the phone up and walk three metres away.
+Without a wake lock the screen sleeps mid-set, the video track stalls and the rep count
+stops — again, indistinguishable from the engine breaking. `keepScreenAwake()` holds one
+for as long as the camera is running and re-acquires it when you come back to the tab.
+
+Beyond the camera, the usual phone tax: 16px form fields so iOS does not zoom and never
+zoom back, safe-area padding for the notch, a portrait 3:4 camera frame (a standing
+player in a 4:3 landscape box is cropped at the knees) that turns 16:9 when the phone
+does, a sticky **Finish set** button, 44px touch targets, and hover states behind
+`@media (hover: hover)` so they do not latch on after a tap.
 
 ### Choosing a position, before anything else
 
@@ -517,7 +578,7 @@ them, only derived numbers persist.
 
 ## Tests
 
-**76 on the server, 173 in the browser.** They cover what actually matters rather than
+**76 on the server, 184 in the browser.** They cover what actually matters rather than
 line count:
 
 - `test_pose.py` — angles match the pose they were built from; depth failures coach but
@@ -544,6 +605,8 @@ In `web/`:
 - `roles.test.ts` — what a position changes, and the attribute hooks the animations
   find their work by. Motion that quietly stops working breaks nothing else, so the
   contract is pinned in a test rather than left to a visual check.
+- `render.test.ts` — the skeleton lands on the body whichever camera is in use, and the
+  live readout is in English. Both are failures you would only catch by looking.
 
 `tests/factories.py` builds synthetic 33-landmark traces, so the pose engine is tested
 without a camera.
@@ -597,8 +660,12 @@ tests/
 web/src/
   main.ts      screen router: sign in → position → injury → home → session → camera
   roles.ts     the role picker: what choosing a position changes
+  mediapipe.ts model choice, camera (front/rear, mirroring), screen wake lock
   motion.ts    entrances, counters, bars and rings — all reduced-motion aware
   pose/        the browser copy of the pose maths
   demo/        the animated how-to figure
-  styles.css   palette, components, and one motion language for the lot
+  styles.css   palette, components, one motion language, and the phone rules
+web/scripts/
+  make-cert.mjs     self-signed https, so a phone will open its camera
+  vendor-assets.mjs copies the wasm and both pose models into public/
 ```

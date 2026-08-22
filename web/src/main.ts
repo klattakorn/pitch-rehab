@@ -12,7 +12,13 @@ import "./styles.css";
 import * as api from "./api";
 import type { Episode, Gate, Phase, Prescription } from "./api";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
-import { createPoseLandmarker, startCamera } from "./mediapipe";
+import type { Facing } from "./mediapipe";
+import {
+  createPoseLandmarker,
+  hasMultipleCameras,
+  keepScreenAwake,
+  startCamera,
+} from "./mediapipe";
 import { enterScreen, pulse } from "./motion";
 import { Frame } from "./pose/geometry";
 import type { Side } from "./pose/landmarks";
@@ -24,6 +30,7 @@ import {
   CAMERA_ICON,
   CROSS,
   DASH,
+  FLIP_ICON,
   TICK,
   bar,
   progressRing,
@@ -119,16 +126,12 @@ function signInScreen(notice = ""): void {
     <div class="dash">
       ${notice ? `<div class="notice">${notice}</div>` : ""}
       <div class="panel">
-        <label class="label">Email</label>
+        <label class="label" for="email">Email</label>
         <input id="email" type="email" value="alex@rehabfootball.app"
-          style="width:100%;margin:8px 0 14px;padding:11px;border-radius:9px;
-            border:1px solid var(--line);background:var(--panel-2);color:var(--text);
-            font-family:inherit;font-size:15px" />
-        <label class="label">Password</label>
+          autocomplete="email" autocapitalize="off" autocorrect="off" spellcheck="false" />
+        <label class="label" for="password">Password</label>
         <input id="password" type="password" value="correct-horse-battery"
-          style="width:100%;margin:8px 0 0;padding:11px;border-radius:9px;
-            border:1px solid var(--line);background:var(--panel-2);color:var(--text);
-            font-family:inherit;font-size:15px" />
+          autocomplete="current-password" />
       </div>
       <button class="primary" id="go">Continue</button>
       <p class="sub" style="text-align:center;margin:0">
@@ -486,25 +489,34 @@ function howToScreen(rx: Prescription): void {
 }
 
 // ------------------------------------------------------------------ camera
-async function cameraScreen(rx: Prescription): Promise<void> {
+async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<void> {
   const exercise = rx.exercise;
   const rule = exercise.pose_rule!;
   const side: Side = rx.side_mode === "bilateral" ? "bilateral" : (rx.side_mode as Side);
+  const twoCameras = await hasMultipleCameras();
 
   shell(`
-    <h2>${exercise.name_en}</h2>
-    <p class="sub">${exercise.cue_en ?? ""}</p>
+    <h2 class="tight">${exercise.name_en}</h2>
+    <p class="sub tight">${exercise.cue_en ?? ""}</p>
     <div class="stage">
-      <video id="cam" playsinline muted></video>
+      <video id="cam" playsinline muted autoplay></video>
       <canvas id="overlay"></canvas>
       <div class="hud">
-        <div class="readout" id="readout">Starting…</div>
+        <div class="hud-top">
+          <div class="readout" id="readout">Starting…</div>
+          ${
+            twoCameras
+              ? `<button class="iconbtn" id="flip" title="Switch camera"
+                   aria-label="Switch camera">${FLIP_ICON}</button>`
+              : ""
+          }
+        </div>
         <div id="centre"></div>
         <div class="repbox"><div class="count" id="count">0</div>
           <div class="of">of ${rx.reps ?? "—"} reps</div></div>
       </div>
     </div>
-    <div class="controls">
+    <div class="controls sticky">
       <button class="ghost" id="back">Back</button>
       <button class="primary" id="finish">Finish set</button>
     </div>`);
@@ -514,9 +526,16 @@ async function cameraScreen(rx: Prescription): Promise<void> {
   const readout = app.querySelector<HTMLDivElement>("#readout")!;
   const centre = app.querySelector<HTMLDivElement>("#centre")!;
   const countEl = app.querySelector<HTMLDivElement>("#count")!;
+  const stage = app.querySelector<HTMLDivElement>(".stage")!;
   const ctx = canvas.getContext("2d")!;
 
-  const camera = await startCamera(video);
+  const camera = await startCamera(video, facing);
+  // A rear camera is already the right way round; flipping it would put the
+  // player's left leg on the right of the screen.
+  stage.classList.toggle("mirrored", camera.mirrored);
+  // The phone is propped up and the player is three metres away. Without this
+  // the screen sleeps mid-set and the rep count simply stops.
+  const releaseWakeLock = keepScreenAwake();
   const landmarker = await createPoseLandmarker();
   canvas.width = camera.width;
   canvas.height = camera.height;
@@ -532,6 +551,7 @@ async function cameraScreen(rx: Prescription): Promise<void> {
 
   const stop = () => {
     running = false;
+    releaseWakeLock();
     camera.stop();
     landmarker.close();
   };
@@ -540,10 +560,16 @@ async function cameraScreen(rx: Prescription): Promise<void> {
     stop();
     sessionScreen();
   });
+  on("#flip", () => {
+    stop();
+    // Reopening is the only reliable way to change camera: swapping the track
+    // in place leaves Safari showing the old one.
+    void cameraScreen(rx, camera.facing === "user" ? "environment" : "user").catch(fail);
+  });
   on("#finish", () => {
     const outcome = session.finish();
     stop();
-    summaryScreen(rx, outcome, camera.width, camera.height, side);
+    summaryScreen(rx, outcome, camera.width, camera.height, side, camera.facing);
   });
 
   const loop = (): void => {
@@ -556,7 +582,7 @@ async function cameraScreen(rx: Prescription): Promise<void> {
       if (points && points.length >= 33) {
         const frame = Frame.from((performance.now() - started) / 1000, points, aspect);
         const result = session.push(frame);
-        drawSkeleton(ctx, frame, result.accepted);
+        drawSkeleton(ctx, frame, result.accepted, camera.mirrored);
         renderReadout(readout, result, show);
         if (result.validRepCount !== shownReps) {
           shownReps = result.validRepCount;
@@ -591,6 +617,7 @@ function summaryScreen(
   width: number,
   height: number,
   side: Side,
+  facing: Facing,
 ): void {
   const rows = outcome.reps
     .map(
@@ -618,7 +645,7 @@ function summaryScreen(
     </div>
     <p class="sub" id="savestate" style="text-align:center;margin-top:12px"></p>`);
 
-  on("#again", () => cameraScreen(rx).catch(fail));
+  on("#again", () => cameraScreen(rx, facing).catch(fail));
   on("#back", () => sessionScreen());
   on("#save", () => {
     const note = app.querySelector<HTMLElement>("#savestate")!;

@@ -35,11 +35,25 @@ if not exist "web\public\mediapipe" (
   if errorlevel 1 goto :modelfail
 )
 
+REM --- https, so a phone camera works --------------------------------
+REM Browsers only allow camera access on a secure origin. localhost is
+REM exempt; the 192.168.x.x address a phone needs is not. A self-signed
+REM certificate is what closes that gap.
+if not exist "web\.cert\cert.pem" (
+  echo   Making a certificate so phones can use their camera...
+  pushd web
+  call node scripts\make-cert.mjs
+  popd
+)
+
+set "SCHEME=http"
+if exist "web\.cert\cert.pem" set "SCHEME=https"
+
 REM --- start both servers in their own windows -------------------------
 echo   Starting the API on http://localhost:8000
 start "RehabFootball API" cmd /k "python -m uvicorn app.main:app --port 8000 --reload"
 
-echo   Starting the app on http://localhost:5173
+echo   Starting the app on %SCHEME%://localhost:5173
 start "RehabFootball Web" cmd /k "cd web && npx vite --port 5173"
 
 echo.
@@ -49,7 +63,7 @@ set /a tries=0
 set /a tries+=1
 REM `timeout` needs a console; `ping` sleeps the same way anywhere.
 ping -n 2 127.0.0.1 >nul 2>&1
-curl -s -o nul http://localhost:5173/ 2>nul
+curl -s -k -o nul %SCHEME%://localhost:5173/ 2>nul
 if not errorlevel 1 goto :ready
 if %tries% lss 45 goto :wait
 echo   Still not up. Check the two windows that opened for an error.
@@ -59,12 +73,34 @@ goto :end
 echo.
 echo   Ready. Opening your browser.
 echo.
-echo     App    http://localhost:5173
+echo     App    %SCHEME%://localhost:5173
 echo     API    http://localhost:8000/docs
 echo.
+
+if not "%SCHEME%"=="https" goto :nophone
+
+echo   ON YOUR PHONE - same wifi as this laptop:
+REM Node knows the addresses. Parsing ipconfig would only work on an
+REM English-language Windows, because it translates its own labels.
+pushd web
+for /f "usebackq delims=" %%A in (`node scripts\make-cert.mjs --urls`) do echo     %%A
+popd
+echo.
+echo   The phone will warn about the certificate once - that is expected.
+echo   Android: Advanced, then Proceed.   iPhone: Show Details, then visit.
+echo.
+goto :howtostop
+
+:nophone
+echo   Phone camera will NOT work - the app is on plain http.
+echo   Run:  cd web ^&^& node scripts\make-cert.mjs
+echo   then start again.
+echo.
+
+:howtostop
 echo   To stop: close the two server windows.
 echo.
-start http://localhost:5173
+start %SCHEME%://localhost:5173
 goto :end
 
 :pyfail

@@ -302,8 +302,11 @@ out loud, timed. Write down everything that goes wrong. Fix only those things.
 
 Two hard facts to plan around:
 
-- The camera only works on `localhost` or `https`. **Demo from the laptop, not a
-  phone**, and not from another machine on the network.
+- The camera needs a secure origin. `start.bat` now serves the app over https and
+  prints a phone address, so a phone works — but **rehearse on whichever device you
+  will actually demo from**, and accept the certificate warning on it beforehand, not
+  in front of an audience. If the laptop's IP changes, re-run
+  `cd web && node scripts/make-cert.mjs --force`.
 - Room lighting changes what MediaPipe sees. If you can, rehearse where you will present.
 
 ---

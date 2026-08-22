@@ -64,6 +64,20 @@ export function titleCase(value: string): string {
     .join(" ");
 }
 
+/** Switch between the front and rear camera. Phones have two; laptops do not. */
+export const FLIP_ICON = `
+  <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
+    <path d="M4 8.5 A8 8 0 0 1 18.5 6.2" fill="none" stroke="currentColor"
+      stroke-width="1.9" stroke-linecap="round"/>
+    <path d="M20 15.5 A8 8 0 0 1 5.5 17.8" fill="none" stroke="currentColor"
+      stroke-width="1.9" stroke-linecap="round"/>
+    <path d="M18.9 2.6 L18.9 6.6 L14.9 6.6" fill="none" stroke="currentColor"
+      stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M5.1 21.4 L5.1 17.4 L9.1 17.4" fill="none" stroke="currentColor"
+      stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="12" cy="12" r="2.6" fill="none" stroke="currentColor" stroke-width="1.9"/>
+  </svg>`;
+
 /** Marks anything measured by the camera rather than typed in or synced. */
 export const CAMERA_ICON = `
   <svg viewBox="0 0 24 24" class="cam-icon" aria-hidden="true">

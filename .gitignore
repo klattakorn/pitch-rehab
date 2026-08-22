@@ -33,6 +33,9 @@ videos/*
 *.avi
 *.mkv
 
+# --- dev https certificate (machine-specific; regenerate with make-cert.mjs) ---
+web/.cert/
+
 # --- editors / OS ---
 .vscode/
 .idea/

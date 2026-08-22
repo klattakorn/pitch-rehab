@@ -75,7 +75,10 @@ export function renderReadout(el: HTMLElement, result: FrameResult, keys: string
   const rows = keys
     .filter((k) => result.metrics![k] !== undefined)
     .map((k) => {
-      const name = FRIENDLY[k]?.th ?? k;
+      // The interface is English. This read `.th` -- a leftover from before the
+      // rebrand -- so the camera screen, the most watched one in the app, was
+      // labelling its readings in Thai.
+      const name = FRIENDLY[k]?.en ?? k;
       const value = result.metrics![k]!;
       const unit = k.endsWith("_ratio") ? "" : "°";
       return `${name} <b>${value.toFixed(0)}${unit}</b>`;
