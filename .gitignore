@@ -23,10 +23,15 @@ web/public/mediapipe/
 web/public/models/
 
 # --- test footage lives in the shared Drive folder, not in git (too big) ---
-videos/
+# Ignore the *contents*, not the folder: git cannot un-ignore a file inside an
+# ignored directory, and videos/README.md is the filming brief everyone needs.
+videos/*
+!videos/README.md
 *.mp4
 *.mov
-!videos/README.md
+*.m4v
+*.avi
+*.mkv
 
 # --- editors / OS ---
 .vscode/
