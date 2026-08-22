@@ -3,18 +3,29 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import Clinician, CurrentPlayer, DbSession, Episode
 from app.core.enums import CriterionSource, EpisodeStatus, PhaseKey, Side
-from app.models.injury import ClinicianSignoff, InjuryEpisode, PhaseAttempt
+from app.data.authorable import CATALOGUE, GROUP_ORDER
+from app.models.injury import (
+    ClinicianSignoff,
+    EpisodeCriterion,
+    InjuryEpisode,
+    PhaseAttempt,
+)
 from app.models.metrics import MetricSample
-from app.models.protocol import Protocol, ProtocolPhase
+from app.models.protocol import Exercise, Protocol, ProtocolPhase
 from app.models.session import PainLog
 from app.schemas.injury import (
     AdvanceOut,
+    AuthorableCatalogueOut,
+    AuthorableExerciseOut,
+    AuthorableOut,
+    CriterionCreateIn,
     EpisodeCreateIn,
+    EpisodeCriterionOut,
     EpisodeOut,
     PhaseAttemptOut,
     PhaseGateOut,
@@ -24,6 +35,7 @@ from app.schemas.injury import (
 )
 from app.schemas.protocol import PhaseOut, ProtocolOut
 from app.schemas.session import MetricSampleOut, PainLogIn, PainLogOut, TestResultIn
+from app.services.criteria import authoring
 from app.services.criteria.engine import evaluate_phase
 from app.services.progress import build_report
 from app.services.progression import advance_if_ready, assign_protocol
@@ -129,6 +141,149 @@ def get_current_phase_plan(episode: Episode, db: DbSession) -> ProtocolPhase:
 def get_exit_criteria(episode: Episode, db: DbSession, phase: PhaseKey | None = None) -> dict:
     """Evaluate every gate for a phase. This is the pass/fail screen on the poster."""
     return evaluate_phase(db, episode, phase).to_dict()
+
+
+# --------------------------------------------------------------------------
+# criteria the player writes themselves
+# --------------------------------------------------------------------------
+@router.get("/criteria/authorable", response_model=AuthorableCatalogueOut)
+def list_authorable(db: DbSession) -> AuthorableCatalogueOut:
+    """What a player can build their own tests from.
+
+    The engine can gate on any metric key at all, which is exactly why this
+    exists: a free-text metric field would let someone create a test that no
+    part of the system ever writes a value for, and it would sit unmet forever.
+    """
+    scored = [
+        AuthorableExerciseOut(key=e.key, name_en=e.name_en, category=e.category)
+        for e in db.execute(select(Exercise).order_by(Exercise.name_en)).scalars()
+        if e.pose_rule is not None
+    ]
+    return AuthorableCatalogueOut(
+        groups=list(GROUP_ORDER),
+        metrics=[
+            AuthorableOut(
+                key=item.key,
+                source=item.source,
+                group=item.group,
+                label_en=item.label_en,
+                unit=item.unit,
+                help_en=item.help_en,
+                phrase_en=item.phrase_en,
+                default_target=item.default_target,
+                comparator=item.default_comparator,
+                lower_is_better=item.lower_is_better,
+                default_window_days=item.default_window_days,
+                target_types=list(item.target_types),
+                step=item.step,
+                needs_exercise=item.needs_exercise,
+            )
+            for item in CATALOGUE
+        ],
+        exercises=scored,
+    )
+
+
+@router.get("/{episode_id}/criteria", response_model=list[EpisodeCriterionOut])
+def list_custom_criteria(episode: Episode, db: DbSession) -> list[EpisodeCriterion]:
+    return list(
+        db.execute(
+            select(EpisodeCriterion)
+            .where(EpisodeCriterion.episode_id == episode.id)
+            .order_by(EpisodeCriterion.phase_key, EpisodeCriterion.order_index)
+        ).scalars()
+    )
+
+
+@router.put(
+    "/{episode_id}/criteria",
+    response_model=EpisodeCriterionOut,
+    status_code=status.HTTP_200_OK,
+)
+def upsert_custom_criterion(
+    payload: CriterionCreateIn,
+    episode: Episode,
+    db: DbSession,
+    player: CurrentPlayer,
+) -> EpisodeCriterion:
+    """Add a test of your own, or tighten one of the standard ones.
+
+    A PUT rather than a POST because the key is derived from what is being
+    measured: setting the same test twice edits it instead of leaving the player
+    with two versions of the same rule disagreeing on the gate.
+    """
+    phase_key = payload.phase_key or episode.current_phase
+    try:
+        item = authoring.resolve(payload.metric)
+        exercise = authoring.check_exercise(db, item, payload.exercise_key)
+        value = authoring.check_value(item, payload.target_type, payload.value)
+        key = payload.key or authoring.build_key(
+            item, payload.exercise_key, payload.target_type
+        )
+        authoring.check_override(db, episode, phase_key, key)
+        spec = authoring.build_spec(
+            item,
+            exercise_key=payload.exercise_key,
+            target_type=payload.target_type,
+            value=value,
+            window_days=payload.window_days,
+        )
+    except authoring.AuthoringError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
+
+    row = db.execute(
+        select(EpisodeCriterion)
+        .where(EpisodeCriterion.episode_id == episode.id)
+        .where(EpisodeCriterion.phase_key == phase_key)
+        .where(EpisodeCriterion.key == key)
+    ).scalar_one_or_none()
+
+    if row is None:
+        highest = db.execute(
+            select(func.max(EpisodeCriterion.order_index)).where(
+                EpisodeCriterion.episode_id == episode.id
+            )
+        ).scalar()
+        row = EpisodeCriterion(
+            episode_id=episode.id,
+            phase_key=phase_key,
+            key=key,
+            order_index=(highest or 0) + 1,
+            created_by_user_id=player.user_id,
+        )
+        db.add(row)
+
+    row.label_en = authoring.build_label(
+        item, exercise=exercise, target_type=payload.target_type, value=value
+    )
+    row.label_th = ""
+    row.help_en = item.help_en
+    row.required = payload.required
+    row.spec = spec.model_dump(mode="json")
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@router.delete("/{episode_id}/criteria/{key}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_custom_criterion(
+    key: str,
+    episode: Episode,
+    db: DbSession,
+    phase_key: PhaseKey | None = None,
+) -> None:
+    """Remove a test you added. If it was tightening a standard one, that
+    standard one comes back."""
+    row = db.execute(
+        select(EpisodeCriterion)
+        .where(EpisodeCriterion.episode_id == episode.id)
+        .where(EpisodeCriterion.phase_key == (phase_key or episode.current_phase))
+        .where(EpisodeCriterion.key == key)
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such custom criterion")
+    db.delete(row)
+    db.commit()
 
 
 @router.post("/{episode_id}/advance", response_model=AdvanceOut)

@@ -1935,6 +1935,245 @@ ul.targets li {
 }
 
 /* ==========================================================================
+   Writing your own test
+   --------------------------------------------------------------------------
+   The builder asks for two things — what to measure and the number — and shows
+   the resulting sentence live, because "Run at least 7.5 m/s" is something a
+   player can sanity-check and a spec object is not.
+   ========================================================================== */
+
+/* A criterion the player wrote, marked so the standard battery stays legible
+   as the standard battery. */
+ul.criteria li.mine {
+  border-color: color-mix(in srgb, var(--green) 30%, var(--line));
+  background: linear-gradient(
+    100deg,
+    color-mix(in srgb, var(--green) 7%, var(--panel)) 0%,
+    var(--panel) 55%
+  );
+}
+ul.criteria .src.yours {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.editbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  margin: -4px -4px -4px 2px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition:
+    color 0.16s,
+    background 0.16s;
+}
+.editbtn:active {
+  color: var(--green);
+  background: var(--green-glow);
+}
+@media (hover: hover) {
+  .editbtn:hover {
+    color: var(--green);
+    background: var(--green-glow);
+  }
+}
+
+.addbtn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 14px;
+  background: none;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.16s,
+    background 0.16s;
+}
+.addbtn .plus {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--green-glow);
+  border: 1px solid var(--green-2);
+  color: var(--green);
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1;
+}
+.addbtn:active {
+  border-color: var(--green-2);
+  background: var(--panel);
+}
+@media (hover: hover) {
+  .addbtn:hover {
+    border-color: var(--green-2);
+    background: var(--panel);
+  }
+}
+
+/* The number, with thumb-sized steppers either side. Typing works too, but on
+   a phone nudging is faster and cannot produce nonsense. */
+.numberrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.stepbtn {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  flex: none;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    border-color 0.16s,
+    background 0.16s,
+    transform 0.12s var(--ease);
+}
+.stepbtn:active {
+  transform: scale(0.94);
+  border-color: var(--green-2);
+}
+@media (hover: hover) {
+  .stepbtn:hover {
+    border-color: var(--green-2);
+  }
+}
+
+.numberbox {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 7px;
+  min-width: 0;
+}
+.numberbox input {
+  width: 100%;
+  max-width: 150px;
+  margin: 0;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  color: var(--green);
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.numberbox input:focus {
+  outline: none;
+  border: 0;
+}
+/* The spinners duplicate the buttons either side and shrink the tap target. */
+.numberbox input::-webkit-outer-spin-button,
+.numberbox input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.numberbox input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.numberbox .unit {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.select {
+  width: 100%;
+  margin-top: 8px;
+  padding: 13px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 16px;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 20px) 22px,
+    calc(100% - 14px) 22px;
+  background-size:
+    6px 6px,
+    6px 6px;
+  background-repeat: no-repeat;
+}
+.select:focus {
+  outline: none;
+  border-color: var(--green-2);
+}
+
+.switch {
+  position: relative;
+  width: 48px;
+  height: 28px;
+  flex: none;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-3);
+  cursor: pointer;
+  transition:
+    background 0.18s,
+    border-color 0.18s;
+}
+.switch span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform 0.2s var(--ease),
+    background 0.18s;
+}
+.switch.on {
+  background: var(--green);
+  border-color: var(--green);
+}
+.switch.on span {
+  background: var(--green-ink);
+  transform: translateX(20px);
+}
+
+.sub.tiny {
+  font-size: 12.5px;
+  margin: 14px 0 4px;
+}
+
+/* ==========================================================================
    Motion
    --------------------------------------------------------------------------
    One idea, applied everywhere: things rise into place and settle. Nothing

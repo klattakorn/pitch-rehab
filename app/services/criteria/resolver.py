@@ -19,8 +19,8 @@ from app.core.enums import (
 from app.data.position_norms import position_norm
 from app.models.injury import InjuryEpisode
 from app.models.metrics import MetricSample
-from app.models.protocol import ProtocolPhase
-from app.models.session import PainLog, RehabSession
+from app.models.protocol import Exercise, ProtocolPhase
+from app.models.session import ExerciseSet, PainLog, RehabSession
 from app.models.user import PlayerBaseline
 
 
@@ -199,12 +199,27 @@ class MetricResolver:
     # ------------------------------------------------------------------ derived
     def _derived(self, metric_key: str, window_days: int | None) -> SampleSet:
         fn = _DERIVED.get(metric_key)
-        if fn is None:
-            return SampleSet([], None, {}, None)
-        value, unit = fn(self, window_days)
-        if value is None:
-            return SampleSet([], unit, {}, None)
-        return SampleSet([value], unit, {}, self.now)
+        if fn is not None:
+            value, unit = fn(self, window_days)
+            return (
+                SampleSet([], unit, {}, None)
+                if value is None
+                else SampleSet([value], unit, {}, self.now)
+            )
+
+        # Per-exercise metrics carry the exercise in the key itself, so a player
+        # can gate on "20 reps of the calf raise" without the library having to
+        # anticipate every exercise anyone might choose.
+        for prefix, per_exercise in _DERIVED_PER_EXERCISE.items():
+            if metric_key.startswith(prefix):
+                value, unit = per_exercise(self, metric_key[len(prefix) :], window_days)
+                return (
+                    SampleSet([], unit, {}, None)
+                    if value is None
+                    else SampleSet([value], unit, {}, self.now)
+                )
+
+        return SampleSet([], None, {}, None)
 
     # helpers used by the derived-metric table below
     def _phase_start(self) -> datetime:
@@ -292,6 +307,64 @@ _DERIVED: dict[str, DerivedFn] = {
 }
 
 DERIVED_METRIC_KEYS: tuple[str, ...] = tuple(_DERIVED)
+
+
+# --------------------------------------------------------------- per exercise
+def _exercise_sets(
+    r: MetricResolver, exercise_key: str, window_days: int | None
+) -> list[ExerciseSet]:
+    """Every completed set of one exercise inside the window."""
+    stmt = (
+        select(ExerciseSet)
+        .join(RehabSession, ExerciseSet.session_id == RehabSession.id)
+        .join(Exercise, ExerciseSet.exercise_id == Exercise.id)
+        .where(RehabSession.episode_id == r.episode.id)
+        .where(RehabSession.status == SessionStatus.COMPLETED)
+        .where(Exercise.key == exercise_key)
+    )
+    if window_days is not None:
+        stmt = stmt.where(RehabSession.started_at >= r.now - timedelta(days=window_days))
+    return list(r.db.execute(stmt).scalars())
+
+
+def _best_reps(
+    r: MetricResolver, exercise_key: str, window_days: int | None
+) -> tuple[float | None, str]:
+    """The best single set, not the total.
+
+    "Do 20 calf raises" means twenty in a row, not two sets of ten spread over a
+    fortnight. Summing would let a player clear the gate without ever having
+    done the thing the gate is about.
+    """
+    sets = _exercise_sets(r, exercise_key, window_days)
+    if not sets:
+        return None, "reps"
+    return float(max(s.valid_reps for s in sets)), "reps"
+
+
+def _mean_form_for_exercise(
+    r: MetricResolver, exercise_key: str, window_days: int | None
+) -> tuple[float | None, str]:
+    scores = [
+        s.form_score for s in _exercise_sets(r, exercise_key, window_days)
+        if s.form_score is not None
+    ]
+    if not scores:
+        return None, "score"
+    return statistics.fmean(scores), "score"
+
+
+PerExerciseFn = Callable[
+    [MetricResolver, str, int | None], tuple[float | None, str | None]
+]
+
+#: Prefix -> reader. Anything after the prefix is the exercise key.
+_DERIVED_PER_EXERCISE: dict[str, PerExerciseFn] = {
+    "session.reps.": _best_reps,
+    "session.form.": _mean_form_for_exercise,
+}
+
+PER_EXERCISE_PREFIXES: tuple[str, ...] = tuple(_DERIVED_PER_EXERCISE)
 
 
 def phase_index(phase: PhaseKey) -> int:

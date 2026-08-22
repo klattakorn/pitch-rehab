@@ -93,6 +93,7 @@ export interface CriterionResult {
   source: string;
   required: boolean;
   status: "pass" | "fail" | "no_data" | "pending_signoff";
+  target_type: string;
   observed: number | null;
   target: number | null;
   unit: string | null;
@@ -306,3 +307,87 @@ export interface SupportedMetrics {
 
 export const supportedMetrics = () =>
   request<SupportedMetrics>("/health/supported-metrics");
+
+// ------------------------------------------------- criteria you write yourself
+/** One thing a test can be built from, with the defaults that suit its metric. */
+export interface Authorable {
+  key: string;
+  source: string;
+  group: string;
+  label_en: string;
+  unit: string;
+  help_en: string;
+  /** A sentence with "…" where the number goes. */
+  phrase_en: string;
+  default_target: number;
+  /** Fixed by the metric, not chosen — "pain of at least 8/10" is not a goal. */
+  comparator: string;
+  lower_is_better: boolean;
+  default_window_days: number | null;
+  target_types: string[];
+  step: number;
+  needs_exercise: boolean;
+}
+
+export interface AuthorableExercise {
+  key: string;
+  name_en: string;
+  category: string;
+}
+
+export interface AuthorableCatalogue {
+  groups: string[];
+  metrics: Authorable[];
+  exercises: AuthorableExercise[];
+}
+
+export interface CriterionSpecJson {
+  metric: string;
+  source: string;
+  aggregate: string;
+  window_days: number | null;
+  comparator: string;
+  scope: string;
+  target: { type: string; value: number; unit: string | null };
+}
+
+/** A test this player added to their own rehab. */
+export interface CustomCriterion {
+  id: number;
+  phase_key: string;
+  key: string;
+  label_en: string;
+  help_en: string | null;
+  required: boolean;
+  spec: CriterionSpecJson;
+}
+
+export interface CriterionDraft {
+  metric: string;
+  exercise_key?: string | null;
+  target_type?: string;
+  value: number;
+  window_days?: number | null;
+  required?: boolean;
+  phase_key?: string;
+  /** Set to a library criterion's key to tighten that one instead of adding to it. */
+  key?: string;
+}
+
+export const authorableCatalogue = () =>
+  request<AuthorableCatalogue>("/injuries/criteria/authorable");
+
+export const listCustomCriteria = (episodeId: number) =>
+  request<CustomCriterion[]>(`/injuries/${episodeId}/criteria`);
+
+export const saveCriterion = (episodeId: number, draft: CriterionDraft) =>
+  request<CustomCriterion>(`/injuries/${episodeId}/criteria`, {
+    method: "PUT",
+    body: JSON.stringify(draft),
+  });
+
+export const deleteCriterion = (episodeId: number, key: string, phaseKey: string) =>
+  request<null>(
+    `/injuries/${episodeId}/criteria/${encodeURIComponent(key)}?phase_key=${phaseKey}`,
+    { method: "DELETE" },
+  );

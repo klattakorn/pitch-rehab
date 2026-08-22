@@ -193,3 +193,66 @@ class ProgressOut(BaseModel):
     trend: list[TrendPointOut]
     top_exercises: list[TopExerciseOut]
     milestones: list[MilestoneOut]
+
+
+# --------------------------------------------------------------------------
+# player-authored exit criteria
+# --------------------------------------------------------------------------
+class AuthorableOut(BaseModel):
+    """One thing a player can build a test from, with its sensible defaults."""
+
+    key: str
+    source: CriterionSource
+    group: str
+    label_en: str
+    unit: str
+    help_en: str
+    phrase_en: str
+    default_target: float
+    #: Fixed by the metric, not chosen -- "pain of at least 8/10" is not a goal.
+    comparator: Comparator
+    lower_is_better: bool
+    default_window_days: int | None
+    target_types: list[TargetType]
+    step: float
+    needs_exercise: bool
+
+
+class AuthorableExerciseOut(BaseModel):
+    """A camera-scored exercise, for the per-exercise metrics."""
+
+    key: str
+    name_en: str
+    category: str
+
+
+class AuthorableCatalogueOut(BaseModel):
+    groups: list[str]
+    metrics: list[AuthorableOut]
+    exercises: list[AuthorableExerciseOut]
+
+
+class CriterionCreateIn(BaseModel):
+    """Two real decisions: what to measure, and the number to beat."""
+
+    metric: str
+    exercise_key: str | None = None
+    target_type: TargetType = TargetType.ABSOLUTE
+    value: float
+    window_days: int | None = None
+    required: bool = True
+    #: Which phase this gates. Defaults to the one the player is in.
+    phase_key: PhaseKey | None = None
+    #: Set to a library criterion's key to tighten that one instead of adding a
+    #: second, contradictory rule beside it.
+    key: str | None = Field(default=None, max_length=64)
+
+
+class EpisodeCriterionOut(ORMModel):
+    id: int
+    phase_key: PhaseKey
+    key: str
+    label_en: str
+    help_en: str | None
+    required: bool
+    spec: dict[str, Any]

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import JSON, Date, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, Date, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.enums import (
@@ -103,3 +103,46 @@ class ClinicianSignoff(Base, TimestampMixin):
     criterion_key: Mapped[str | None] = mapped_column(String(64))
     approved: Mapped[bool] = mapped_column(default=True)
     note: Mapped[str | None] = mapped_column(Text())
+
+
+class EpisodeCriterion(Base, TimestampMixin):
+    """An exit criterion this player added to their own rehab.
+
+    The library-authored criteria hang off ``ProtocolPhase`` and are shared by
+    every player on that protocol, so a personal one cannot live there -- it
+    would appear in 41 other people's rehab. These are scoped to one episode.
+
+    ``key`` is what ties the two together. A custom criterion whose key matches
+    a library one *replaces* it for this player, which is how "the standard
+    sprint gate, but 95% instead of 90%" is expressed. A new key is simply an
+    extra test on top.
+
+    Deliberately shaped like ``ExitCriterion``: the same field names, so the
+    engine evaluates both without knowing or caring which it is holding.
+    """
+
+    __tablename__ = "episode_criterion"
+    __table_args__ = (UniqueConstraint("episode_id", "phase_key", "key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    episode_id: Mapped[int] = mapped_column(
+        ForeignKey("injury_episode.id", ondelete="CASCADE"), index=True
+    )
+    phase_key: Mapped[PhaseKey] = mapped_column(Enum(PhaseKey, native_enum=False), index=True)
+
+    key: Mapped[str] = mapped_column(String(64))
+    label_en: Mapped[str] = mapped_column(String(200))
+    label_th: Mapped[str] = mapped_column(String(200), default="")
+    help_en: Mapped[str | None] = mapped_column(Text())
+    help_th: Mapped[str | None] = mapped_column(Text())
+    required: Mapped[bool] = mapped_column(default=True)
+    order_index: Mapped[int] = mapped_column(default=0)
+
+    #: A ``CriterionSpec``, same JSON shape the library stores.
+    spec: Mapped[dict[str, Any]] = mapped_column(JSON())
+
+    created_by_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+
+    episode: Mapped[InjuryEpisode] = relationship()

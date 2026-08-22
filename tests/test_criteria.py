@@ -3,9 +3,11 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.enums import (
+    Comparator,
     CriterionSource,
     CriterionStatus,
     EpisodeStatus,
@@ -14,11 +16,13 @@ from app.core.enums import (
     Position,
     Role,
     Side,
+    TargetType,
 )
-from app.models.injury import ClinicianSignoff
+from app.models.injury import ClinicianSignoff, EpisodeCriterion
 from app.models.metrics import MetricSample
 from app.models.session import PainLog, RehabSession
 from app.models.user import PlayerBaseline, User
+from app.services.criteria import authoring
 from app.services.criteria.engine import evaluate_phase
 from app.services.progression import advance_if_ready
 from tests.conftest import make_episode, make_player
@@ -303,3 +307,254 @@ def test_passing_the_last_phase_clears_the_player(db, player) -> None:
     assert advanced is True
     assert episode.status is EpisodeStatus.CLEARED
     assert episode.cleared_at is not None
+
+
+# --------------------------------------------------------------------------
+# criteria the player writes themselves
+# --------------------------------------------------------------------------
+def add_exercise_sets(
+    db: Session,
+    episode,
+    exercise_key: str,
+    reps: list[int],
+    *,
+    form: float | None = 90.0,
+    days_ago: float = 1,
+) -> list:
+    """One completed session holding one set per entry in ``reps``."""
+    from app.core.enums import SessionStatus
+    from app.models.protocol import Exercise
+    from app.models.session import ExerciseSet
+
+    exercise = db.execute(
+        select(Exercise).where(Exercise.key == exercise_key)
+    ).scalar_one()
+    session = RehabSession(
+        episode_id=episode.id,
+        phase_key=episode.current_phase,
+        status=SessionStatus.COMPLETED,
+        started_at=datetime.now(UTC) - timedelta(days=days_ago),
+    )
+    db.add(session)
+    db.flush()
+    rows = [
+        ExerciseSet(
+            session_id=session.id,
+            exercise_id=exercise.id,
+            order_index=index,
+            completed_reps=count,
+            valid_reps=count,
+            form_score=form,
+        )
+        for index, count in enumerate(reps)
+    ]
+    db.add_all(rows)
+    db.flush()
+    return rows
+
+
+def add_custom(
+    db: Session,
+    episode,
+    *,
+    metric: str,
+    value: float,
+    exercise_key: str | None = None,
+    target_type: TargetType = TargetType.ABSOLUTE,
+    key: str | None = None,
+    phase_key: PhaseKey | None = None,
+) -> EpisodeCriterion:
+    """Build a criterion the way the endpoint does, without the HTTP hop."""
+    item = authoring.resolve(metric)
+    exercise = authoring.check_exercise(db, item, exercise_key)
+    checked = authoring.check_value(item, target_type, value)
+    row = EpisodeCriterion(
+        episode_id=episode.id,
+        phase_key=phase_key or episode.current_phase,
+        key=key or authoring.build_key(item, exercise_key, target_type),
+        label_en=authoring.build_label(
+            item, exercise=exercise, target_type=target_type, value=checked
+        ),
+        required=True,
+        spec=authoring.build_spec(
+            item,
+            exercise_key=exercise_key,
+            target_type=target_type,
+            value=checked,
+            window_days=None,
+        ).model_dump(mode="json"),
+    )
+    db.add(row)
+    db.flush()
+    return row
+
+
+def test_a_custom_criterion_joins_the_gate(db, episode) -> None:
+    before = evaluate_phase(db, episode)
+    add_custom(db, episode, metric="health.running_speed", value=7.5)
+    after = evaluate_phase(db, episode)
+
+    assert after.required_total == before.required_total + 1
+    mine = find(after, "custom_health_running_speed")
+    assert mine.label_en == "Run at least 7.5 m/s"
+    assert mine.status is CriterionStatus.NO_DATA
+
+    add_metric(
+        db, episode, "health.running_speed", 7.9,
+        source=CriterionSource.HEALTH, unit="m/s",
+    )
+    assert find(evaluate_phase(db, episode), "custom_health_running_speed").passed
+
+
+def test_reps_of_an_exercise_read_the_best_single_set(db, episode) -> None:
+    """"Do 20 reps" means twenty in a row.
+
+    Summing sets would let a player clear the gate with two sets of ten spread
+    over a fortnight, having never once done the thing the gate is about.
+    """
+    add_custom(
+        db, episode,
+        metric="session.reps",
+        exercise_key="single_leg_calf_raise",
+        value=20,
+    )
+    key = "custom_session_reps_single_leg_calf_raise"
+    assert find(evaluate_phase(db, episode), key).status is CriterionStatus.NO_DATA
+
+    # Three sets adding up to 24, but the best is 10. Nowhere near.
+    add_exercise_sets(db, episode, "single_leg_calf_raise", [8, 10, 6])
+    result = find(evaluate_phase(db, episode), key)
+    assert result.observed == 10
+    assert not result.passed
+
+    add_exercise_sets(db, episode, "single_leg_calf_raise", [21])
+    result = find(evaluate_phase(db, episode), key)
+    assert result.observed == 21
+    assert result.passed
+
+
+def test_only_reps_the_camera_accepted_count(db, episode) -> None:
+    add_custom(
+        db, episode,
+        metric="session.reps",
+        exercise_key="single_leg_calf_raise",
+        value=20,
+    )
+    # Twenty-five attempted, ten of them sloppy enough to be thrown out.
+    (only_set,) = add_exercise_sets(db, episode, "single_leg_calf_raise", [25])
+    only_set.valid_reps = 15
+    db.flush()
+
+    key = "custom_session_reps_single_leg_calf_raise"
+    assert find(evaluate_phase(db, episode), key).observed == 15
+
+
+def test_a_custom_criterion_replaces_the_library_one_with_the_same_key(db, episode) -> None:
+    """"The standard gate, but stricter" is a change, not a second rule."""
+    before = evaluate_phase(db, episode)
+    library = find(before, "adherence")
+    assert library.target == 70
+
+    add_custom(db, episode, metric="session.adherence_pct", value=90, key="adherence")
+    after = evaluate_phase(db, episode)
+
+    assert after.required_total == before.required_total  # replaced, not added
+    assert len([c for c in after.criteria if c.key == "adherence"]) == 1
+    assert find(after, "adherence").target == 90
+
+
+def test_one_players_custom_criterion_stays_theirs(db) -> None:
+    """They hang off the episode, not the phase -- otherwise a personal target
+    would appear in every other player's rehab on the same protocol."""
+    mine = make_episode(db, make_player(db, "mine@rtpapp.com"), InjurySite.CALF)
+    theirs = make_episode(db, make_player(db, "theirs@rtpapp.com"), InjurySite.CALF)
+    assert mine.protocol_id == theirs.protocol_id  # same programme
+
+    add_custom(db, mine, metric="health.running_speed", value=7.5)
+
+    assert any(c.key.startswith("custom") for c in evaluate_phase(db, mine).criteria)
+    assert not any(c.key.startswith("custom") for c in evaluate_phase(db, theirs).criteria)
+
+
+def test_a_custom_criterion_can_block_a_phase_that_would_otherwise_pass(db, episode) -> None:
+    """The point of letting a player set their own bar is that it holds them."""
+    # A hamstring in phase 1: no pain, full knee range, sessions actually done.
+    add_pain_logs(db, episode, days=6, pain=0.0)
+    # scope=injured, so the reading has to be on the injured side
+    add_metric(db, episode, "pose.knee_flexion_rom", 132.0, side=Side.LEFT)
+    add_sessions(db, episode, 30)
+    assert evaluate_phase(db, episode).passed, evaluate_phase(db, episode).blocking
+
+    add_custom(
+        db, episode,
+        metric="session.reps",
+        exercise_key="single_leg_calf_raise",
+        value=25,
+    )
+    gate = evaluate_phase(db, episode)
+    assert not gate.passed
+    assert "custom_session_reps_single_leg_calf_raise" in gate.blocking
+
+
+def test_the_builder_refuses_a_metric_nothing_ever_writes(db, episode) -> None:
+    """A free-text metric field would let someone create a test that can never
+    pass, because no part of the system produces that key."""
+    with pytest.raises(authoring.AuthoringError, match="not something you can build"):
+        authoring.resolve("health.runningspeed")
+
+
+def test_the_builder_refuses_reps_on_a_hand_logged_drill(db, episode) -> None:
+    item = authoring.resolve("session.reps")
+    with pytest.raises(authoring.AuthoringError, match="logged by hand"):
+        authoring.check_exercise(db, item, "adductor_squeeze")
+
+
+def test_the_builder_refuses_a_comparison_the_metric_cannot_make(db) -> None:
+    # Limb symmetry needs two limbs. Running speed is one number for the player.
+    item = authoring.resolve("health.running_speed")
+    with pytest.raises(authoring.AuthoringError, match="cannot be compared"):
+        authoring.check_value(item, TargetType.LSI, 90)
+
+
+def test_the_builder_refuses_a_number_that_is_not_a_target(db) -> None:
+    item = authoring.resolve("health.running_speed")
+    for bad in (0, -3, float("nan"), float("inf")):
+        with pytest.raises(authoring.AuthoringError):
+            authoring.check_value(item, TargetType.ABSOLUTE, bad)
+
+
+def test_the_direction_of_the_comparison_is_not_the_players_to_choose(db, episode) -> None:
+    """"Pain at rest of at least 8/10" is not a goal anyone means to set."""
+    add_custom(db, episode, metric="pro.pain_rest", value=2, key="my_pain")
+    spec = find(evaluate_phase(db, episode), "my_pain")
+    assert spec.comparator is Comparator.LTE
+
+    add_custom(db, episode, metric="health.running_speed", value=7, key="my_speed")
+    assert find(evaluate_phase(db, episode), "my_speed").comparator is Comparator.GTE
+
+
+def test_clinician_signoff_cannot_be_swapped_for_a_number(db, episode) -> None:
+    """Phase 4 needs a human. It is the only check in the app that is not
+    self-assessed, so it is the one thing a player cannot redefine."""
+    with pytest.raises(authoring.AuthoringError, match="Clinician sign-off"):
+        authoring.check_override(db, episode, PhaseKey.P4_RETURN, "clinician_clearance")
+
+    # Everything else in phase 4 is fair game.
+    authoring.check_override(db, episode, PhaseKey.P4_RETURN, "confidence")
+
+
+def test_a_custom_criterion_can_gate_a_phase_the_player_is_not_in_yet(db, episode) -> None:
+    add_custom(
+        db, episode,
+        metric="test.hop_triple",
+        target_type=TargetType.LSI,
+        value=95,
+        phase_key=PhaseKey.P3_RUNNING,
+    )
+    assert not any(
+        c.key.startswith("custom") for c in evaluate_phase(db, episode).criteria
+    )
+    later = evaluate_phase(db, episode, PhaseKey.P3_RUNNING)
+    mine = find(later, "custom_test_hop_triple_lsi")
+    assert mine.label_en == "Triple hop distance at least 95% of the other side"
+    assert mine.target_type is TargetType.LSI

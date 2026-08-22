@@ -15,6 +15,18 @@ import * as api from "./api";
 import type { Episode, Gate, Phase, Prescription } from "./api";
 import { INJURY_SITES, bodyMapHtml } from "./bodymap";
 import { barChart, lineChart, meterRow } from "./charts";
+import {
+  ABSOLUTE,
+  TARGET_TYPE_LABELS,
+  draftFrom,
+  exercisePickerHtml,
+  metricPickerHtml,
+  preview,
+  splitMetric,
+  toDraft,
+  unitFor,
+  windowText,
+} from "./criteria";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
 import type { Facing } from "./mediapipe";
 import {
@@ -39,6 +51,7 @@ import {
   DASH,
   FLIP_ICON,
   PAUSE_ICON,
+  PENCIL,
   PLAY_ICON,
   TAB_ICONS,
   TICK_FILLED,
@@ -80,6 +93,8 @@ interface State {
   positions: api.PositionInfo[] | null;
   protocol: api.Protocol | null;
   progress: api.Progress | null;
+  catalogue: api.AuthorableCatalogue | null;
+  customCriteria: api.CustomCriterion[] | null;
   online: boolean;
 }
 const state: State = {
@@ -91,6 +106,8 @@ const state: State = {
   positions: null,
   protocol: null,
   progress: null,
+  catalogue: null,
+  customCriteria: null,
   online: false,
 };
 
@@ -1058,6 +1075,10 @@ async function progressScreen(): Promise<void> {
 function testScreen(): void {
   const gate = state.gate;
   if (!gate) return homeScreen();
+  // Both are already loaded by `refresh`; the empty fallbacks only matter on the
+  // very first paint, where they simply mean "no pencils yet".
+  const cat = state.catalogue ?? { groups: [], metrics: [], exercises: [] };
+  const yours = new Set((state.customCriteria ?? []).map((c) => c.key));
   const percent = Math.round(gate.progress * 100);
   const info = PHASE_NAMES[gate.phase_key] ?? {
     n: 1,
@@ -1088,17 +1109,37 @@ function testScreen(): void {
      <h3>Test battery</h3>
      <ul class="criteria">
        ${gate.criteria
-         .map(
-           (c) => `<li class="${c.required ? "" : "optional"} ${c.status}">
+         .map((c) => {
+           // Editable when the metric is one the builder understands. Clinician
+           // sign-off never is, which is the point of it.
+           const editable = c.source !== "manual" && splitMetric(c.metric, cat).base !== null;
+           const mine = yours.has(c.key);
+           return `<li class="${c.required ? "" : "optional"} ${c.status}${
+             mine ? " mine" : ""
+           }">
              ${mark(c)}
              <span class="what">${c.label_en}
                ${c.source === "pose" ? `<span class="src">${CAMERA_ICON} camera</span>` : ""}
+               ${mine ? `<span class="src yours">yours</span>` : ""}
                <small>${c.detail_en}${c.required ? "" : " · optional"}</small></span>
              <span class="val">${value(c)}</span>
-           </li>`,
-         )
+             ${
+               editable
+                 ? `<button class="editbtn" data-edit="${c.key}"
+                      aria-label="Change the target for ${c.label_en}">${PENCIL}</button>`
+                 : ""
+             }
+           </li>`;
+         })
          .join("")}
      </ul>
+
+     <button class="addbtn" id="add-test">
+       <span class="plus" aria-hidden="true">+</span>
+       <span class="rowbody"><b>Add your own test</b>
+         <small>Set a target that matters to you — reps, speed, pain, anything
+           the app can measure</small></span>
+     </button>
 
      <div class="notice ${gate.passed ? "good" : ""}">${
        gate.passed
@@ -1114,6 +1155,14 @@ function testScreen(): void {
      }`,
     { tab: "test", title: "Exit Criteria", back: () => homeScreen() },
   );
+
+  on("#add-test", () => void pickMetricScreen());
+  app.querySelectorAll<HTMLButtonElement>("[data-edit]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      void editCriterionScreen(button.dataset["edit"]!);
+    };
+  });
 
   on("#advance", () =>
     void (async () => {
@@ -1320,21 +1369,293 @@ function notificationsScreen(): void {
   );
 }
 
+// -------------------------------------------------- write your own criterion
+/** Cached because the catalogue never changes inside a session. */
+async function catalogue(): Promise<api.AuthorableCatalogue> {
+  state.catalogue ??= await api.authorableCatalogue();
+  return state.catalogue;
+}
+
+/** Step one: what do you want to measure? */
+async function pickMetricScreen(): Promise<void> {
+  shell(`<div class="loading">Loading what you can measure…</div>`, {
+    title: "Add a test",
+    back: () => testScreen(),
+  });
+  let cat: api.AuthorableCatalogue;
+  try {
+    cat = await catalogue();
+  } catch (error) {
+    return fail(error);
+  }
+
+  shell(
+    `<p class="sub">Pick what to measure. You set the number on the next screen,
+       and it joins your testing for this phase like any other.</p>
+     ${metricPickerHtml(cat)}`,
+    { title: "Add a test", back: () => testScreen() },
+  );
+
+  app.querySelectorAll<HTMLButtonElement>("[data-metric]").forEach((row) => {
+    row.onclick = () => {
+      const item = cat.metrics.find((m) => m.key === row.dataset["metric"]);
+      if (item) void buildCriterionScreen({ item });
+    };
+  });
+}
+
+interface BuilderState {
+  item: api.Authorable;
+  exerciseKey?: string | null;
+  targetType?: string;
+  value?: number;
+  required?: boolean;
+  /** Set when tightening a library criterion rather than adding a new one. */
+  overrideKey?: string | null;
+  /** Set when editing something already saved, so Remove can be offered. */
+  existingKey?: string | null;
+}
+
+/** Step two: the number. */
+async function buildCriterionScreen(initial: BuilderState): Promise<void> {
+  const cat = await catalogue();
+  const item = initial.item;
+  const phaseKey = state.episode?.current_phase ?? "p1_protect";
+
+  let exerciseKey =
+    initial.exerciseKey ?? (item.needs_exercise ? (cat.exercises[0]?.key ?? null) : null);
+  let targetType = initial.targetType ?? item.target_types[0] ?? ABSOLUTE;
+  let value = initial.value ?? item.default_target;
+  let required = initial.required ?? true;
+
+  const exerciseName = (): string | null =>
+    item.needs_exercise
+      ? (cat.exercises.find((e) => e.key === exerciseKey)?.name_en ?? null)
+      : null;
+
+  const render = (): void => {
+    const back = () =>
+      initial.existingKey || initial.overrideKey ? testScreen() : void pickMetricScreen();
+
+    shell(
+      `<section class="panel accent">
+         <span class="label">Your test will read</span>
+         <div class="headline" id="preview">${preview(
+           item,
+           targetType,
+           value,
+           exerciseName(),
+         )}</div>
+         <div class="caption">${windowText(item, null)}</div>
+       </section>
+
+       ${item.needs_exercise ? `<section class="panel">${exercisePickerHtml(cat, exerciseKey)}</section>` : ""}
+
+       ${
+         item.target_types.length > 1
+           ? `<h3>Compare against</h3>
+              <div class="segmented" role="group" aria-label="What to compare against">
+                ${item.target_types
+                  .map(
+                    (t) => `<button class="seg${t === targetType ? " on" : ""}"
+                      data-target-type="${t}">${TARGET_TYPE_LABELS[t] ?? t}</button>`,
+                  )
+                  .join("")}
+              </div>`
+           : ""
+       }
+
+       <h3>The number</h3>
+       <section class="panel">
+         <div class="numberrow">
+           <button class="stepbtn" id="minus" aria-label="Less">−</button>
+           <div class="numberbox">
+             <input id="value" type="number" inputmode="decimal"
+               step="${item.step}" min="0" value="${value}" />
+             <span class="unit">${unitFor(item, targetType)}</span>
+           </div>
+           <button class="stepbtn" id="plus" aria-label="More">+</button>
+         </div>
+         <p class="sub tiny">${item.help_en}</p>
+         <div class="rowcard static">
+           <span class="rowbody"><b>Must pass to advance</b>
+             <small>Turn off to track it without it blocking the phase</small></span>
+           <button class="switch${required ? " on" : ""}" id="required"
+             role="switch" aria-checked="${required}" aria-label="Must pass to advance">
+             <span></span></button>
+         </div>
+       </section>
+
+       <div class="controls stackable">
+         <button class="primary block" id="save">
+           ${initial.existingKey ? "Save changes" : "Add this test"}</button>
+         ${
+           initial.existingKey
+             ? `<button class="danger block" id="remove">${
+                 initial.overrideKey ? "Restore the standard target" : "Remove this test"
+               }</button>`
+             : ""
+         }
+       </div>
+       <p class="sub center" id="saved"></p>`,
+      {
+        title: initial.existingKey ? "Edit test" : "Set the target",
+        back,
+      },
+    );
+
+    const input = app.querySelector<HTMLInputElement>("#value")!;
+    const previewEl = app.querySelector<HTMLDivElement>("#preview")!;
+    const repaint = (): void => {
+      previewEl.textContent = preview(item, targetType, value, exerciseName());
+    };
+    const setValue = (next: number): void => {
+      value = Math.max(0, Number(next.toFixed(3)));
+      input.value = String(value);
+      repaint();
+    };
+
+    input.oninput = () => {
+      value = Number(input.value);
+      repaint();
+    };
+    on("#minus", () => setValue(value - item.step));
+    on("#plus", () => setValue(value + item.step));
+
+    const select = app.querySelector<HTMLSelectElement>("#ex");
+    if (select) {
+      select.onchange = () => {
+        exerciseKey = select.value;
+        repaint();
+      };
+    }
+
+    app.querySelectorAll<HTMLButtonElement>("[data-target-type]").forEach((button) => {
+      button.onclick = () => {
+        targetType = button.dataset["targetType"]!;
+        // The unit changes with the comparison, so the whole panel is redrawn.
+        render();
+      };
+    });
+
+    on("#required", () => {
+      required = !required;
+      const toggle = app.querySelector<HTMLButtonElement>("#required")!;
+      toggle.classList.toggle("on", required);
+      toggle.setAttribute("aria-checked", String(required));
+    });
+
+    on("#save", () => {
+      const note = app.querySelector<HTMLElement>("#saved")!;
+      const button = app.querySelector<HTMLButtonElement>("#save")!;
+      button.disabled = true;
+      note.textContent = "Saving…";
+      void (async () => {
+        try {
+          await api.saveCriterion(
+            state.episode!.id,
+            toDraft({
+              item,
+              exerciseKey,
+              targetType,
+              value,
+              required,
+              phaseKey,
+              overrideKey: initial.overrideKey ?? initial.existingKey ?? null,
+            }),
+          );
+          state.customCriteria = null;
+          await refresh();
+          testScreen();
+        } catch (error) {
+          button.disabled = false;
+          note.textContent =
+            error instanceof api.ApiError ? String(error.detail) : String(error);
+        }
+      })();
+    });
+
+    on("#remove", () => {
+      void (async () => {
+        try {
+          await api.deleteCriterion(state.episode!.id, initial.existingKey!, phaseKey);
+          state.customCriteria = null;
+          await refresh();
+          testScreen();
+        } catch (error) {
+          fail(error);
+        }
+      })();
+    });
+  };
+
+  render();
+}
+
+/** Reopen a criterion in the builder — one the player wrote, or a standard one. */
+async function editCriterionScreen(key: string): Promise<void> {
+  const cat = await catalogue();
+  const mine = (state.customCriteria ?? []).find((c) => c.key === key);
+
+  if (mine) {
+    const parsed = draftFrom(mine, cat);
+    if (!parsed) return testScreen();
+    return buildCriterionScreen({
+      ...parsed,
+      required: mine.required,
+      existingKey: key,
+      overrideKey: isOverride(key) ? key : null,
+    });
+  }
+
+  // A standard criterion: open the builder pointed at the same metric, so
+  // saving writes an override rather than a second rule beside it.
+  const row = state.gate?.criteria.find((c) => c.key === key);
+  if (!row) return testScreen();
+  const { base, exerciseKey } = splitMetric(row.metric, cat);
+  if (!base) return testScreen();
+  return buildCriterionScreen({
+    item: base,
+    exerciseKey,
+    targetType: base.target_types.includes(row.target_type) ? row.target_type : ABSOLUTE,
+    value: row.target ?? base.default_target,
+    required: row.required,
+    overrideKey: key,
+    existingKey: null,
+  });
+}
+
+/**
+ * Is this saved criterion replacing a standard one, or a test of the player's own?
+ *
+ * The builder always generates keys prefixed `custom_`, so anything else the
+ * player has saved took its key from the library and is therefore an override.
+ * Used only to word the Remove button -- taking away an override restores the
+ * standard target, while taking away an invented test removes it outright.
+ */
+function isOverride(key: string): boolean {
+  return !key.startsWith("custom_");
+}
+
 const round = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
 
 // -------------------------------------------------------------------- boot
 async function refresh(): Promise<void> {
   if (!state.episode) return;
-  const [phase, gate, sessions, progress] = await Promise.all([
+  const [phase, gate, sessions, progress, custom, cat] = await Promise.all([
     api.todayPlan(state.episode.id),
     api.exitCriteria(state.episode.id),
     api.listSessions(state.episode.id),
     api.progress(state.episode.id),
+    api.listCustomCriteria(state.episode.id),
+    state.catalogue ? Promise.resolve(state.catalogue) : api.authorableCatalogue(),
   ]);
   state.phase = phase;
   state.gate = gate;
   state.sessions = sessions;
   state.progress = progress;
+  state.customCriteria = custom;
+  state.catalogue = cat;
 }
 
 async function boot(): Promise<void> {

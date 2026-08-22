@@ -442,6 +442,51 @@ Two things the engine will not let you skip:
 Every gate evaluation that changes a phase is frozen into `phase_attempt.snapshot`,
 so a clinician can always answer *"why was this player cleared?"*.
 
+### Writing your own exit criteria
+
+The 42 protocols ship with a gate per phase. A player can add to it — *"do 20 single-leg
+calf raises in one set"*, *"run at 7.8 m/s"*, *"triple hop within 95% of the other leg"* —
+and those tests join the battery like any other, blocking the phase until they pass.
+
+**Two decisions, not eight.** A `CriterionSpec` has eight fields and most have exactly
+one sensible value for a given metric. The screen asks what to measure and the number;
+`app/data/authorable.py` supplies the rest — the aggregate, the window, the direction of
+the comparison.
+
+The direction is deliberately not a choice. Nobody sets out to require pain of *at
+least* 8/10, so the metric decides and the screen states it. What the player sees while
+they type is the finished sentence:
+
+> **Single-leg calf raise: do at least 20 reps in one set**
+
+which is checkable in a way `{"comparator": "gte", "value": 20}` is not.
+
+**Why a catalogue and not a text field.** The engine can gate on any metric key at all.
+Left open, someone types `health.runningspeed`, nothing ever writes that key, and they
+have built a test that can never pass and no error to explain why. The API refuses
+anything outside the catalogue for the same reason it refuses reps on a hand-logged
+drill: nothing counts reps for an exercise the camera never sees.
+
+**Same key means replace, not argue.** *"The standard sprint gate, but 95%"* is a change
+to an existing rule, not a second rule sitting beside it disagreeing. A custom criterion
+whose key matches a library one takes its place; deleting it brings the standard target
+back. A new key is simply an extra test, and it lands after the standard battery so the
+two stay legible as two.
+
+**One thing cannot be redefined.** Phase 4 requires a clinician to sign the player off.
+It is the only check in the app that is not self-assessed, so it is the one the API
+refuses to swap for a number.
+
+Player-authored criteria live on the **episode**, not the phase — the library's criteria
+are shared by every player on that protocol, so a personal target stored there would
+appear in forty-one other people's rehab.
+
+Two metrics exist only for this: `session.reps.<exercise>` and
+`session.form.<exercise>`, derived from completed sets. Reps read the **best single
+set**, never the sum — "do 20" means twenty in a row, and summing would let someone
+clear the gate with two sets of ten a fortnight apart, having never once done the thing
+the gate is about.
+
 ### 3. Health data — `app/services/health/`
 
 Neither HealthKit nor Health Connect has a server API — only the device can read the
@@ -552,6 +597,9 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 | `GET` | `/injuries/{id}/today` | The exercises for the current phase |
 | `GET` | `/injuries/{id}/protocol` | |
 | `GET` | `/injuries/{id}/exit-criteria` | **The pass/fail screen.** `?phase=` to preview another |
+| `GET` | `/injuries/criteria/authorable` | What a player can build their own tests from |
+| `GET` `PUT` | `/injuries/{id}/criteria` | Their own tests. PUT is an upsert on the key |
+| `DELETE` | `/injuries/{id}/criteria/{key}` | Removing an override restores the standard target |
 | `POST` | `/injuries/{id}/advance` | Moves on only if every required gate passed |
 | `GET` | `/injuries/{id}/attempts` | Frozen audit trail of every gate decision |
 | `POST` | `/injuries/{id}/signoff` | Clinician only (403 for players) |
@@ -602,7 +650,7 @@ them, only derived numbers persist.
 
 ## Tests
 
-**78 on the server, 206 in the browser.** They cover what actually matters rather than
+**91 on the server, 229 in the browser.** They cover what actually matters rather than
 line count:
 
 - `test_pose.py` — angles match the pose they were built from; depth failures coach but
@@ -635,6 +683,9 @@ In `web/`:
   body, markers do not overlap, and the hamstring is on the back.
 - `charts.test.ts` — a day with no session is a gap in the line, never a zero. A chart
   that plots "did not train" as 0% accuracy tells a player they failed.
+- `criteria.test.ts` — the sentence the builder shows while you type, and the draft it
+  sends. That sentence is the only thing between a player and a target they did not
+  mean to set.
 
 `tests/factories.py` builds synthetic 33-landmark traces, so the pose engine is tested
 without a camera.
@@ -648,6 +699,11 @@ without a camera.
 - **The thresholds are defaults, not clinical truth.** The exit criteria follow common
   return-to-sport practice (LSI ≥ 90%, pain ≤ 2/10, staged speed exposure), but a
   physio should review and adjust every one for your setting before use.
+- **Players can now set their own targets, including looser ones.** That is the point of
+  the feature and also its risk: a player who moves their pain ceiling from 2/10 to 6/10
+  has not got better, they have moved the goalposts. Overrides are marked as theirs on
+  the gate and the standard target is one tap away, but nothing stops them. In any real
+  setting this should be a clinician's screen, not a player's.
 - **`app/data/position_norms.py` is configuration.** Those numbers exist only so a
   first-time user with no history gets a concrete target instead of a wall. Replace
   them with your own testing data.
@@ -684,6 +740,7 @@ app/
     progression.py
     progress.py  what the Progress tab draws, derived from completed sessions
   data/        exercises, protocols, position norms   ← edit the library here
+    authorable.py what a player may build their own tests from
   api/routers/ auth, players, catalog, injuries, sessions, health
 tests/
 web/src/
@@ -691,6 +748,7 @@ web/src/
   roles.ts     the role picker: what choosing a position changes
   bodymap.ts   front/back silhouettes with a marker per injury site
   charts.ts    the accuracy line and the sessions bars, as plain SVG
+  criteria.ts  building your own exit criterion: wording, units, the draft
   mediapipe.ts model choice, camera (front/rear, mirroring), screen wake lock
   motion.ts    entrances, counters, bars and rings — all reduced-motion aware
   ui.ts        the mark, the icon set, the ring and bar

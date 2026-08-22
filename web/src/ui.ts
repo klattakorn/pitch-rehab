@@ -107,6 +107,15 @@ export const PLAY_ICON = `
       stroke-width="2" stroke-linejoin="round"/>
   </svg>`;
 
+/** Change the target on a test. Only appears where the builder can open it. */
+export const PENCIL = `
+  <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+    <path d="M4 20 l0.9 -4 L15.4 5.5 a2 2 0 0 1 2.8 0 l1.3 1.3 a2 2 0 0 1 0 2.8
+      L9 20.1 Z" fill="none" stroke="currentColor" stroke-width="1.8"
+      stroke-linejoin="round"/>
+    <path d="M14.2 6.7 L17.3 9.8" fill="none" stroke="currentColor" stroke-width="1.8"/>
+  </svg>`;
+
 // --------------------------------------------------------------- tab bar
 /** The five tabs. Line icons, so the active one reads by colour, not weight. */
 export const TAB_ICONS: Record<string, string> = {

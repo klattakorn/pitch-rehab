@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -17,7 +18,7 @@ from app.core.enums import (
     PhaseKey,
     TargetType,
 )
-from app.models.injury import ClinicianSignoff, InjuryEpisode
+from app.models.injury import ClinicianSignoff, EpisodeCriterion, InjuryEpisode
 from app.models.protocol import ExitCriterion, ProtocolPhase
 from app.services.criteria.resolver import MetricResolver, SampleSet
 from app.services.criteria.spec import CriterionSpec
@@ -306,6 +307,42 @@ def evaluate_criterion(
     )
 
 
+def merge_criteria(
+    db: Session,
+    episode: InjuryEpisode,
+    phase_key: PhaseKey,
+    library: Sequence[ExitCriterion],
+) -> list[ExitCriterion | EpisodeCriterion]:
+    """The library's criteria for this phase, plus whatever the player added.
+
+    A custom criterion sharing a key with a library one **replaces** it. That is
+    how "the standard sprint gate, but 95%" is said: the player is not adding a
+    second, contradictory rule that both have to pass -- they are changing the
+    one that already exists.
+
+    Anything with a new key is appended, so the personal tests read as a group
+    after the standard battery rather than being scattered through it.
+    """
+    custom = list(
+        db.execute(
+            select(EpisodeCriterion)
+            .where(EpisodeCriterion.episode_id == episode.id)
+            .where(EpisodeCriterion.phase_key == phase_key)
+            .order_by(EpisodeCriterion.order_index, EpisodeCriterion.id)
+        ).scalars()
+    )
+    if not custom:
+        return list(library)
+
+    overrides = {c.key: c for c in custom}
+    merged: list[ExitCriterion | EpisodeCriterion] = [
+        overrides.pop(item.key, item) for item in library
+    ]
+    # Whatever is left over introduced a key the library never had.
+    merged.extend(c for c in custom if c.key in overrides)
+    return merged
+
+
 def evaluate_phase(
     db: Session,
     episode: InjuryEpisode,
@@ -351,7 +388,10 @@ def evaluate_phase(
     )
     signoffs: dict[str | None, ClinicianSignoff] = {s.criterion_key: s for s in signoff_rows}
 
-    evaluations = [evaluate_criterion(resolver, c, signoffs) for c in phase.exit_criteria]
+    evaluations = [
+        evaluate_criterion(resolver, c, signoffs)
+        for c in merge_criteria(db, episode, phase_key, phase.exit_criteria)
+    ]
     required = [e for e in evaluations if e.required]
     required_passed = [e for e in required if e.passed]
 
