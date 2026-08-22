@@ -6,6 +6,10 @@ on Sunday 30 August rather than pushing everything back.
 
 ---
 
+> **Working with two other people?** See [docs/TEAM.md](docs/TEAM.md) — who owns which
+> files, what footage and evidence to ask them for, and a three-lane version of the
+> calendar below. This file stays the code lane.
+
 ## Where you actually are today (22 August)
 
 Checked just now, not from memory:
@@ -89,13 +93,24 @@ If this is broken, you want to know on day 1, not day 14.
    whole body in frame, decent light.
 2. Split squats: **3 clean reps, then 3 where you deliberately let the front knee
    drop inward.** Exaggerate the bad ones.
-3. Run it:
+3. **Film your two teammates doing the same.** The engine has only ever seen one body;
+   different heights and builds are the cheapest useful test you can run. Full brief in
+   [videos/README.md](videos/README.md).
+4. Run it:
 
 ```bash
 python scripts/check_video.py valgus_front.mp4 split_squat --side left --out annotated.mp4
 ```
 
-4. Compare the `knee_valgus` number per rep, and watch `annotated.mp4`.
+5. Compare the `knee_valgus` number per rep, and watch `annotated.mp4`. Once you have
+   more than a couple of clips, run the whole folder at once instead:
+
+```bash
+python scripts/batch_check.py videos/
+```
+
+That writes `docs/video-results.md` with a PASS / WEAK / FAIL verdict per exercise —
+did the bad reps score worse than the good ones? Someone who cannot code can run it.
 
 **Done when:** the three deliberate reps score clearly worse than the three clean
 ones, and the app actually flags them.
