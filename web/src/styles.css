@@ -16,6 +16,9 @@
   --mono: "IBM Plex Mono", ui-monospace, monospace;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius: 14px;
+  /* One curve for everything that moves: quick off the mark, settles without
+     bouncing. A single ease is what stops a UI feeling assembled from parts. */
+  --ease: cubic-bezier(0.22, 0.9, 0.3, 1);
 }
 
 * {
@@ -151,6 +154,10 @@ h3 {
   background: var(--panel-2);
   transform: translateY(-2px);
 }
+.card:active {
+  transform: translateY(-1px) scale(0.995);
+  transition-duration: 0.06s;
+}
 .card .meta {
   display: block;
   font-family: var(--mono);
@@ -178,8 +185,21 @@ button.primary {
   font-size: 15px;
   cursor: pointer;
 }
-button.primary:hover {
+button.primary {
+  transition:
+    filter 0.16s,
+    transform 0.12s var(--ease),
+    box-shadow 0.2s;
+  box-shadow: 0 6px 20px -14px var(--green);
+}
+button.primary:hover:not(:disabled) {
   filter: brightness(1.08);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px -14px var(--green);
+}
+button.primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+  transition-duration: 0.06s;
 }
 button.primary:disabled {
   background: var(--line);
@@ -196,9 +216,19 @@ button.ghost {
   font-size: 14px;
   cursor: pointer;
 }
+button.ghost {
+  transition:
+    color 0.16s,
+    border-color 0.16s,
+    transform 0.12s var(--ease);
+}
 button.ghost:hover {
   color: var(--text);
   border-color: var(--muted);
+}
+button.ghost:active {
+  transform: scale(0.985);
+  transition-duration: 0.06s;
 }
 
 /* -------------------------------------------------------------- dashboard */
@@ -254,9 +284,9 @@ button.ghost:hover {
 .bar > i {
   display: block;
   height: 100%;
-  background: var(--green);
+  background: linear-gradient(90deg, var(--green-deep), var(--green));
   border-radius: 4px;
-  transition: width 0.5s ease;
+  transition: width 0.85s var(--ease);
 }
 .bar-row {
   display: flex;
@@ -313,6 +343,9 @@ button.ghost:hover {
   width: 132px;
   height: 132px;
   flex: none;
+}
+.ring circle.arc {
+  transition: stroke-dasharray 0.95s var(--ease);
 }
 .ring text.pct {
   font-family: var(--sans);
@@ -693,4 +726,380 @@ ul.criteria .src {
   font-weight: 600;
   letter-spacing: 0.04em;
   vertical-align: 1px;
+}
+
+/* ==========================================================================
+   Motion
+   --------------------------------------------------------------------------
+   One idea, applied everywhere: things rise into place and settle. Nothing
+   bounces, nothing slides sideways, nothing spins. Entrances are short (under
+   half a second) because they happen on every screen; data animations are
+   slower, because a bar filling or a number counting is information arriving
+   and is worth watching.
+
+   Every animation starts from a state that is already laid out and ends on the
+   real value, so switching all of this off costs polish and nothing else. The
+   block at the bottom of this file does exactly that.
+   ========================================================================== */
+
+@keyframes screen-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(13px);
+  }
+}
+
+/* The detail panel rises like everything else rather than dropping in. One
+   direction throughout is what keeps the app feeling like one app. */
+@keyframes detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(9px);
+  }
+}
+
+/* The rep counter, when the camera accepts a rep. That is the moment the whole
+   project is selling, so it gets the one piece of overshoot in the app. */
+@keyframes tick-up {
+  0% {
+    transform: none;
+  }
+  32% {
+    transform: translateY(-7px) scale(1.16);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+main {
+  animation: screen-in 300ms var(--ease) both;
+}
+
+.stagger-in {
+  /* Capped at ten steps: a phase with forty exit criteria would otherwise take
+     two seconds to finish arriving, which reads as lag rather than polish. */
+  animation: rise-in 380ms var(--ease) both;
+  animation-delay: calc(min(var(--i, 0), 10) * 42ms);
+}
+
+.repbox .count.tick-up {
+  animation: tick-up 420ms var(--ease);
+}
+
+/* Keyboard users get the same affordances the mouse does. */
+:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+/* ==========================================================================
+   Onboarding steps
+   ========================================================================== */
+
+.steps {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.step {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 13px;
+}
+.step.on {
+  color: var(--green);
+  border-color: var(--green-deep);
+  background: var(--green-glow);
+}
+.step.done {
+  border-color: var(--green-deep);
+}
+.step.done::before {
+  content: "\2713\00a0";
+  color: var(--green);
+}
+
+/* ==========================================================================
+   Role picker
+   --------------------------------------------------------------------------
+   Six cards, ordered by how hard each position's sprint gate is, so the bars
+   climb as you read down. Selecting one opens a panel saying what that choice
+   actually changes -- the screen has to earn the question it is asking.
+   ========================================================================== */
+
+.role-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+}
+
+.role-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 46px 15px 16px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.18s,
+    background 0.18s,
+    transform 0.18s var(--ease),
+    box-shadow 0.24s;
+}
+.role-card:hover {
+  border-color: var(--green-deep);
+  background: var(--panel-2);
+  transform: translateY(-3px);
+}
+.role-card:active {
+  transform: translateY(-1px) scale(0.995);
+  transition-duration: 0.06s;
+}
+.role-card.on {
+  border-color: var(--green);
+  background: var(--green-glow);
+  box-shadow: 0 14px 34px -22px var(--green);
+}
+
+.role-card .role-name {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.role-card .role-blurb {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* The selection mark: an empty ring that fills, with the tick drawn in after. */
+.role-card .tick {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.role-card:hover .tick {
+  border-color: var(--green-deep);
+}
+.role-card.on .tick {
+  border-color: var(--green);
+  background: var(--green);
+}
+.role-card .tick::after {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 3px;
+  width: 5px;
+  height: 10px;
+  border: solid #0b1705;
+  border-width: 0 2px 2px 0;
+  transform: rotate(43deg) scale(0);
+  transform-origin: center;
+  transition: transform 0.24s cubic-bezier(0.3, 1.5, 0.5, 1);
+}
+.role-card.on .tick::after {
+  transform: rotate(43deg) scale(1);
+}
+
+.role-card .gate {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 9px;
+}
+.gate-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+.role-card.on .gate-bar {
+  background: rgba(11, 13, 12, 0.5);
+}
+.gate-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--green-deep), var(--green));
+  transition: width 0.85s var(--ease);
+}
+.gate-num {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--green);
+  font-variant-numeric: tabular-nums;
+}
+.role-card .gate-label {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.role-detail-slot {
+  margin-top: 16px;
+  min-height: 4px;
+}
+
+.role-detail {
+  background: var(--panel);
+  border: 1px solid var(--green-deep);
+  border-radius: var(--radius);
+  padding: 16px 18px 18px;
+  animation: detail-in 340ms var(--ease) both;
+}
+.role-detail .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.role-detail .headline {
+  font-size: 19px;
+  font-weight: 700;
+  margin: 5px 0 0;
+}
+
+ul.role-changes {
+  list-style: none;
+  margin: 13px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+ul.role-changes li {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 11px 13px;
+  border-radius: 10px;
+  background: var(--panel-2);
+  border-left: 3px solid var(--green-deep);
+}
+ul.role-changes .k {
+  flex: none;
+  min-width: 108px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+ul.role-changes .v {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+@media (max-width: 520px) {
+  ul.role-changes li {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+
+/* ==========================================================================
+   Who you are, on the dashboard
+   ========================================================================== */
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.tagbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 5px 5px 13px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 0.18s,
+    background 0.18s;
+}
+.tagbtn em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-left: 1px solid var(--line);
+  padding: 0 9px;
+  transition: color 0.18s;
+}
+.tagbtn:hover {
+  border-color: var(--green-deep);
+  background: var(--panel-2);
+}
+.tagbtn:hover em {
+  color: var(--green);
+}
+
+/* ==========================================================================
+   Reduced motion
+   --------------------------------------------------------------------------
+   Everything above is decoration on top of a layout that is already correct,
+   so this can switch all of it off without hiding anything. `motion.ts` makes
+   the same check and jumps counters, bars and rings straight to their values.
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .role-card:hover,
+  .card:hover {
+    transform: none;
+  }
 }

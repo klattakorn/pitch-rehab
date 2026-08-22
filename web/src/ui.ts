@@ -26,7 +26,12 @@ export const DASH = `
       stroke-dasharray="3 3"/>
   </svg>`;
 
-/** The result ring from the poster: a percentage arc with a verdict underneath. */
+/** The result ring: a percentage arc with a verdict underneath.
+ *
+ * Rendered empty and carrying its real value in `data-dash`; `animateRings`
+ * fills it in on the next frame so the arc sweeps round rather than appearing.
+ * The percentage underneath counts up from zero the same way. Both land on the
+ * true figure, so nothing is lost if the animation is skipped. */
 export function progressRing(percent: number, state: string): string {
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
@@ -36,17 +41,20 @@ export function progressRing(percent: number, state: string): string {
     <svg class="ring" viewBox="0 0 132 132" role="img"
          aria-label="${Math.round(percent)} percent, ${state}">
       <circle cx="66" cy="66" r="${radius}" fill="none" stroke="#2a2f30" stroke-width="10"/>
-      <circle cx="66" cy="66" r="${radius}" fill="none" stroke="${colour}" stroke-width="10"
-        stroke-linecap="round" stroke-dasharray="${filled} ${circumference}"
+      <circle class="arc" cx="66" cy="66" r="${radius}" fill="none" stroke="${colour}"
+        stroke-width="10" stroke-linecap="round"
+        stroke-dasharray="0 ${circumference}" data-dash="${filled} ${circumference}"
         transform="rotate(-90 66 66)"/>
-      <text class="pct" x="66" y="64" text-anchor="middle">${Math.round(percent)}%</text>
+      <text class="pct" x="66" y="64" text-anchor="middle"
+        data-count="${Math.round(percent)}" data-suffix="%">0%</text>
       <text class="state" x="66" y="82" text-anchor="middle">${state.toUpperCase()}</text>
     </svg>`;
 }
 
+/** A progress bar that grows from empty once it is on screen. */
 export function bar(percent: number): string {
   const clamped = Math.max(0, Math.min(100, percent));
-  return `<div class="bar"><i style="width:${clamped}%"></i></div>`;
+  return `<div class="bar"><i style="width:0" data-width="${clamped}"></i></div>`;
 }
 
 export function titleCase(value: string): string {

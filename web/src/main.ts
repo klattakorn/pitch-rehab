@@ -1,7 +1,9 @@
 /**
  * RehabFootball — demo front end.
  *
- * Screens: sign in, pick your role and injury, home, session, camera, results.
+ * Screens: sign in, pick your position, pick your injury, home, session, camera,
+ * results. Position comes before anything else because it decides the sprint
+ * targets a player has to clear, so it cannot be asked for afterwards.
  * Scoring runs here in the browser so the feedback is instant; the same numbers
  * go to the server afterwards, and the server decides whether a phase unlocks.
  */
@@ -11,10 +13,12 @@ import * as api from "./api";
 import type { Episode, Gate, Phase, Prescription } from "./api";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
 import { createPoseLandmarker, startCamera } from "./mediapipe";
+import { enterScreen, pulse } from "./motion";
 import { Frame } from "./pose/geometry";
 import type { Side } from "./pose/landmarks";
 import { LiveSession } from "./pose/live";
 import { drawSkeleton, metricsToShow, renderReadout } from "./render";
+import { byDemand, roleCardHtml, roleDetailHtml } from "./roles";
 import {
   BRAND_MARK,
   CAMERA_ICON,
@@ -60,6 +64,7 @@ interface State {
   phase: Phase | null;
   gate: Gate | null;
   sessions: api.SessionRow[];
+  positions: api.PositionInfo[] | null;
   online: boolean;
 }
 const state: State = {
@@ -68,6 +73,7 @@ const state: State = {
   phase: null,
   gate: null,
   sessions: [],
+  positions: null,
   online: false,
 };
 
@@ -87,6 +93,9 @@ function shell(body: string): void {
       }
     </div>
     <main>${body}</main>`;
+  // One place for every screen's entrance: children fan in, counters count,
+  // bars and rings fill. Screens never have to remember to animate themselves.
+  enterScreen(app);
 }
 
 const on = (selector: string, handler: () => void): void => {
@@ -103,11 +112,12 @@ function fail(error: unknown): void {
 }
 
 // ------------------------------------------------------------------ sign in
-function signInScreen(): void {
+function signInScreen(notice = ""): void {
   shell(`
     <h2>Your comeback. Stronger. Smarter.</h2>
     <p class="sub">Personalised rehab paths with data-driven return-to-play testing.</p>
     <div class="dash">
+      ${notice ? `<div class="notice">${notice}</div>` : ""}
       <div class="panel">
         <label class="label">Email</label>
         <input id="email" type="email" value="alex@rehabfootball.app"
@@ -130,18 +140,120 @@ function signInScreen(): void {
     const password = app.querySelector<HTMLInputElement>("#password")!.value;
     void (async () => {
       try {
-        try {
-          await api.login(email, password);
-        } catch {
+        await api.login(email, password);
+        await boot();
+      } catch (error) {
+        // Sign-in failed. The server deliberately does not say whether the email
+        // exists, so treat this as a new player and ask for a position -- an
+        // account cannot be created without one.
+        if (error instanceof api.ApiError && error.status === 401) {
+          return void roleScreen({ mode: "signup", email, password });
+        }
+        fail(error);
+      }
+    })();
+  });
+}
+
+// ---------------------------------------------------------- pick your role
+type RoleIntent =
+  | { mode: "signup"; email: string; password: string }
+  | { mode: "edit" };
+
+/**
+ * Choose a position before rehab starts.
+ *
+ * This is a real fork, not a profile field: the position sets the sprint gates
+ * a player has to clear before they are allowed back and adds drills specific
+ * to the job. So the screen shows what each choice changes, sourced from the
+ * same profiles the server uses to build the programme.
+ */
+async function roleScreen(intent: RoleIntent): Promise<void> {
+  shell(`<h2>Loading positions…</h2>`);
+  try {
+    state.positions ??= await api.listPositions();
+  } catch (error) {
+    return fail(error);
+  }
+  const positions = byDemand(state.positions);
+  let chosen = intent.mode === "edit" ? (state.user?.profile?.position ?? null) : null;
+
+  shell(`
+    ${
+      intent.mode === "signup"
+        ? `<div class="steps">
+             <span class="step on">1 · Position</span>
+             <span class="step">2 · Injury</span>
+           </div>`
+        : ""
+    }
+    <h2>Which position do you play?</h2>
+    <p class="sub">Your rehab is built around what your position actually demands.
+      A winger has to sprint faster than a keeper before either is let back on.</p>
+    <div class="role-grid">
+      ${positions.map((position) => roleCardHtml(position, position.key === chosen)).join("")}
+    </div>
+    <div id="role-detail" class="role-detail-slot"></div>
+    <div class="controls">
+      ${intent.mode === "edit" ? `<button class="ghost" id="back">Cancel</button>` : ""}
+      <button class="primary" id="continue" ${chosen ? "" : "disabled"}>
+        ${intent.mode === "edit" ? "Save position" : "Continue"}
+      </button>
+    </div>`);
+
+  const slot = app.querySelector<HTMLDivElement>("#role-detail")!;
+  const showDetail = (key: string): void => {
+    const position = positions.find((item) => item.key === key);
+    if (!position) return;
+    // Replacing the node rather than its text restarts the reveal animation.
+    slot.innerHTML = roleDetailHtml(position);
+    enterScreen(slot);
+  };
+
+  const select = (key: string): void => {
+    chosen = key;
+    app.querySelectorAll<HTMLButtonElement>(".role-card").forEach((card) => {
+      const on = card.dataset["key"] === key;
+      card.classList.toggle("on", on);
+      card.setAttribute("aria-pressed", String(on));
+    });
+    app.querySelector<HTMLButtonElement>("#continue")!.disabled = false;
+    showDetail(key);
+  };
+
+  if (chosen) showDetail(chosen);
+
+  app.querySelectorAll<HTMLButtonElement>(".role-card").forEach((card) => {
+    card.onclick = () => select(card.dataset["key"]!);
+  });
+
+  on("#back", () => homeScreen());
+  on("#continue", () => {
+    if (!chosen) return;
+    const button = app.querySelector<HTMLButtonElement>("#continue")!;
+    button.disabled = true;
+    button.textContent = intent.mode === "edit" ? "Saving…" : "Setting up…";
+    void (async () => {
+      try {
+        if (intent.mode === "signup") {
           await api.register({
-            email,
-            password,
-            full_name: email.split("@")[0]!,
-            position: "striker",
+            email: intent.email,
+            password: intent.password,
+            full_name: intent.email.split("@")[0]!,
+            position: chosen!,
           });
+        } else {
+          await api.updateProfile({ position: chosen! });
         }
         await boot();
       } catch (error) {
+        if (error instanceof api.ApiError && error.status === 409) {
+          // The email is already registered, so the sign-in failure was a wrong
+          // password rather than a missing account. Say so instead of looping.
+          return signInScreen(
+            "That email already has an account — check the password and try again.",
+          );
+        }
         fail(error);
       }
     })();
@@ -150,9 +262,18 @@ function signInScreen(): void {
 
 // -------------------------------------------------------------- onboarding
 function injuryScreen(): void {
+  const position = POSITIONS.find((p) => p.key === state.user?.profile?.position);
   shell(`
-    <h2>Select your injury</h2>
-    <p class="sub">You get a rehab plan built for this injury and your position.</p>
+    <div class="steps">
+      <span class="step done">1 · Position</span>
+      <span class="step on">2 · Injury</span>
+    </div>
+    <h2>What are you rehabbing?</h2>
+    <p class="sub">${
+      position
+        ? `Your plan is built for this injury <b>and</b> for playing ${position.label.toLowerCase()}.`
+        : "Your plan is built for this injury and your position."
+    }</p>
     <div class="grid">
       ${INJURIES.map(
         (i) => `<button class="card" data-key="${i.key}">${i.label}
@@ -208,12 +329,43 @@ function homeScreen(): void {
   const scored = phase.prescriptions.filter((rx) => rx.exercise.pose_rule).length;
   const injury = INJURIES.find((i) => i.key === episode.injury_site)?.label ?? "";
 
+  // Adherence and movement quality come from the same gate the testing screen
+  // reads, so the dashboard can never disagree with it.
+  const criterion = (key: string) => gate?.criteria.find((c) => c.key === key);
+  const adherence = criterion("adherence")?.observed ?? null;
+  const formScore = criterion("form_quality")?.observed ?? null;
+  const completed = state.sessions.filter((s) => s.status === "completed").length;
+  const painScores = state.sessions
+    .map((s) => s.pain_during)
+    .filter((p): p is number => p != null);
+  const avgPain = painScores.length
+    ? painScores.reduce((a, b) => a + b, 0) / painScores.length
+    : null;
+
+  // A tile either counts up to a real figure or shows a dash. It never counts
+  // up to a number that was not measured.
+  const tile = (value: number | null, suffix = ""): string =>
+    value == null
+      ? "—"
+      : `<span data-count="${Math.round(value)}" data-suffix="${suffix}">0${suffix}</span>`;
+  const movement =
+    formScore != null
+      ? tile(formScore)
+      : avgPain != null
+        ? `<span data-count="${avgPain.toFixed(1)}" data-decimals="1"
+             data-suffix="/10">0.0/10</span>`
+        : "—";
+
   shell(`
     <div class="dash">
       <div>
-        <p class="hello">👋 Welcome back,</p>
+        <p class="hello">Welcome back,</p>
         <p class="name">${user?.full_name ?? "Player"}</p>
-        <p class="sub" style="margin:0">${position} · ${injury} (${episode.side})</p>
+        <div class="who">
+          <button class="tagbtn" id="change-role" title="Change your position">
+            ${position}<em>change</em></button>
+          <span>${injury} · ${episode.side} side</span>
+        </div>
       </div>
 
       <div class="panel">
@@ -246,11 +398,11 @@ function homeScreen(): void {
       </div>
 
       <div class="tiles">
-        <div class="tile"><div class="n" id="t-sessions">—</div>
+        <div class="tile"><div class="n">${tile(completed)}</div>
           <div class="k">Sessions<br>completed</div></div>
-        <div class="tile"><div class="n" id="t-adherence">—</div>
+        <div class="tile"><div class="n">${tile(adherence, "%")}</div>
           <div class="k">Adherence</div></div>
-        <div class="tile"><div class="n" id="t-form">—</div>
+        <div class="tile"><div class="n">${movement}</div>
           <div class="k">Movement<br>quality</div></div>
       </div>
 
@@ -259,38 +411,9 @@ function homeScreen(): void {
       </div>
     </div>`);
 
-  // Adherence and pain come from the same gate the criteria screen reads, so the
-  // dashboard can never disagree with the testing screen.
-  const criterion = (key: string) => gate?.criteria.find((c) => c.key === key);
-  const adherence = criterion("adherence")?.observed;
-  const painScores = state.sessions
-    .map((s) => s.pain_during)
-    .filter((p): p is number => p != null);
-  const avgPain = painScores.length
-    ? painScores.reduce((a, b) => a + b, 0) / painScores.length
-    : null;
-  const completed = state.sessions.filter((s) => s.status === "completed").length;
-
-  const set = (id: string, value: string) => {
-    const el = app.querySelector(id);
-    if (el) el.textContent = value;
-  };
-  // Movement quality is the camera's own number, so it belongs on the front page
-  // rather than three taps deep inside a session summary.
-  const formScore = criterion("form_quality")?.observed;
-  set("#t-sessions", String(completed));
-  set("#t-adherence", adherence == null ? "—" : `${Math.round(adherence)}%`);
-  set(
-    "#t-form",
-    formScore == null
-      ? avgPain == null
-        ? "—"
-        : `${avgPain.toFixed(1)}/10`
-      : `${Math.round(formScore)}`,
-  );
-
   on("#start", () => sessionScreen());
   on("#criteria", () => criteriaScreen());
+  on("#change-role", () => void roleScreen({ mode: "edit" }));
 }
 
 // ----------------------------------------------------------------- session
@@ -404,6 +527,7 @@ async function cameraScreen(rx: Prescription): Promise<void> {
   let running = true;
   let lastTime = -1;
   let cueUntil = 0;
+  let shownReps = 0;
   const started = performance.now();
 
   const stop = () => {
@@ -434,7 +558,12 @@ async function cameraScreen(rx: Prescription): Promise<void> {
         const result = session.push(frame);
         drawSkeleton(ctx, frame, result.accepted);
         renderReadout(readout, result, show);
-        countEl.textContent = String(result.validRepCount);
+        if (result.validRepCount !== shownReps) {
+          shownReps = result.validRepCount;
+          countEl.textContent = String(shownReps);
+          // The rep landing is the moment the camera proves itself. Give it one.
+          pulse(countEl, "tick-up");
+        }
 
         const blocker = result.problems.find((p) => p.code !== "warming_up");
         if (blocker) {
@@ -613,6 +742,11 @@ async function boot(): Promise<void> {
 
   try {
     state.user = await api.me();
+    // A player with no position cannot be given a programme -- the sprint gates
+    // come from it. Ask before anything else.
+    if (state.user.role === "player" && !state.user.profile?.position) {
+      return void roleScreen({ mode: "edit" });
+    }
     const episodes = await api.listEpisodes();
     state.episode = episodes[0] ?? null;
     if (!state.episode) return injuryScreen();

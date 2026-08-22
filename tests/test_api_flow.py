@@ -355,6 +355,109 @@ def test_catalog_exposes_every_position_and_injury_combination(
     assert speed_target(keeper) == 75
 
 
+def test_role_picker_shows_what_a_position_actually_changes(client: TestClient) -> None:
+    """The role screen has to justify itself, not just collect a label.
+
+    Whatever it displays comes from this endpoint, and this endpoint reads the
+    same profiles the protocol composer uses -- so the promise made on the picker
+    and the programme the player is handed cannot drift apart.
+    """
+    positions = client.get(f"{API}/catalog/positions").json()
+    assert len(positions) == 6
+
+    by_key = {p["key"]: p for p in positions}
+    assert set(by_key) == {
+        "goalkeeper", "centre_back", "full_back",
+        "centre_midfield", "winger", "striker",
+    }
+
+    for position in positions:
+        assert position["blurb_en"].strip(), f"{position['key']} has nothing to say"
+        # The gate must tighten as a player gets closer to playing, never loosen.
+        assert position["speed_p3"] < position["speed_p4"]
+
+    # The numbers on the picker are the ones the protocol really enforces.
+    winger, keeper = by_key["winger"], by_key["goalkeeper"]
+    assert winger["speed_p3"] == 90
+    assert keeper["speed_p3"] == 75
+
+    protocol = client.get(f"{API}/catalog/protocols/winger/hamstring").json()
+    phase = next(p for p in protocol["phases"] if p["phase_key"] == "p3_running")
+    criterion = next(c for c in phase["exit_criteria"] if c["key"] == "speed_vs_baseline")
+    assert criterion["spec"]["target"]["value"] == winger["speed_p3"]
+
+    # A keeper trains dive landings; a winger does not. That difference is the
+    # whole argument for asking the question.
+    assert any(e["key"] == "goalkeeper_dive_landing" for e in keeper["extra_exercises"])
+    assert not any(e["key"] == "goalkeeper_dive_landing" for e in winger["extra_exercises"])
+
+    # Repeated sprint is prescribed in P4 for wingers; it must be listed once,
+    # under the phase it first appears in, not repeated per phase.
+    keys = [e["key"] for e in winger["extra_exercises"]]
+    assert len(keys) == len(set(keys))
+    assert all(e["phase_order"] in (1, 2, 3, 4) for e in winger["extra_exercises"])
+
+
+def test_changing_position_moves_the_targets_without_losing_progress(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """The role picker promises a position sets your targets. Make that true.
+
+    A player who switches position mid-rehab has to end up on the new
+    programme -- otherwise the screen lied. What they must *not* lose is where
+    they had got to, so the phase and its clock have to survive the move.
+    """
+    before = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    assert before["current_phase"] == "p1_protect"
+
+    def speed_gate() -> float:
+        protocol = client.get(
+            f"{API}/injuries/{episode_id}/protocol", headers=headers
+        ).json()
+        phase = next(p for p in protocol["phases"] if p["phase_key"] == "p3_running")
+        criterion = next(
+            c for c in phase["exit_criteria"] if c["key"] == "speed_vs_baseline"
+        )
+        return criterion["spec"]["target"]["value"]
+
+    assert speed_gate() == 90  # winger
+
+    # Advance out of phase 1 so there is real progress to preserve.
+    client.post(
+        f"{API}/injuries/{episode_id}/pain-logs",
+        headers=headers,
+        json={"pain_rest": 0, "pain_activity": 0, "logged_for": str(date.today())},
+    )
+
+    updated = client.patch(
+        f"{API}/players/me/profile", headers=headers, json={"position": "goalkeeper"}
+    )
+    assert updated.status_code == 200
+    assert updated.json()["position"] == "goalkeeper"
+
+    # The programme followed the player...
+    assert speed_gate() == 75  # goalkeeper
+    keeper_plan = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
+    assert keeper_plan["position"] == "goalkeeper"
+    assert keeper_plan["injury_site"] == before["injury_site"]
+
+    # ...and did not throw away where they were.
+    after = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    assert after["current_phase"] == before["current_phase"]
+    assert after["injured_on"] == before["injured_on"]
+    assert client.get(f"{API}/injuries/{episode_id}/today", headers=headers).status_code == 200
+
+
+def test_setting_the_same_position_again_changes_nothing(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """Re-saving the picker without changing the answer must be a no-op."""
+    before = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    client.patch(f"{API}/players/me/profile", headers=headers, json={"position": "winger"})
+    after = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    assert after["protocol_id"] == before["protocol_id"]
+    assert after["current_phase"] == before["current_phase"]
+
 def test_a_tendinopathy_is_not_treated_like_a_torn_ligament(client: TestClient) -> None:
     """The two used to share one "knee" programme. They need opposite handling:
     a reconstructed ligament is protected early, a painful tendon is loaded."""

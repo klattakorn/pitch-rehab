@@ -78,3 +78,34 @@ class ProtocolSummaryOut(ORMModel):
 
 class ProtocolOut(ProtocolSummaryOut):
     phases: list[PhaseOut]
+
+
+class PositionExtraOut(BaseModel):
+    """One drill or test that a position adds on top of the shared injury plan."""
+
+    key: str
+    label_en: str
+    phase_key: PhaseKey
+    phase_order: int
+
+
+class PositionOut(BaseModel):
+    """What picking a position actually changes, so the app can say so up front.
+
+    A player choosing a role is choosing a set of return-to-play targets, not a
+    label. The running gates and the extra work below are read straight from
+    ``app/data/protocols.py``, so the screen can never drift from the programme
+    the player is really given.
+    """
+
+    key: Position
+    label_en: str
+    label_th: str
+    blurb_en: str
+    #: Sprint speed gate, as a percentage of the player's own pre-injury best.
+    speed_p3: float
+    speed_p4: float
+    #: High-speed running volume gate for the final phase, same basis.
+    hsr_p4: float
+    extra_exercises: list[PositionExtraOut]
+    extra_criteria: list[PositionExtraOut]

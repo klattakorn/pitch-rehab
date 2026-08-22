@@ -6,8 +6,16 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
 from app.core.enums import InjurySite, PhaseKey, Position
+from app.data.exercises import EXERCISES_BY_KEY
+from app.data.protocols import POSITION_PROFILES
 from app.models.protocol import Exercise, Protocol, ProtocolPhase
-from app.schemas.protocol import ExerciseOut, ProtocolOut, ProtocolSummaryOut
+from app.schemas.protocol import (
+    ExerciseOut,
+    PositionExtraOut,
+    PositionOut,
+    ProtocolOut,
+    ProtocolSummaryOut,
+)
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -55,6 +63,97 @@ def get_protocol(position: Position, injury_site: InjurySite, db: DbSession) -> 
     if protocol is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "no protocol for that combination")
     return protocol
+
+
+#: A plain sentence per role, for the screen where a player picks one. The
+#: numbers beside it are pulled from the real position profile -- only the
+#: wording lives here, the same way phase labels do below.
+_ROLE_BLURBS: dict[Position, str] = {
+    Position.GOALKEEPER: (
+        "Diving, landing and getting straight back up. Less running than anyone "
+        "else, but far more awkward landings."
+    ),
+    Position.CENTRE_BACK: (
+        "Heading duels and short, hard sprints to cover the space in behind."
+    ),
+    Position.FULL_BACK: (
+        "Up and down the touchline all game — the most total running distance "
+        "of any outfield role."
+    ),
+    Position.CENTRE_MIDFIELD: (
+        "Covers the most ground overall, at a steadier pace than the wide players."
+    ),
+    Position.WINGER: (
+        "Repeated top-speed sprints and sharp cuts. The hardest speed target "
+        "in the app."
+    ),
+    Position.STRIKER: (
+        "Explosive short sprints, jumping for the ball, and turning under pressure."
+    ),
+}
+
+_PHASE_ORDER: dict[PhaseKey, int] = {key: i + 1 for i, key in enumerate(PhaseKey)}
+
+
+@router.get("/positions", response_model=list[PositionOut])
+def list_positions() -> list[PositionOut]:
+    """The six roles, and what each one changes about the programme.
+
+    Picking a position is not cosmetic -- it moves the sprint gates a player has
+    to clear and adds drills specific to the role. This endpoint returns those
+    differences so the picker can show them instead of asking the player to take
+    it on trust.
+    """
+    out: list[PositionOut] = []
+    for position, profile in POSITION_PROFILES.items():
+        exercises = [
+            PositionExtraOut(
+                key=rx.exercise,
+                label_en=(
+                    definition.name_en
+                    if (definition := EXERCISES_BY_KEY.get(rx.exercise))
+                    else rx.exercise
+                ),
+                phase_key=phase,
+                phase_order=_PHASE_ORDER[phase],
+            )
+            for phase, items in profile.extra_rx.items()
+            for rx in items
+        ]
+        # A drill can appear in more than one phase; show it once, at the phase
+        # it first arrives, so the picker reads as a list of new things.
+        seen: set[str] = set()
+        unique_exercises = [
+            item
+            for item in sorted(exercises, key=lambda i: i.phase_order)
+            if not (item.key in seen or seen.add(item.key))
+        ]
+
+        criteria = [
+            PositionExtraOut(
+                key=criterion.key,
+                label_en=criterion.label_en,
+                phase_key=phase,
+                phase_order=_PHASE_ORDER[phase],
+            )
+            for phase, items in profile.extra_criteria.items()
+            for criterion in items
+        ]
+
+        out.append(
+            PositionOut(
+                key=position,
+                label_en=profile.label_en,
+                label_th=profile.label_th,
+                blurb_en=_ROLE_BLURBS[position],
+                speed_p3=profile.speed_p3,
+                speed_p4=profile.speed_p4,
+                hsr_p4=profile.hsr_p4,
+                extra_exercises=unique_exercises,
+                extra_criteria=sorted(criteria, key=lambda i: i.phase_order),
+            )
+        )
+    return out
 
 
 @router.get("/phases")

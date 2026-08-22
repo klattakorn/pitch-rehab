@@ -14,8 +14,8 @@ from app.services.criteria.engine import PhaseGateResult, evaluate_phase
 def select_protocol(db: Session, episode: InjuryEpisode) -> Protocol | None:
     """Pick the programme for this player's position and injury site.
 
-    This is the 6 x 5 grid from the poster: the same hamstring tear gets a
-    different programme for a winger than for a centre-back.
+    The same hamstring tear gets a different programme for a winger than for a
+    centre-back -- 6 positions x 7 injury sites.
     """
     player = episode.player
     if player is None:
@@ -44,6 +44,37 @@ def assign_protocol(db: Session, episode: InjuryEpisode) -> Protocol | None:
         )
     )
     return protocol
+
+
+def realign_protocol(db: Session, episode: InjuryEpisode) -> Protocol | None:
+    """Move an in-progress episode onto the programme for the player's position.
+
+    Called when a player changes position mid-rehab. The role picker promises
+    that a position sets the targets you have to clear, so leaving someone on
+    their old programme would quietly make that untrue.
+
+    Deliberately *not* ``assign_protocol``: that one restarts the episode at
+    phase 1 and opens a fresh attempt, which is right for a new injury and
+    wrong here. Every protocol carries the same four phases, so the player
+    keeps their phase, their clock and their history -- only the targets move.
+
+    Returns the new protocol when something changed, otherwise ``None``.
+    """
+    protocol = select_protocol(db, episode)
+    if protocol is None or protocol.id == episode.protocol_id:
+        return None
+    episode.protocol_id = protocol.id
+    return protocol
+
+
+def realign_active_episodes(db: Session, player_id: int) -> int:
+    """Re-point every open episode after a position change. Returns how many moved."""
+    episodes = db.execute(
+        select(InjuryEpisode)
+        .where(InjuryEpisode.player_id == player_id)
+        .where(InjuryEpisode.status == EpisodeStatus.ACTIVE)
+    ).scalars()
+    return sum(1 for episode in episodes if realign_protocol(db, episode) is not None)
 
 
 def _open_attempt(db: Session, episode: InjuryEpisode, phase: PhaseKey) -> PhaseAttempt:

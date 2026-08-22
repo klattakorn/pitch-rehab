@@ -100,14 +100,59 @@ cd web && npm install && node scripts/vendor-assets.mjs && npm run dev
 Open <http://localhost:5173> with the backend running in another terminal. Pick an
 exercise, and the webcam scores your form live.
 
-**It runs offline.** MediaPipe's wasm and the pose model are copied into `web/public`,
-and a generated copy of the exercise library lives in `web/src/fallback.ts`, so nothing
-is fetched from the internet and the app still works if the backend is down.
-Presentation wifi fails; this removes the risk.
+**No internet needed.** MediaPipe's wasm and the pose model are copied into
+`web/public`, so nothing is fetched from a CDN at run time. Presentation wifi fails;
+this removes that risk.
+
+A generated copy of the exercise library also sits in `web/src/fallback.ts` for the day
+the *backend* dies mid-demo — but nothing imports it yet, so today the app still needs
+the API. Wiring it up is task 3 in [PLAN.md](PLAN.md).
 
 **Camera permission needs a secure origin.** `localhost` counts as secure, a plain
 `http://192.168.x.x` address does not — so the laptop is the reliable demo, and opening
 it on a phone over wifi needs https.
+
+### Choosing a position, before anything else
+
+The first thing a new player is asked is what they play, because it is not a profile
+field — it sets the sprint targets they have to clear before they are allowed back, and
+it adds drills specific to the job. A winger has to hit 97% of their own best sprint
+speed to be cleared; a goalkeeper, 85%.
+
+So the picker shows what each choice changes rather than asking for it on trust. The
+numbers come from `GET /catalog/positions`, which is derived from the same
+`POSITION_PROFILES` the protocol composer uses — the promise on the screen and the
+programme the player is handed cannot drift apart.
+
+Positions are listed easiest gate first, each with a bar showing where its sprint
+target sits. That bar is zoomed to the 70–100% band the gates actually live in, because
+on a plain 0–100 scale all six look identical; the real percentage is printed next to
+it, and that is the number that means anything.
+
+Changing position later re-points any open episode onto the new programme
+(`realign_protocol`). The player keeps their phase, their clock and their history —
+only the targets move.
+
+### How it moves
+
+One idea, everywhere: things rise into place and settle. Nothing bounces, nothing
+slides sideways, nothing spins. Screens fade up as they arrive; cards, criteria and rep
+rows fan in behind them; bars, rings and numbers fill from zero because a figure
+arriving is information, not decoration.
+
+Two rules keep it from getting in the way, both enforced in `web/src/motion.ts`:
+
+- **Motion never gates meaning.** Every animation starts from a layout that is already
+  correct and ends on the real value. Drop the frames, kill the animation, hide the
+  tab — you lose polish and nothing else. A hidden tab never runs
+  `requestAnimationFrame`, so values are applied immediately there rather than being
+  queued for a frame that will not come.
+- **`prefers-reduced-motion` is honoured in JavaScript as well as CSS.** The stylesheet
+  switches the keyframes off; the helpers jump counters, bars and rings straight to
+  their values instead of easing toward them.
+
+The one place with any overshoot is the rep counter on the camera screen, when a rep is
+accepted. That is the moment the whole project is selling.
 
 ### Showing the player what "correct" looks like
 
@@ -399,7 +444,7 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 | `POST` | `/auth/register` | Players must pick a position — it decides their protocol |
 | `POST` | `/auth/login` | Same 401 for unknown email and wrong password |
 | `GET` | `/auth/me` | |
-| `PATCH` | `/players/me/profile` | |
+| `PATCH` | `/players/me/profile` | Changing position re-points open episodes at the new programme |
 | `GET` `PUT` | `/players/me/baselines` | Personal reference values for `percent_of_baseline` |
 | `GET` | `/players/me/reference-values` | What the engine would use with no baseline stored |
 
@@ -407,6 +452,7 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 
 | Method | Path | |
 |---|---|---|
+| `GET` | `/catalog/positions` | The six roles and what each one changes — powers the role picker |
 | `GET` | `/catalog/exercises` | Includes each `pose_rule` for on-device scoring |
 | `GET` | `/catalog/protocols` | All 30, filterable by position / injury site |
 | `GET` | `/catalog/protocols/{position}/{injury_site}` | Full 4-phase programme |
@@ -471,7 +517,8 @@ them, only derived numbers persist.
 
 ## Tests
 
-57 tests, all passing. They cover what actually matters rather than line count:
+**76 on the server, 173 in the browser.** They cover what actually matters rather than
+line count:
 
 - `test_pose.py` — angles match the pose they were built from; depth failures coach but
   still count the rep while knee collapse invalidates it; hysteresis rejects threshold
@@ -484,7 +531,19 @@ them, only derived numbers persist.
 - `test_health.py` — type mapping, unit conversion, re-sync is a no-op, unmapped types
   are reported not swallowed, HSR derivation, pre-injury baseline derivation.
 - `test_api_flow.py` — the whole journey the app will make, plus authorisation edges
-  (players cannot sign themselves off, cannot read another player's episode).
+  (players cannot sign themselves off, cannot read another player's episode), and the
+  role picker: the numbers it shows are the ones the protocol really enforces, and
+  changing position moves the targets without losing the player's progress.
+
+In `web/`:
+
+- `crosscheck.test.ts` — the Python and TypeScript pose maths agree, pinned by a
+  generated fixture.
+- `live.test.ts` — the streaming rep state machine and its rolling-window guards.
+- `demo.test.ts` — every exercise has a distinct "wrong" pose to demonstrate.
+- `roles.test.ts` — what a position changes, and the attribute hooks the animations
+  find their work by. Motion that quietly stops working breaks nothing else, so the
+  contract is pinned in a test rather than left to a visual check.
 
 `tests/factories.py` builds synthetic 33-landmark traces, so the pose engine is tested
 without a camera.
@@ -535,4 +594,11 @@ app/
   data/        exercises, protocols, position norms   ← edit the library here
   api/routers/ auth, players, catalog, injuries, sessions, health
 tests/
+web/src/
+  main.ts      screen router: sign in → position → injury → home → session → camera
+  roles.ts     the role picker: what choosing a position changes
+  motion.ts    entrances, counters, bars and rings — all reduced-motion aware
+  pose/        the browser copy of the pose maths
+  demo/        the animated how-to figure
+  styles.css   palette, components, and one motion language for the lot
 ```

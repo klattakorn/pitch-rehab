@@ -9,6 +9,7 @@ from app.data.position_norms import METRIC_UNITS, position_norm
 from app.models.user import PlayerBaseline, PlayerProfile
 from app.schemas.auth import PlayerProfileOut, ProfileUpdateIn, UserOut
 from app.schemas.injury import BaselineIn, BaselineOut
+from app.services.progression import realign_active_episodes
 
 router = APIRouter(prefix="/players", tags=["players"])
 
@@ -22,8 +23,19 @@ def get_me(user: CurrentUser) -> object:
 def update_profile(
     payload: ProfileUpdateIn, db: DbSession, player: CurrentPlayer
 ) -> PlayerProfile:
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    moved_position = "position" in changes and changes["position"] != player.position
+
+    for field, value in changes.items():
         setattr(player, field, value)
+
+    if moved_position:
+        # The position is what sets a player's sprint gates, so a change to it
+        # has to reach the rehab they are actually doing. Their phase and their
+        # history survive -- only the targets move. See realign_protocol.
+        db.flush()
+        realign_active_episodes(db, player.id)
+
     db.commit()
     db.refresh(player)
     return player

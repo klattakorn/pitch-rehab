@@ -155,7 +155,35 @@ export async function register(input: {
   await login(input.email, input.password);
 }
 
+/** One drill or test that a position adds on top of the shared injury plan. */
+export interface PositionExtra {
+  key: string;
+  label_en: string;
+  phase_key: string;
+  phase_order: number;
+}
+
+/** What choosing a role changes. Comes from the same profiles the server uses
+ *  to compose the programme, so the picker cannot promise the wrong thing. */
+export interface PositionInfo {
+  key: string;
+  label_en: string;
+  label_th: string;
+  blurb_en: string;
+  speed_p3: number;
+  speed_p4: number;
+  hsr_p4: number;
+  extra_exercises: PositionExtra[];
+  extra_criteria: PositionExtra[];
+}
+
 export const me = () => request<User>("/auth/me");
+export const listPositions = () => request<PositionInfo[]>("/catalog/positions");
+export const updateProfile = (body: { position?: string; dominant_foot?: string }) =>
+  request<Profile>("/players/me/profile", {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
 export const listExercises = () => request<Exercise[]>("/catalog/exercises");
 export const listEpisodes = () => request<Episode[]>("/injuries?status_filter=active");
 export const todayPlan = (episodeId: number) => request<Phase>(`/injuries/${episodeId}/today`);
