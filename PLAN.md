@@ -59,8 +59,8 @@ the freeze is now about the demo working, not about the app doing more.
 | Sun 23 Aug | Sun | **1.** Prove the knee-valgus check on a real front-on video | 1 |
 | Mon 24 Aug | Mon | **2.** Fix whatever that video exposes | 1 |
 | ~~Tue 25 Aug~~ | | ~~**4.** Demo player with three weeks of history~~ | ✅ |
-| Wed 26 Aug | Wed | **3.** Demo safety net — survive backend down and wifi off | 1 |
-| Thu 27 Aug | Thu | **6.** Session scheduling ("Today, 4:30 PM") | 1 |
+| Wed 26 Aug | Wed | **6a.** Session scheduling — backend + the "Today, 4:30 PM" card | 1 |
+| Thu 27 Aug | Thu | **6b.** Calendar screen — the last poster screen with nothing behind it | 1 |
 | Fri 28 Aug | Fri | Buffer — the video is the thing most likely to need a second go | — |
 | Sat 29 Aug | Sat | **8a.** Coach view — backend, *or* cut it | 1 |
 | Sun 30 Aug | Sun | **8b.** Coach view — screen, *or* cut it | 1 |
@@ -160,7 +160,16 @@ spare day at the end. You will want it.
 
 ---
 
-### 3. Demo safety net — Mon 24 Aug
+### 3. Demo safety net — CUT on 23 August
+
+Kept here for the record. `web/src/fallback.ts` holds a copy of every camera-scored
+exercise, and nothing imports it, so if the backend dies mid-demo the app dies with it.
+The decision was to accept that rather than spend half a day on it. What covers you
+instead: both server windows stay open, and you have a full screen recording from
+task 12 if anything goes wrong live.
+
+<details><summary>What it would have involved</summary>
+
 
 **Why.** Two things will be true in the demo room: the wifi will be bad, and
 something will go down at the worst moment.
@@ -180,6 +189,8 @@ the app just breaks.
 
 **Done when:** with wifi off and the API window closed, you can still get to the
 camera screen and score a rep.
+
+</details>
 
 ---
 
@@ -354,11 +365,18 @@ Boot it once. Confirm it comes up. Confirm the backup video plays. Nothing else.
 
 If you fall behind, cut from the top of this list:
 
-1. **Coach view** (31 Aug – 1 Sep) — least poster value, most work
-2. **Notifications** (29 Aug) — a static list of reminders reads fine on a slide
-3. **Session scheduling** (28 Aug) — hardcode "Today, 4:30 PM" on the home screen
+1. **Coach view** (29–30 Aug) — least poster value, most work
+2. **The calendar screen** (27 Aug) — the scheduling card on Home carries the idea
+   on its own
+3. **Session scheduling** (26 Aug) — hardcode "Today, 4:30 PM" on the home screen
 
-**Never cut:** tasks 1, 3, 4, 10, 11, 12. Those are the demo working at all.
+**Never cut:** tasks 1, 10, 11 and 12 — proving the camera works, freezing, and
+rehearsing twice. Those are the demo working at all.
+
+**Cut on 23 August:** task 3, the offline safety net. `web/src/fallback.ts` stays
+generated and tested but unused, so closing the API window still kills the app. That is
+a known, accepted risk now rather than an oversight — keep both server windows open,
+and the backup recording from task 12 covers the rest.
 
 ### Garmin and WHOOP — do not build these
 

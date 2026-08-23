@@ -137,8 +137,8 @@ because a programme cannot exist until both are known.
 this removes that risk.
 
 A generated copy of the exercise library also sits in `web/src/fallback.ts` for the day
-the *backend* dies mid-demo — but nothing imports it yet, so today the app still needs
-the API. Wiring it up is task 3 in [PLAN.md](PLAN.md).
+the *backend* dies mid-demo — but nothing imports it yet, so the app still needs the
+API. Parked deliberately, not forgotten.
 
 ### Pointing at the injury instead of naming it
 
@@ -736,7 +736,12 @@ without a camera.
   run on SQLite.
 - **`RTP_SECRET_KEY` must be set in production** — the app refuses to boot with the dev
   key when `RTP_ENV=prod`.
-- The frontend.
+- **Session scheduling**, and the calendar screen that would sit on top of it. The only
+  screen from the product poster with nothing behind it.
+- **A coach or medical-staff view.** Clinician sign-off exists as an endpoint; there is
+  no screen listing a squad.
+- **The offline fallback.** `web/src/fallback.ts` is generated and tested but nothing
+  imports it, so the app still needs the API. Deliberately parked.
 
 ## Layout
 
