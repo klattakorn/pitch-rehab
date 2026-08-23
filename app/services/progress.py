@@ -215,7 +215,14 @@ def build_report(db: Session, episode: InjuryEpisode) -> ProgressReport:
         overall_pct=round(100 * overall, 1),
         phase_key=episode.current_phase,
         phase_order=phase_order + 1,
-        phase_pct=round(100 * min(1.0, gate.progress), 1),
+        # The share of criteria passed, not the mean progress toward each --
+        # averaging lets a phase read 100% while a test is still failing.
+        phase_pct=round(
+            100 * gate.required_passed / gate.required_total
+            if gate.required_total
+            else (100.0 if gate.passed else 0.0),
+            1,
+        ),
         criteria_passed=gate.required_passed,
         criteria_total=gate.required_total,
         week_of=week_of,

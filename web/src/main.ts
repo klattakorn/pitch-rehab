@@ -475,6 +475,21 @@ function injuryScreen(): void {
   render();
 }
 
+
+/**
+ * How far through a phase's gate a player is, as a percentage.
+ *
+ * Deliberately the share of criteria *passed*, not the mean progress toward
+ * each. Averaging lets a gate read 100% while a test is still failing -- one
+ * criterion sitting at 79.3 against a target of 80 rounds the whole thing up --
+ * and a ring saying 100% beside the words "NOT YET" is not a rounding error,
+ * it is the screen contradicting itself.
+ */
+function gatePercent(gate: Gate | null): number {
+  if (!gate || gate.required_total === 0) return gate?.passed ? 100 : 0;
+  return Math.round((100 * gate.required_passed) / gate.required_total);
+}
+
 // -------------------------------------------------------------------- home
 function homeScreen(): void {
   const { episode, phase, gate } = state;
@@ -485,7 +500,7 @@ function homeScreen(): void {
     name: titleCase(episode.current_phase),
     weeks: "",
   };
-  const percent = Math.round((gate?.progress ?? 0) * 100);
+  const percent = gatePercent(gate);
   const injury = INJURY_SITES.find((i) => i.key === episode.injury_site)?.label ?? "";
   const scored = phase.prescriptions.filter((rx) => rx.exercise.pose_rule).length;
   const progress = state.progress;
@@ -1079,7 +1094,7 @@ function testScreen(): void {
   // very first paint, where they simply mean "no pencils yet".
   const cat = state.catalogue ?? { groups: [], metrics: [], exercises: [] };
   const yours = new Set((state.customCriteria ?? []).map((c) => c.key));
-  const percent = Math.round(gate.progress * 100);
+  const percent = gatePercent(gate);
   const info = PHASE_NAMES[gate.phase_key] ?? {
     n: 1,
     name: titleCase(gate.phase_key),

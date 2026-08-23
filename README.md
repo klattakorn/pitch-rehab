@@ -60,6 +60,19 @@ page came from a secure origin — `localhost` is exempt, a plain `http://192.16
 address is not — so the dev server signs its own certificate, which no phone has any
 reason to trust. See [Running it on a phone](#running-it-on-a-phone).
 
+**Want something to look at?** A fresh account is honest and useless to show anyone —
+every chart says "nothing measured yet". This builds a player three weeks into an ACL
+rehab, with sessions behind them and a gate that has something to say:
+
+```bash
+python scripts/seed_demo.py
+```
+
+Sign in as `demo@pitchrehab.app` / `correct-horse-battery`. Re-running rebuilds them
+from scratch, so it doubles as the reset button between rehearsals — and it only ever
+touches that one account. `--blocker none` leaves the phase ready to advance;
+`--list` shows the choices.
+
 **Not sure where to start?** With the server running, in a second terminal:
 
 ```bash

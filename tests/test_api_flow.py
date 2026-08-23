@@ -529,6 +529,33 @@ def test_progress_counts_a_real_session(
     assert progress["trend"][-1]["sessions"] == 1
     assert progress["top_exercises"][0]["key"] == "prone_hamstring_curl"
 
+def test_a_phase_never_reads_full_while_a_test_is_failing(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """The ring counts criteria passed, not average progress toward each.
+
+    Averaging rounds a gate up: one criterion sitting at 79.3 against a target
+    of 80 is 99% of the way there, and the mean of that with four passes is
+    100%. A ring reading 100% beside the words "NOT YET" is not a rounding
+    error, it is the screen contradicting itself.
+    """
+    # Clear one criterion and leave the rest untouched.
+    client.post(
+        f"{API}/injuries/{episode_id}/pain-logs",
+        headers=headers,
+        json={"pain_rest": 0, "pain_activity": 0, "logged_for": str(date.today())},
+    )
+
+    gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
+    progress = client.get(f"{API}/injuries/{episode_id}/progress", headers=headers).json()
+
+    assert not gate["passed"]
+    assert gate["required_passed"] < gate["required_total"]
+    assert progress["phase_pct"] < 100
+    assert progress["phase_pct"] == pytest.approx(
+        100 * gate["required_passed"] / gate["required_total"], abs=0.1
+    )
+
 def test_a_tendinopathy_is_not_treated_like_a_torn_ligament(client: TestClient) -> None:
     """The two used to share one "knee" programme. They need opposite handling:
     a reconstructed ligament is protected early, a painful tendon is loaded."""

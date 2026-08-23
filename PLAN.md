@@ -58,7 +58,7 @@ the freeze is now about the demo working, not about the app doing more.
 | ~~Sat 22 Aug~~ | | ~~**5b.** Progress screen~~ · position picker · phone + https · redesign | ✅ |
 | Sun 23 Aug | Sun | **1.** Prove the knee-valgus check on a real front-on video | 1 |
 | Mon 24 Aug | Mon | **2.** Fix whatever that video exposes | 1 |
-| Tue 25 Aug | Tue | **4.** Demo player with three weeks of history | 1 |
+| ~~Tue 25 Aug~~ | | ~~**4.** Demo player with three weeks of history~~ | ✅ |
 | Wed 26 Aug | Wed | **3.** Demo safety net — survive backend down and wifi off | 1 |
 | Thu 27 Aug | Thu | **6.** Session scheduling ("Today, 4:30 PM") | 1 |
 | Fri 28 Aug | Fri | Buffer — the video is the thing most likely to need a second go | — |
@@ -83,6 +83,8 @@ the freeze is now about the demo working, not about the app doing more.
 - **The Pitch Rehab redesign** — five tabs, body map, new palette
 - **Player-authored exit criteria** — set your own targets; overrides replace rather
   than argue with the standard ones
+- **Demo player** (was 25 Aug) — `python scripts/seed_demo.py`, three weeks of history
+  and the reset button between rehearsals
 
 Four extra days of features. Which is exactly why the two remaining risks matter more
 now, not less: **nothing on this list makes the demo work if the camera check is wrong
