@@ -88,9 +88,12 @@ describe("the sessions bar chart", () => {
       { day: day(3), value: 2 },
     ]);
     expect(html.match(/<rect /g)).toHaveLength(3);
-    // The empty day is drawn in the flat surface colour, not the accent.
-    expect(html).toContain("var(--panel-3)");
-    expect(html).toContain("var(--green)");
+    // A day with a session is a state, so it takes the state colour; an empty
+    // day takes a flat surface. Neither uses the accent -- the accent means
+    // "you can act here", and a chart is not something you act on.
+    expect(html).toContain("var(--raised)");
+    expect(html).toContain("var(--pass)");
+    expect(html).not.toContain("var(--volt)");
   });
 
   it("survives a window with nothing in it at all", () => {

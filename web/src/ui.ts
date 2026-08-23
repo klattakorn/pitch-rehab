@@ -34,7 +34,7 @@ export const TICK = `
 export const TICK_FILLED = `
   <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">
     <circle cx="12" cy="12" r="10" fill="currentColor"/>
-    <path d="M7.5 12.4 l3 3 l6-6.5" fill="none" stroke="var(--green-ink)" stroke-width="2.4"
+    <path d="M7.5 12.4 l3 3 l6-6.5" fill="none" stroke="var(--page)" stroke-width="2.4"
       stroke-linecap="round" stroke-linejoin="round"/>
   </svg>`;
 
@@ -162,11 +162,11 @@ export function progressRing(
   const circumference = 2 * Math.PI * radius;
   const filled = circumference * Math.max(0, Math.min(1, percent / 100));
   const colour =
-    percent >= 100 ? "var(--green)" : percent >= 60 ? "var(--amber)" : "var(--red)";
+    percent >= 100 ? "var(--pass)" : percent >= 60 ? "var(--fix)" : "var(--fail)";
   return `
     <svg class="ring ring-${size}" viewBox="0 0 132 132" role="img"
          aria-label="${Math.round(percent)} percent, ${state}">
-      <circle cx="66" cy="66" r="${radius}" fill="none" stroke="var(--panel-3)"
+      <circle cx="66" cy="66" r="${radius}" fill="none" stroke="var(--raised)"
         stroke-width="9"/>
       <circle class="arc" cx="66" cy="66" r="${radius}" fill="none" stroke="${colour}"
         stroke-width="9" stroke-linecap="round"

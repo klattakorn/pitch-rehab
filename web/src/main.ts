@@ -189,10 +189,61 @@ function shell(body: string, chrome: Chrome = {}): void {
   });
   on("#bell", () => notificationsScreen());
 
+  syncHistory(chrome);
   // One place for every screen's entrance: children fan in, counters count,
   // bars and rings fill. Screens never have to remember to animate themselves.
   enterScreen(app);
 }
+
+
+// ------------------------------------------------------------------ history
+/**
+ * Make the phone's back gesture mean "back", not "quit".
+ *
+ * The router is plain function calls, so without this the Android back button
+ * and the iOS edge swipe close the whole app from any screen -- including
+ * mid-set, with the camera running. That is the most destructive thing a
+ * gesture can do here and it was one swipe away.
+ *
+ * Only screens that show a back arrow push an entry, so the tab bar does not
+ * fill history with five sideways moves. A screen re-rendering itself (the
+ * injury picker redraws on every tap) is the same screen, so it does not push
+ * either -- otherwise choosing a side four times would take four presses to
+ * undo.
+ */
+let currentBack: (() => void) | null = null;
+let currentKey = "";
+let poppingBack = false;
+
+function screenKey(chrome: Chrome): string {
+  return chrome.title ?? chrome.tab ?? (chrome.greeting ? "home" : "welcome");
+}
+
+function syncHistory(chrome: Chrome): void {
+  const key = screenKey(chrome);
+  currentBack = chrome.back ?? null;
+  if (poppingBack || key === currentKey) {
+    currentKey = key;
+    return;
+  }
+  currentKey = key;
+  if (chrome.back) history.pushState({ key }, "");
+  else history.replaceState({ key }, "");
+}
+
+addEventListener("popstate", () => {
+  const back = currentBack;
+  poppingBack = true;
+  try {
+    // Whatever the back arrow would have done, the gesture does too -- which
+    // matters most on the camera screen, where that handler is what releases
+    // the camera and the wake lock.
+    if (back) back();
+    else homeScreen();
+  } finally {
+    poppingBack = false;
+  }
+});
 
 const on = (selector: string, handler: () => void): void => {
   const el = app.querySelector<HTMLElement>(selector);
@@ -751,7 +802,10 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
        <canvas id="overlay"></canvas>
        <div class="hud">
          <div class="hud-top">
-           <div class="form-badge" id="badge">Getting ready…</div>
+           <!-- One word. At three metres a sentence is a wall, and a 12px badge
+                is invisible -- so the state is a word plus the band of colour
+                around the whole frame. -->
+           <div class="form-word" id="badge" role="status" aria-live="polite">Getting ready</div>
            ${
              twoCameras
                ? `<button class="iconbtn" id="flip" title="Switch camera"
@@ -761,22 +815,17 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
          </div>
          <div id="centre"></div>
          <div class="hud-bottom">
-           <div class="repdial">
-             <svg viewBox="0 0 88 88" aria-hidden="true">
-               <circle cx="44" cy="44" r="39" fill="none" stroke="rgba(9,14,11,.75)"
-                 stroke-width="6"/>
-               <circle id="repring" cx="44" cy="44" r="39" fill="none" stroke="var(--green)"
-                 stroke-width="6" stroke-linecap="round" stroke-dasharray="0 245"
-                 transform="rotate(-90 44 44)"/>
-             </svg>
-             <span class="repnum" id="count">0</span>
-             <span class="replabel">REPS</span>
+           <div class="repcount">
+             <span class="now" id="count">0</span>
+             <span class="of">/ ${rx.reps ?? "—"}</span>
            </div>
-           <div class="readout" id="readout">Starting…</div>
          </div>
        </div>
+       <div class="reptrack" aria-hidden="true"><i id="reptrack"></i></div>
      </div>
 
+     <!-- Below the frame is the near scale: read on the walk back to the phone,
+          not from across the room. -->
      <div class="setbar">
        <div class="setstat"><span>Target</span><b>${rx.sets} × ${
          rx.reps ?? `${rx.hold_seconds}s`
@@ -784,6 +833,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
        <button class="roundbtn" id="pause" aria-label="Pause">${PAUSE_ICON}</button>
        <div class="setstat right"><span>Rest</span><b>${rx.rest_seconds ?? 30}s</b></div>
      </div>
+     <p class="readout" id="readout">Starting…</p>
      <div class="controls">
        <button class="primary block" id="finish">End Set</button>
      </div>`,
@@ -796,7 +846,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   const centre = app.querySelector<HTMLDivElement>("#centre")!;
   const countEl = app.querySelector<HTMLSpanElement>("#count")!;
   const badge = app.querySelector<HTMLDivElement>("#badge")!;
-  const repring = app.querySelector<SVGCircleElement>("#repring")!;
+  const reptrack = app.querySelector<HTMLElement>("#reptrack")!;
   const stage = app.querySelector<HTMLDivElement>(".stage")!;
   const ctx = canvas.getContext("2d")!;
 
@@ -815,7 +865,14 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   const show = metricsToShow(rule.targets.map((t) => t.metric));
   const aspect = camera.width / camera.height;
   const target = rx.reps ?? 10;
-  const CIRCUMFERENCE = 2 * Math.PI * 39;
+
+  /** State lives in three places at once: the word, the frame, the colour. */
+  const setState = (kind: "good" | "fix" | "bad" | "", word: string): void => {
+    badge.className = `form-word${kind ? ` ${kind}` : ""}`;
+    badge.textContent = word;
+    stage.classList.remove("state-good", "state-fix", "state-bad");
+    if (kind) stage.classList.add(`state-${kind}`);
+  };
 
   let running = true;
   let paused = false;
@@ -870,30 +927,25 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
         if (result.validRepCount !== shownReps) {
           shownReps = result.validRepCount;
           countEl.textContent = String(shownReps);
-          const filled = CIRCUMFERENCE * Math.min(1, shownReps / Math.max(1, target));
-          repring.setAttribute("stroke-dasharray", `${filled} ${CIRCUMFERENCE}`);
+          reptrack.style.width = `${Math.min(100, (100 * shownReps) / Math.max(1, target))}%`;
           // The rep landing is the moment the camera proves itself. Give it one.
           pulse(countEl, "tick-up");
         }
 
         const blocker = result.problems.find((p) => p.code !== "warming_up");
         if (blocker) {
-          badge.className = "form-badge bad";
-          badge.textContent = "Check your setup";
+          setState("bad", "Move the phone");
           centre.innerHTML = `<div class="blocker">${blocker.message_en}</div>`;
         } else if (result.activeCues.length) {
-          badge.className = "form-badge warn";
-          badge.textContent = "Fix your form";
+          setState("fix", "Fix your form");
           centre.innerHTML = `<div class="cue">${result.activeCues[0]!.message_en}</div>`;
           cueUntil = performance.now() + 900;
         } else if (performance.now() > cueUntil) {
-          badge.className = "form-badge good";
-          badge.textContent = "Good form!";
+          setState("good", "Good form");
           centre.innerHTML = "";
         }
       } else {
-        badge.className = "form-badge bad";
-        badge.textContent = "No player detected";
+        setState("bad", "Step into frame");
         readout.innerHTML = `<span class="warn">no reading</span>`;
         centre.innerHTML = `<div class="blocker">Stand so your whole body is in shot</div>`;
       }
@@ -1104,9 +1156,12 @@ function testScreen(): void {
     c.status === "pass" ? TICK_FILLED : c.status === "fail" ? CROSS : DASH;
   const value = (c: api.CriterionResult) => {
     if (c.observed == null) return `<span>not measured</span>`;
+    // The unit is printed once, after the pair. Repeating it ("63 deg / 60
+    // deg") doubled the width of this column and pushed every label onto three
+    // lines, which made a six-row list a thousand pixels tall.
     const unit = c.unit && c.unit !== "score" ? ` ${c.unit}` : "";
-    const target = c.target == null ? "" : ` <span>/ ${round(c.target)}${unit}</span>`;
-    return `<b>${round(c.observed)}${unit}</b>${target}`;
+    const target = c.target == null ? "" : ` / ${round(c.target)}`;
+    return `<b>${round(c.observed)}</b><span>${target}${unit}</span>`;
   };
 
   shell(

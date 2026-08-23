@@ -230,6 +230,24 @@ Changing position later re-points any open episode onto the new programme
 (`realign_protocol`). The player keeps their phase, their clock and their history —
 only the targets move.
 
+### How it looks, and why
+
+The full system is in **[docs/DESIGN.md](docs/DESIGN.md)**. Two ideas carry it.
+
+**Colour is rationed.** The interface is monochrome — every surface, every control,
+every piece of chrome is a cool grey. Colour appears only when it means something:
+`volt` says *you can act here*, and green, amber and red say *passed*, *fix this*,
+*stop*. The previous design used one green seventy-two times for the brand, the buttons,
+the bars, the ticks and the tabs, which left green meaning nothing in an app whose whole
+job is telling you good from bad. Volt sits 74° from the pass green so the two can never
+be confused, and no state is ever carried by colour alone.
+
+**The app is read from two distances.** Every screen but one is held at arm's length.
+The camera screen is propped up three metres away while you exercise, so it has its own
+type scale: the rep count is 104px, coaching is one 30px word, and state fills the frame
+edge rather than sitting in a badge you have to find. Everything that does not need
+reading at that range — sets, rest, raw angles — sits below the frame at normal size.
+
 ### How it moves
 
 One idea, everywhere: things rise into place and settle. Nothing bounces, nothing
@@ -767,6 +785,7 @@ web/src/
   bodymap.ts   front/back silhouettes with a marker per injury site
   charts.ts    the accuracy line and the sessions bars, as plain SVG
   criteria.ts  building your own exit criterion: wording, units, the draft
+  styles.css   the design system — see docs/DESIGN.md for why
   mediapipe.ts model choice, camera (front/rear, mirroring), screen wake lock
   motion.ts    entrances, counters, bars and rings — all reduced-motion aware
   ui.ts        the mark, the icon set, the ring and bar

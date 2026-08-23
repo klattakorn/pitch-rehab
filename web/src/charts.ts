@@ -67,7 +67,7 @@ export function lineChart(points: Point[], opts: { min?: number; max?: number } 
       const gy = PAD.top + plotH * t;
       const label = Math.round(max - span * t);
       return `<line x1="${PAD.left}" y1="${gy}" x2="${WIDTH - PAD.right}" y2="${gy}"
-                stroke="var(--line)" stroke-width="1"/>
+                stroke="var(--edge)" stroke-width="1"/>
               <text class="tick" x="${PAD.left - 6}" y="${gy + 3.5}"
                 text-anchor="end">${label}</text>`;
     })
@@ -83,12 +83,12 @@ export function lineChart(points: Point[], opts: { min?: number; max?: number } 
       ${gridlines}
       ${segments
         .map(
-          (d) => `<path d="${d}" fill="none" stroke="var(--green)" stroke-width="2.4"
+          (d) => `<path d="${d}" fill="none" stroke="var(--pass)" stroke-width="2.4"
                     stroke-linecap="round" stroke-linejoin="round"/>`,
         )
         .join("")}
-      <circle cx="${x(lastIndex)}" cy="${y(last.value)}" r="4.2" fill="var(--green)"/>
-      <circle cx="${x(lastIndex)}" cy="${y(last.value)}" r="8" fill="var(--green)"
+      <circle cx="${x(lastIndex)}" cy="${y(last.value)}" r="4.2" fill="var(--pass)"/>
+      <circle cx="${x(lastIndex)}" cy="${y(last.value)}" r="8" fill="var(--pass)"
         opacity="0.18"/>
       <text class="tick" x="${PAD.left}" y="${HEIGHT - 4}">${shortDate(points[0]!.day)}</text>
       <text class="tick" x="${WIDTH - PAD.right}" y="${HEIGHT - 4}"
@@ -107,7 +107,7 @@ export function barChart(points: { day: string; value: number }[]): string {
       const bx = PAD.left + index * (width + gap);
       return `<rect x="${bx.toFixed(1)}" y="${(PAD.top + plotH - h).toFixed(1)}"
         width="${width.toFixed(1)}" height="${Math.max(1.5, h).toFixed(1)}" rx="1.5"
-        fill="${point.value ? "var(--green)" : "var(--panel-3)"}"/>`;
+        fill="${point.value ? "var(--pass)" : "var(--raised)"}"/>`;
     })
     .join("");
   return `
