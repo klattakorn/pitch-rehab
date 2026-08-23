@@ -45,9 +45,18 @@ of the demo. Inside the app the files are served from the package itself over
    start.bat
    ```
 
-3. **Get `pitch-rehab.apk` onto the phone.** USB, or send it to yourself and open it
-   from the notification. Android asks permission to install from whichever app it
-   came through; that prompt is normal for anything not from the Play Store.
+3. **Get `pitch-rehab.apk` onto the phone.** Double-click **`send-to-phone.bat`**.
+   It prints a QR code; scan it, tap Download, and open the file from the
+   notification shade. The laptop stops serving as soon as the file has gone.
+
+   The phone asks three things on the way, all normal for an app that did not come
+   from the Play Store: that the file type can be harmful (*Download anyway*), that
+   the browser wants permission to install apps (allow it once), and Play Protect
+   warning it has not seen this app before (*More details -> Install anyway*).
+
+   A USB cable works too: copy the file across and open it from the phone's Files
+   app. Set the USB connection to *File transfer* first, or the phone shows an empty
+   folder and looks broken.
 
 4. **Open it.** It asks for the camera the first time you start a session.
 
