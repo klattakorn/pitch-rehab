@@ -176,7 +176,18 @@ export interface SetResult {
 // ---------------------------------------------------------------- calls
 export async function backendUp(): Promise<boolean> {
   try {
-    return (await fetch("/healthz")).ok;
+    // Through serverOrigin(), not a bare path. In a browser they are the same
+    // thing; in the installed app a bare path asks the phone about itself, and
+    // the phone answers with the app's own index.html -- a 200, which reads as
+    // "the backend is fine" right up until the first real request fails.
+    //
+    // The deadline matters as much. An unreachable address on wifi does not
+    // refuse the connection, it hangs, so without one the app sits on "Loading"
+    // for the best part of a minute before admitting anything is wrong.
+    const response = await fetch(`${serverOrigin()}/healthz`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    return response.ok;
   } catch {
     return false;
   }

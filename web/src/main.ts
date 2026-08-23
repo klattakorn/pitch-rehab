@@ -340,7 +340,9 @@ function serverScreen(notice = ""): void {
         });
         if (!response.ok) throw new Error(`answered ${response.status}`);
         api.setServerOrigin(origin);
-        welcomeScreen();
+        // Straight on rather than back to the welcome screen: the address was
+        // just proved to work, so there is nothing left to decide.
+        void boot();
       } catch {
         serverScreen(
           `Could not reach <code>${attr(origin)}</code>. Check the laptop is running,
@@ -1833,6 +1835,29 @@ async function boot(): Promise<void> {
   shell(`<div class="loading">Loading…</div>`, { brand: true });
   state.online = await api.backendUp();
   if (!state.online) {
+    // The installed app needs its own version of this. "Reload this page" is
+    // advice you cannot take in an app, and the browser wording blames the one
+    // cause -- a stopped server -- that is the least likely of the three here.
+    // Worse, the screen it lands on has no route to the address box, so a phone
+    // pointed at the wrong laptop has nowhere to go.
+    if (api.isNative()) {
+      shell(
+        `<div class="stack narrow">
+           <h2>Cannot reach the laptop</h2>
+           <p class="sub">This app shows the rehab; the laptop works it out.
+             It is looking for it at <b>${attr(api.serverOrigin() || "no address set")}</b>.</p>
+           <div class="notice">Check, in this order: the laptop is running
+             <code>start.bat</code>; both are on the same wifi; and the laptop's
+             firewall lets the API through.</div>
+           <button class="primary block" id="retry">Try again</button>
+           <button class="linkbtn" id="server">Change server address</button>
+         </div>`,
+        { title: "No connection" },
+      );
+      on("#retry", () => void boot());
+      on("#server", () => serverScreen());
+      return;
+    }
     shell(
       `<div class="stack">
          <div class="notice">The API is not running. Start it with
