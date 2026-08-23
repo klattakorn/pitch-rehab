@@ -13,6 +13,7 @@
     "cert": "node scripts/make-cert.mjs",
     "phone": "node scripts/phone.mjs",
     "apk": "node scripts/build-apk.mjs",
+    "apk:send": "node scripts/serve-apk.mjs",
     "assets": "node scripts/vendor-assets.mjs"
   },
   "dependencies": {
