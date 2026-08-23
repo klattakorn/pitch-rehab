@@ -48,24 +48,45 @@ someone added one more feature on the last night.
 
 ## Day by day
 
+Re-cut on **23 August**. The building ran well ahead of this plan and the
+de-risking ran behind it, so the two have swapped places: everything left before
+the freeze is now about the demo working, not about the app doing more.
+
 | Date | Day | Task | Units |
 |---|---|---|---|
-| Sat 22 Aug | Sat | **1.** Prove the knee-valgus check on a real front-on video | 1 |
-| Sun 23 Aug | Sun | **2.** Fix whatever that video exposes | 1 |
-| Mon 24 Aug | Mon | **3.** Demo safety net — survive backend down and wifi off | 1 |
+| ~~Sat 22 Aug~~ | | ~~**5a.** Progress endpoint~~ · ~~**7.** Notifications~~ | ✅ |
+| ~~Sat 22 Aug~~ | | ~~**5b.** Progress screen~~ · position picker · phone + https · redesign | ✅ |
+| Sun 23 Aug | Sun | **1.** Prove the knee-valgus check on a real front-on video | 1 |
+| Mon 24 Aug | Mon | **2.** Fix whatever that video exposes | 1 |
 | Tue 25 Aug | Tue | **4.** Demo player with three weeks of history | 1 |
-| Wed 26 Aug | Wed | **5a.** Progress endpoint on the backend | 1 |
-| Thu 27 Aug | Thu | **5b.** Progress screen in the browser | 2 |
-| Fri 28 Aug | Fri | **6.** Session scheduling ("Today, 4:30 PM") | 1 |
-| Sat 29 Aug | Sat | **7.** Notifications / reminders (the bell icon) | 1 |
-| Sun 30 Aug | Sun | **Buffer.** Catch up. Add nothing new. | — |
-| Mon 31 Aug | Mon | **8a.** Coach view — backend | 1 |
-| Tue 1 Sep | Tue | **8b.** Coach view — screen | 1 |
+| Wed 26 Aug | Wed | **3.** Demo safety net — survive backend down and wifi off | 1 |
+| Thu 27 Aug | Thu | **6.** Session scheduling ("Today, 4:30 PM") | 1 |
+| Fri 28 Aug | Fri | Buffer — the video is the thing most likely to need a second go | — |
+| Sat 29 Aug | Sat | **8a.** Coach view — backend, *or* cut it | 1 |
+| Sun 30 Aug | Sun | **8b.** Coach view — screen, *or* cut it | 1 |
+| Mon 31 Aug | Mon | Buffer | — |
+| Tue 1 Sep | Tue | Buffer | — |
 | Wed 2 Sep | Wed | **9.** Polish pass | 2 |
 | Thu 3 Sep | Thu | **10.** Code freeze + write the demo script | 2 |
-| Fri 4 Sep | Fri | **11.** Rehearsal 1 — demo laptop, wifi off | 1 |
+| Fri 4 Sep | Fri | **11.** Rehearsal 1 — demo device, wifi off | 1 |
 | Sat 5 Sep | Sat | **12.** Rehearsal 2 + record a backup video | 1 |
 | Sun 6 Sep | Sun | **Deadline.** Light check only. No code. | — |
+
+### Already done, ahead of schedule
+
+- **Progress screen and endpoint** (was 26–27 Aug) — overall %, accuracy over time,
+  sessions per day, strength balance, milestones
+- **Notifications** (was 29 Aug) — the bell, generated from your real plan and gate
+- **Position picker** — registration used to hardcode "striker" for everyone, so most
+  players were quietly getting the wrong programme
+- **Phone support** — https so the camera works, lite model, front/rear switch, wake lock
+- **The Pitch Rehab redesign** — five tabs, body map, new palette
+- **Player-authored exit criteria** — set your own targets; overrides replace rather
+  than argue with the standard ones
+
+Four extra days of features. Which is exactly why the two remaining risks matter more
+now, not less: **nothing on this list makes the demo work if the camera check is wrong
+or the app dies when the backend does.**
 
 **Every day, before you stop:**
 
