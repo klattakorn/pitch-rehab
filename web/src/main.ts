@@ -276,12 +276,80 @@ function welcomeScreen(): void {
        <div class="stack">
          <button class="primary block" id="start">Get Started</button>
          <button class="linkbtn" id="signin">I already have an account</button>
+         ${api.isNative() ? `<button class="linkbtn" id="server">Change server address</button>` : ""}
        </div>
      </div>`,
     { brand: true },
   );
   on("#start", () => signInScreen("", true));
   on("#signin", () => signInScreen());
+  if (api.isNative()) on("#server", () => serverScreen());
+}
+
+/** Escape a value going into an attribute. Only the server address needs it. */
+function attr(value: string): string {
+  return value.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+/**
+ * Where the laptop is -- the installed app only.
+ *
+ * The app is the front end. The 42 protocols, the criteria engine and every
+ * session ever logged live on the laptop, so the phone has to be told where
+ * that is. The address is baked in when the package is built, but a DHCP lease
+ * moves on its own and rebuilding an APK to chase it would be absurd, so it can
+ * be typed in here and is remembered.
+ *
+ * Saving tests the connection first. "Saved" followed by a dead app teaches
+ * nothing; "this phone cannot see that address" is the whole diagnosis.
+ */
+function serverScreen(notice = ""): void {
+  const current = api.serverOrigin();
+  const builtIn = api.builtInOrigin();
+  shell(
+    `<div class="stack narrow">
+       <h2>Where is the laptop?</h2>
+       <p class="sub">This app shows the rehab; the laptop works it out. They have
+         to be on the <b>same wifi</b>, and the laptop has to be running.</p>
+       ${notice ? `<div class="notice">${notice}</div>` : ""}
+       <div class="panel">
+         <label class="label" for="origin">Server address</label>
+         <input id="origin" type="url" inputmode="url" value="${attr(current)}"
+           placeholder="http://192.168.0.48:8000" autocapitalize="off"
+           autocorrect="off" spellcheck="false" />
+       </div>
+       <p class="sub">Built into this app: <b>${attr(builtIn || "nothing")}</b>.
+         The laptop prints its address when it starts.</p>
+       <button class="primary block" id="save">Test and save</button>
+       <button class="linkbtn" id="back">Back</button>
+     </div>`,
+    { title: "Server", back: () => welcomeScreen() },
+  );
+
+  on("#back", () => welcomeScreen());
+  on("#save", () => {
+    const input = app.querySelector<HTMLInputElement>("#origin")!;
+    const origin = input.value.trim().replace(/\/+$/, "");
+    void (async () => {
+      try {
+        // Ask the backend directly rather than trusting that it is there. Four
+        // seconds, because an unreachable address on wifi hangs rather than
+        // failing, and a spinner that never resolves reads as a broken app.
+        const response = await fetch(`${origin}/healthz`, {
+          signal: AbortSignal.timeout(4000),
+        });
+        if (!response.ok) throw new Error(`answered ${response.status}`);
+        api.setServerOrigin(origin);
+        welcomeScreen();
+      } catch {
+        serverScreen(
+          `Could not reach <code>${attr(origin)}</code>. Check the laptop is running,
+           that both are on the same wifi, and that the address matches the one it
+           printed when it started.`,
+        );
+      }
+    })();
+  });
 }
 
 function signInScreen(notice = "", isNew = false): void {

@@ -50,8 +50,11 @@ set "SCHEME=http"
 if exist "web\.cert\cert.pem" set "SCHEME=https"
 
 REM --- start both servers in their own windows -------------------------
+REM --host 0.0.0.0 so the Android app can reach it. The browser route does
+REM not need this -- Vite proxies /api from the phone -- but the installed
+REM app talks to the backend directly, and on loopback it cannot see it.
 echo   Starting the API on http://localhost:8000
-start "Pitch Rehab API" cmd /k "python -m uvicorn app.main:app --port 8000 --reload"
+start "Pitch Rehab API" cmd /k "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
 echo   Starting the app on %SCHEME%://localhost:5173
 start "Pitch Rehab Web" cmd /k "cd web && npx vite --port 5173"

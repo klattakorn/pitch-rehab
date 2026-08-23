@@ -41,3 +41,19 @@ web/.cert/
 .idea/
 .DS_Store
 Thumbs.db
+
+# --- Android (Capacitor) ---
+# The android/ project itself IS tracked: it carries the manifest, the icons
+# and MainActivity, which are real source. Only what Gradle makes is ignored.
+web/android/build/
+web/android/app/build/
+web/android/.gradle/
+web/android/local.properties
+web/android/app/src/main/assets/public/
+web/android/app/src/main/assets/capacitor.config.json
+web/android/capacitor-cordova-android-plugins/
+*.apk
+*.aab
+
+# Generated from scripts/make_app_icon.py, then fanned out by capacitor-assets.
+web/assets/
