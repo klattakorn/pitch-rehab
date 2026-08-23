@@ -1054,6 +1054,9 @@ async function progressScreen(): Promise<void> {
        <span class="label">Overall progress</span>
        <div class="row-between">
          <div>
+           <!-- The bar that used to sit under this said the same thing as the
+                number. Two readings of one figure, plus the ring beside it
+                reading a different one, and the panel was mostly empty space. -->
            <div class="bignum" data-count="${Math.round(p.overall_pct)}"
              data-suffix="%">0%</div>
            <div class="caption">Phase ${info.n} of 4 — ${info.name}</div>
@@ -1065,7 +1068,6 @@ async function progressScreen(): Promise<void> {
          </div>
          ${progressRing(p.phase_pct, "this phase", "sm")}
        </div>
-       ${bar(p.overall_pct)}
      </section>
 
      <div class="tiles">
@@ -1075,7 +1077,7 @@ async function progressScreen(): Promise<void> {
          <div class="k">Exercises</div></div>
        <div class="tile"><div class="n">${
          p.mean_form_score == null ? "—" : tileValue(Math.round(p.mean_form_score), "%")
-       }</div><div class="k">Avg accuracy</div></div>
+       }</div><div class="k">Accuracy</div></div>
      </div>
 
      ${
@@ -1154,14 +1156,26 @@ function testScreen(): void {
 
   const mark = (c: api.CriterionResult) =>
     c.status === "pass" ? TICK_FILLED : c.status === "fail" ? CROSS : DASH;
+
+  /** "1.9 / 2 NPRS". A missing reading is an em dash, so the target still shows —
+   *  the number you have to beat is worth knowing before you have a number. */
   const value = (c: api.CriterionResult) => {
-    if (c.observed == null) return `<span>not measured</span>`;
-    // The unit is printed once, after the pair. Repeating it ("63 deg / 60
-    // deg") doubled the width of this column and pushed every label onto three
-    // lines, which made a six-row list a thousand pixels tall.
     const unit = c.unit && c.unit !== "score" ? ` ${c.unit}` : "";
+    const observed = c.observed == null ? "—" : round(c.observed);
     const target = c.target == null ? "" : ` / ${round(c.target)}`;
-    return `<b>${round(c.observed)}</b><span>${target}${unit}</span>`;
+    return `<b>${observed}</b><span>${target}${unit}</span>`;
+  };
+
+  /* The engine writes "Not measured yet" as the detail, which the value column
+     already says with its em dash. Printing both put the same fact on the row
+     twice and made every unmeasured row taller than a measured one. */
+  const note = (c: api.CriterionResult): string => {
+    const parts: string[] = [];
+    if (c.detail_en && c.detail_en.toLowerCase() !== "not measured yet") {
+      parts.push(c.detail_en);
+    }
+    if (!c.required) parts.push("optional");
+    return parts.join(" · ");
   };
 
   shell(
@@ -1184,21 +1198,40 @@ function testScreen(): void {
            // sign-off never is, which is the point of it.
            const editable = c.source !== "manual" && splitMetric(c.metric, cat).base !== null;
            const mine = yours.has(c.key);
+           const detail = note(c);
+           const chips =
+             (c.source === "pose" ? `<span class="src">${CAMERA_ICON} camera</span>` : "") +
+             (mine ? `<span class="src yours">yours</span>` : "");
+           // A fixed three-row grid, so a long label cannot make one row twice
+           // the height of its neighbour. Label, then how close you are, then
+           // whatever else is worth saying.
            return `<li class="${c.required ? "" : "optional"} ${c.status}${
              mine ? " mine" : ""
            }">
-             ${mark(c)}
-             <span class="what">${c.label_en}
-               ${c.source === "pose" ? `<span class="src">${CAMERA_ICON} camera</span>` : ""}
-               ${mine ? `<span class="src yours">yours</span>` : ""}
-               <small>${c.detail_en}${c.required ? "" : " · optional"}</small></span>
-             <span class="val">${value(c)}</span>
+             <span class="crit-mark">${mark(c)}</span>
+             <span class="crit-label">${c.label_en}</span>
              ${
                editable
                  ? `<button class="editbtn" data-edit="${c.key}"
                       aria-label="Change the target for ${c.label_en}">${PENCIL}</button>`
-                 : ""
+                 : `<span class="crit-spacer" aria-hidden="true"></span>`
              }
+             <span class="crit-meter">
+               ${
+                 // The meter answers "how close am I", so it only belongs on the
+                 // rows where there is still a gap. On a passed criterion it is
+                 // a full bar saying nothing, and it pushed every cleared row
+                 // 26px taller than it needed to be.
+                 c.status === "pass"
+                   ? ""
+                   : `<span class="bar slim ${c.status}">
+                        <i style="width:0" data-width="${Math.round(
+                          Math.max(0, Math.min(1, c.progress)) * 100,
+                        )}"></i></span>`
+               }
+               <span class="crit-val">${value(c)}</span>
+             </span>
+             ${detail || chips ? `<span class="crit-note">${chips}${detail}</span>` : ""}
            </li>`;
          })
          .join("")}

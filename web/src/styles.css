@@ -1335,6 +1335,20 @@ ul.role-changes .v {
   color: var(--ink-3);
   margin-top: var(--s2);
   line-height: 1.3;
+  /* Two lines of space whether the label needs them or not, so a wrapping
+     label cannot make one tile taller than the two beside it. */
+  min-height: 2.6em;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.tiles {
+  align-items: stretch;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .camera-note {
@@ -1461,12 +1475,10 @@ ul.role-changes .v {
   font-size: 9px;
   fill: var(--ink-3);
 }
+/* An empty state should be shorter than a full one, not taller. This used to be
+   a dashed box inside a panel -- two frames drawn around nothing. */
 .chart-empty {
-  margin-top: var(--s3);
-  padding: var(--s5) var(--s4);
-  border: 1px dashed var(--edge-control);
-  border-radius: var(--r-md);
-  text-align: center;
+  margin: var(--s3) 0 0;
   font-size: var(--t-small);
   color: var(--ink-3);
   line-height: 1.5;
@@ -1542,18 +1554,112 @@ ul.criteria {
   flex-direction: column;
   gap: var(--s2);
 }
+/* A fixed three-row grid, not a flex row that sizes itself from its content.
+   Before this, one criterion with a long label and a camera chip was 210px tall
+   while its neighbour was 130px, because the value column was `nowrap` and ate
+   whatever width the label needed. Now every row is: label, how close you are,
+   and a note -- in that order, at that size, whatever is in them. */
 ul.criteria li {
-  display: flex;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 32px;
   align-items: center;
-  gap: var(--s3);
+  gap: var(--s2) var(--s3);
   padding: var(--s3) var(--s4);
-  min-height: 64px;
   border: 1px solid var(--edge);
   /* State reads down the left edge, so a column of them can be scanned in one
      movement instead of hunting for coloured ticks. */
   border-left: 3px solid var(--edge-control);
   border-radius: var(--r-md);
   background: var(--card);
+}
+
+.crit-mark {
+  grid-column: 1;
+  grid-row: 1;
+  display: inline-flex;
+}
+.crit-label {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: var(--t-body);
+  font-weight: 600;
+  line-height: 1.35;
+  /* Two lines is plenty for any target worth setting, and it stops one verbose
+     criterion from dominating the list. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.editbtn,
+.crit-spacer {
+  grid-column: 3;
+  grid-row: 1;
+}
+.crit-spacer {
+  width: 32px;
+  height: 28px;
+}
+
+/* How close you are, which is the question this screen exists to answer. The
+   numbers alone made you do the comparison yourself. */
+.crit-meter {
+  grid-column: 2 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s3);
+}
+.crit-meter .bar {
+  flex: 1;
+  margin-top: 0;
+}
+.crit-meter .bar.pass > i {
+  background: var(--pass);
+}
+.crit-meter .bar.fail > i {
+  background: var(--fail);
+}
+.crit-meter .bar.no_data > i,
+.crit-meter .bar.pending_signoff > i {
+  background: var(--edge-control);
+}
+.crit-val {
+  flex: none;
+  font-family: var(--display);
+  font-size: var(--t-lead);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.crit-val b {
+  color: var(--ink);
+  font-weight: 700;
+}
+.crit-val span {
+  color: var(--ink-3);
+  font-size: var(--t-small);
+}
+
+/* Block, not flex: as a flex container the chip claimed a whole line to itself
+   and pushed the sentence beside it onto two more. Inline chips let the text
+   run on after them the way a sentence should. */
+.crit-note {
+  grid-column: 2 / -1;
+  grid-row: 3;
+  font-size: var(--t-small);
+  color: var(--ink-3);
+  line-height: 1.4;
+  /* Two lines, whatever the engine writes. The detail explains how a number is
+     arrived at, which is worth saying once and never worth three lines. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.crit-note .src {
+  margin-right: 6px;
+  vertical-align: 1px;
 }
 ul.criteria li.pass {
   border-left-color: var(--pass);
@@ -1577,36 +1683,6 @@ ul.criteria li.pass .mark {
 ul.criteria li.fail .mark {
   color: var(--fail);
 }
-ul.criteria .what {
-  flex: 1;
-  min-width: 0;
-  font-size: var(--t-body);
-  font-weight: 600;
-}
-ul.criteria .what small {
-  display: block;
-  font-weight: 400;
-  font-size: var(--t-small);
-  color: var(--ink-3);
-  margin-top: 2px;
-  line-height: 1.45;
-}
-ul.criteria .val {
-  font-family: var(--display);
-  font-size: var(--t-lead);
-  text-align: right;
-  white-space: nowrap;
-  flex: none;
-  font-variant-numeric: tabular-nums;
-}
-ul.criteria .val b {
-  color: var(--ink);
-  font-weight: 700;
-}
-ul.criteria .val span {
-  color: var(--ink-3);
-  font-size: var(--t-small);
-}
 ul.criteria li.optional {
   opacity: 0.66;
 }
@@ -1614,7 +1690,6 @@ ul.criteria .src {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  margin-left: var(--s2);
   padding: 1px 7px 2px;
   border-radius: var(--r-full);
   border: 1px solid var(--edge-control);
@@ -2096,14 +2171,18 @@ ul.criteria .src.yours {
   color: var(--volt);
 }
 
+/* The visual button is small so it cannot set the height of the row it sits
+   in -- a 44px control beside a 20px label left 24px of dead space on every
+   row. The tap target is restored to 44px with a pseudo-element, which is the
+   whole point of separating hit area from painted size. */
 .editbtn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 28px;
   flex: none;
-  margin: -8px -10px -8px 0;
   border: 0;
   border-radius: var(--r-sm);
   background: none;
@@ -2112,6 +2191,15 @@ ul.criteria .src.yours {
   transition:
     color 0.16s,
     background 0.16s;
+}
+.editbtn::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
 }
 .editbtn:active {
   color: var(--volt);

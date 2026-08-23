@@ -37,8 +37,11 @@ function shortDate(iso: string): string {
 export function lineChart(points: Point[], opts: { min?: number; max?: number } = {}): string {
   const measured = points.filter((p) => p.value !== null) as { day: string; value: number }[];
   if (measured.length === 0) {
-    return `<div class="chart-empty">Nothing measured yet — complete a session and
-      your accuracy appears here.</div>`;
+    // A dashed box inside a panel is two frames around nothing, and it made the
+    // empty screen taller than the full one. One line of text is the whole
+    // message.
+    return `<p class="chart-empty">Nothing measured yet — your accuracy appears
+      here after your first session.</p>`;
   }
 
   const values = measured.map((p) => p.value);
@@ -98,6 +101,11 @@ export function lineChart(points: Point[], opts: { min?: number; max?: number } 
 
 /** Sessions per day, as bars. Empty days are visible, because they are the point. */
 export function barChart(points: { day: string; value: number }[]): string {
+  // Every bar at zero renders as a row of 1.5px slivers under a date axis --
+  // which reads as a broken chart rather than as an empty one.
+  if (points.every((p) => p.value === 0)) {
+    return `<p class="chart-empty">No sessions logged yet.</p>`;
+  }
   const max = Math.max(1, ...points.map((p) => p.value));
   const gap = 1.5;
   const width = (plotW - gap * (points.length - 1)) / points.length;

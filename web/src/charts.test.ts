@@ -96,14 +96,28 @@ describe("the sessions bar chart", () => {
     expect(html).not.toContain("var(--volt)");
   });
 
-  it("survives a window with nothing in it at all", () => {
+  it("says nothing has happened rather than drawing a chart of nothing", () => {
+    // Every bar at zero renders as a row of 1.5px slivers under a date axis,
+    // which reads as a broken chart rather than an empty one -- and takes more
+    // vertical room than a chart with data in it.
     const html = barChart([
       { day: day(1), value: 0 },
       { day: day(2), value: 0 },
     ]);
-    expect(html).toContain("<rect");
+    expect(html).toContain("chart-empty");
+    expect(html).toContain("No sessions logged yet");
+    expect(html).not.toContain("<rect");
     expect(html).not.toContain("NaN");
     expect(html).not.toContain("Infinity");
+  });
+
+  it("draws the chart as soon as one day has something in it", () => {
+    const html = barChart([
+      { day: day(1), value: 0 },
+      { day: day(2), value: 1 },
+    ]);
+    expect(html).not.toContain("chart-empty");
+    expect(html.match(/<rect /g)).toHaveLength(2);
   });
 
   it("scales the tallest bar to the plot, not to a fixed maximum", () => {
