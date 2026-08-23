@@ -77,23 +77,17 @@ echo     App    %SCHEME%://localhost:5173
 echo     API    http://localhost:8000/docs
 echo.
 
-if not "%SCHEME%"=="https" goto :nophone
-
-echo   ON YOUR PHONE - same wifi as this laptop:
-REM Node knows the addresses. Parsing ipconfig would only work on an
-REM English-language Windows, because it translates its own labels.
+REM Print a QR code for the phone to scan, rather than an address to type.
+REM Node knows this machine's addresses; parsing ipconfig would only work on an
+REM English-language Windows, because it translates its own labels. The web
+REM server window has already checked the certificate against the current
+REM address by this point, so --no-cert just avoids doing the same work twice.
 pushd web
-for /f "usebackq delims=" %%A in (`node scripts\make-cert.mjs --urls`) do echo     %%A
+call node scripts\phone.mjs --no-cert
 popd
-echo.
-echo   The phone will warn about the certificate once - that is expected.
-echo   Android: Advanced, then Proceed.   iPhone: Show Details, then visit.
-echo.
-goto :howtostop
 
-:nophone
-echo   Phone camera will NOT work - the app is on plain http.
-echo   Run:  cd web ^&^& node scripts\make-cert.mjs
+if "%SCHEME%"=="https" goto :howtostop
+echo   To fix that:  cd web ^&^& node scripts\make-cert.mjs
 echo   then start again.
 echo.
 

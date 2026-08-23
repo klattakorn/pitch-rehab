@@ -11,6 +11,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "cert": "node scripts/make-cert.mjs",
+    "phone": "node scripts/phone.mjs",
     "assets": "node scripts/vendor-assets.mjs"
   },
   "dependencies": {

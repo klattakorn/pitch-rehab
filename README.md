@@ -50,10 +50,17 @@ First boot creates the SQLite schema and seeds all 42 protocols.
 | API docs | <http://localhost:8000/docs> |
 | Health check | <http://localhost:8000/healthz> |
 
-**On a phone**, `start.bat` prints an address to open — something like
-`https://192.168.0.46:5173`. Same wifi as the laptop. The phone warns about the
-certificate once (Android: *Advanced → Proceed*; iOS: *Show Details → visit this
-website*); tap through and the camera works.
+**On a phone**, `start.bat` prints a **QR code**. Point the phone's camera at it and
+tap the link — no address to type, and nothing to get wrong. Same wifi as the laptop.
+The phone warns about the certificate once (Android: *Advanced → Proceed*; iOS: *Show
+Details → visit this website*); tap through and the camera works.
+
+For a bigger code — on a projector, or across a room — open
+<https://localhost:5173/phone> on the laptop. Or print one any time with:
+
+```bash
+cd web && npm run phone
+```
 
 That warning is unavoidable and expected. A browser will not open a camera unless the
 page came from a secure origin — `localhost` is exempt, a plain `http://192.168.x.x`
@@ -157,7 +164,7 @@ hamstring is on the back.
 ### Running it on a phone
 
 The app is meant to be used with a phone propped up while you exercise, so it has to
-actually work on one. Four things were in the way, and all four are handled by
+actually work on one. Five things were in the way, and all five are handled by
 `start.bat`.
 
 **1. The camera needs https.** A browser will not call `getUserMedia` unless the page
@@ -170,13 +177,19 @@ and every local network address this machine has, and Vite serves https when it 
 one. The phone warns once, because nothing has any reason to trust a certificate this
 laptop signed for itself. Tap through it.
 
+**The certificate keeps itself current.** The laptop's address is a DHCP lease, so it
+moves on its own — this machine went `.46`, `.47`, `.48` inside three days. Each time,
+the certificate still named the old address, the phone refused to connect, and neither
+screen said why. So the dev server now checks on every start and rewrites the
+certificate when the two disagree. You should never need to think about it; if you
+want to anyway:
+
 ```bash
 cd web && node scripts/make-cert.mjs --force
 ```
 
-Re-run that with `--force` whenever the laptop's network address changes, or the phone
-will reject the certificate. `RTP_HTTPS=0` forces plain http back on for anything that
-cannot click through the warning.
+`RTP_HTTPS=0` forces plain http back on for anything that cannot click through the
+warning.
 
 Only the browser-facing origin has to be secure. The API stays on plain http and Vite
 proxies to it, a hop that never leaves the machine.
@@ -202,6 +215,27 @@ together.
 Without a wake lock the screen sleeps mid-set, the video track stalls and the rep count
 stops — again, indistinguishable from the engine breaking. `keepScreenAwake()` holds one
 for as long as the camera is running and re-acquires it when you come back to the tab.
+
+**5. Nobody can type an IP address.** `https://192.168.0.48:5173` is twenty-five
+characters of digits and punctuation on a phone keyboard, and one wrong digit gives you
+a timeout that says nothing about which digit. So the server prints a **QR code**
+instead — in the terminal when it starts, and at `/phone` as an SVG for a projector.
+
+`web/scripts/qr.mjs` is the encoder: byte mode, error correction level M, versions 1 to
+10, about 350 lines. It is written out rather than installed because `start.bat` has to
+work on a teammate's laptop with no internet, and a dependency is one failed
+`npm install` away from no demo at all.
+
+`phone.mjs` draws it to the terminal in ANSI background colours. Both halves of that
+matter: block characters come out as mojibake in a `cmd` window on a Thai-language
+Windows, and drawing in the *foreground* colour turns the code into a photographic
+negative on a dark terminal theme, which plenty of scanners refuse.
+
+A QR code is either exactly right or it is a grey square, so `qr.test.mjs` **decodes**
+every code back out again with a reader written separately from the encoder, checks
+each error-correction block against Reed-Solomon syndromes computed with its own copy
+of the field arithmetic, and cross-checks the block tables against the published
+codeword totals.
 
 Beyond the camera, the usual phone tax: 16px form fields so iOS does not zoom and never
 zoom back, safe-area padding for the notch, a portrait 3:4 camera frame (a standing
@@ -793,6 +827,8 @@ web/src/
   demo/        the animated how-to figure
   styles.css   palette, components, one motion language, and the phone rules
 web/scripts/
-  make-cert.mjs     self-signed https, so a phone will open its camera
+  make-cert.mjs     self-signed https, kept current as the laptop's address moves
+  qr.mjs            a QR encoder, so nothing has to be installed to draw one
+  phone.mjs         the code to scan, in the terminal and at /phone
   vendor-assets.mjs copies the wasm and both pose models into public/
 ```
