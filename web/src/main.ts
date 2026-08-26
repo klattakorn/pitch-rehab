@@ -281,6 +281,41 @@ function fail(error: unknown): void {
 }
 
 // ---------------------------------------------------------------- onboarding
+/**
+ * The first thing someone sees who was sent this app rather than building it.
+ *
+ * They have no laptop, no server and no idea there is meant to be one, so the
+ * demo is the offer and the laptop is the footnote -- the reverse of every
+ * other screen here. It is still said plainly which one they are getting,
+ * because a demo presented as the real thing is worse than no demo.
+ */
+function firstRunScreen(): void {
+  shell(
+    `<div class="welcome">
+       <div class="welcome-art" aria-hidden="true">
+         <span class="glow"></span>
+         ${BRAND_MARK}
+       </div>
+       <h2>Smarter Rehab<br><em>Stronger Comeback</em></h2>
+       <p class="sub">Rehab plans built around your position and your injury —
+         with your camera checking every rep.</p>
+       <div class="stack">
+         <button class="primary block" id="demo">Try the demo</button>
+         <button class="linkbtn" id="server">I have a laptop running it</button>
+       </div>
+       <p class="sub tiny">The demo is a real player's programme, recorded from
+         the real system. <b>The camera is not a recording</b> — it counts your
+         reps and scores your form as you move, on this phone.</p>
+     </div>`,
+    { brand: true },
+  );
+  on("#demo", () => {
+    api.useStandalone(true);
+    void boot();
+  });
+  on("#server", () => serverScreen());
+}
+
 function welcomeScreen(): void {
   shell(
     `<div class="welcome">
@@ -1890,6 +1925,15 @@ async function boot(): Promise<void> {
     // cause -- a stopped server -- that is the least likely of the three here.
     // Worse, the screen it lands on has no route to the address box, so a phone
     // pointed at the wrong laptop has nowhere to go.
+    // Someone handed this app by a friend has no laptop and never had one.
+    // Opening to "Cannot reach the laptop" tells them the app is broken when
+    // nothing is wrong -- it is simply not what they were given it for. That
+    // reading only applies on a first run: once a server has been reached,
+    // losing it really is a fault, and gets the diagnosis below.
+    if (api.standaloneAvailable() && !api.hasEverConnected()) {
+      return firstRunScreen();
+    }
+
     if (api.isNative()) {
       shell(
         `<div class="stack narrow">

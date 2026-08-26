@@ -5,6 +5,7 @@ import type { Exercise, ExerciseRule } from "./pose/rules";
 const BASE = "/api/v1";
 const TOKEN_KEY = "rf_token";
 const SERVER_KEY = "rf_server";
+const SEEN_KEY = "rf_seen_server";
 
 /**
  * Is this the installed Android app rather than a browser tab?
@@ -223,11 +224,18 @@ export async function backendUp(): Promise<boolean> {
     const response = await fetch(`${serverOrigin()}/healthz`, {
       signal: AbortSignal.timeout(5000),
     });
+    // Remember that a server was once reachable. It changes what a failure
+    // means: for someone who has connected before this is a fault to fix, and
+    // for someone who was handed the app it is simply how things are.
+    if (response.ok) localStorage.setItem(SEEN_KEY, "1");
     return response.ok;
   } catch {
     return false;
   }
 }
+
+/** Has this install ever reached a backend? */
+export const hasEverConnected = (): boolean => localStorage.getItem(SEEN_KEY) === "1";
 
 export async function login(email: string, password: string): Promise<void> {
   const body = await post<{ access_token: string }>("/auth/login", { email, password });
