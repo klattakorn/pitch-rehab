@@ -132,6 +132,29 @@ tells you how old it is.
 
 ---
 
+## Sending it to someone not on your wifi
+
+`send-to-phone.bat` serves the file over the local network, so it is no use to
+somebody in another building. Send them `pitch-rehab.apk` itself — Google Drive or
+Telegram are the reliable routes. Some chat apps refuse `.apk` attachments outright
+and others quietly rename them; if it arrives as `pitch-rehab.apk.txt` or similar,
+renaming it back is enough.
+
+**They do not need you, your laptop, or your wifi.** On first run, with no server to
+find, the app opens on **Try the demo** and everything works: the plan, the exit
+criteria, the progress charts. It is one player's real programme, recorded from the
+real system by `make_snapshot.py`.
+
+The camera is the part that is not recorded. It runs MediaPipe on *their* phone
+against *their* body, counting their reps and scoring their form live — that needs no
+server and never did.
+
+What they cannot do is be themselves in it: no account of their own, no logging their
+own injury, no saved history. Those live on a backend, and there is not one. The app
+says which mode it is in on every screen rather than letting anyone assume.
+
+---
+
 ## Updating it
 
 Two commands, about a minute, entirely yours — nothing here needs anyone else:
