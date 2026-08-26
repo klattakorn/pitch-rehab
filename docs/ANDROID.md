@@ -132,18 +132,56 @@ tells you how old it is.
 
 ---
 
-## Rebuilding
+## Updating it
+
+Two commands, about a minute, entirely yours — nothing here needs anyone else:
 
 ```bash
 cd web && npm run apk
 ```
 
-Finds the JDK and the SDK, bakes in this laptop's current address, and writes
-`pitch-rehab.apk` to the repository root. First build takes a few minutes; after that
-Gradle only redoes what changed.
+Then double-click **`send-to-phone.bat`** and scan the code. Install straight over the
+top: **your settings survive**, including the server address and whether standalone
+mode is on. Android does not ask you to uninstall first.
 
-Rebuild when the app code changes. You do **not** need to rebuild when the laptop's
-address changes — use the in-app address box.
+`npm run apk` finds the JDK and the SDK, bakes in this laptop's current address,
+stamps the version, and writes `pitch-rehab.apk` to the repository root. The first
+build took minutes; after that Gradle only redoes what changed, so it is ~15 seconds.
+
+### Knowing which build is on the phone
+
+Every package is stamped with the date, time and commit it was built from:
+
+```
+0.1.0+20260827.0027.ae8e066
+```
+
+You can read it in three places, and they should agree: the build output prints it,
+`send-to-phone.bat` says how old the file is, and the app shows it under
+**Profile → About → This build**. A `.dirty` on the end means it was built from
+changes that were never committed — fine while you are working, worth avoiding for
+anything you hand to someone else, because nobody can rebuild it later.
+
+### When you do and do not need to rebuild
+
+| Changed | Rebuild? |
+|---|---|
+| Anything in `web/src/` | **Yes** |
+| The laptop's IP address | No — use the in-app address box |
+| Protocols, exit criteria, backend logic | Yes, and re-run `make_snapshot.py` first |
+| Seed data for the demo player | Only if you want standalone mode to show it |
+
+The backend itself is never inside the package, so a fix to `app/` reaches the phone
+the moment you restart the server — no rebuild at all, as long as the phone can reach
+the laptop. It is only the offline snapshot that freezes a copy.
+
+### If someone else builds it
+
+Android refuses to install an update signed by a different key, and a debug build is
+signed with a key generated per machine. So a package built on a teammate's laptop
+will not install over yours — it fails with a flat *"App not installed"* and no
+explanation. Either keep one person building, or uninstall before switching. This
+also applies to you after a Windows reinstall.
 
 ### What the build needs
 

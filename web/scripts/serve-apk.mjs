@@ -41,8 +41,28 @@ if (!existsSync(APK)) {
   process.exit(1);
 }
 
-const size = statSync(APK).size;
+const stat = statSync(APK);
+const size = stat.size;
 const megabytes = (size / 1024 / 1024).toFixed(1);
+
+/**
+ * How old the package is, in words.
+ *
+ * The commonest mistake with a hand-installed app is sending yesterday's build
+ * and wondering why the fix is not in it. The age is the cheapest possible
+ * guard: if this says two days and you changed something an hour ago, you
+ * forgot `npm run apk`.
+ */
+function builtAgo() {
+  const minutes = Math.round((Date.now() - stat.mtimeMs) / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+const age = builtAgo();
 const [address] = localAddresses();
 
 if (!address) {
@@ -70,7 +90,7 @@ const page = `<!doctype html>
 </style></head>
 <body>
   <h1>Pitch&nbsp;Rehab</h1>
-  <p>Android app, ${megabytes} MB.</p>
+  <p>Android app, ${megabytes} MB. Built ${age}.</p>
   <a class="get" href="/pitch-rehab.apk" download>Download</a>
   <small>Your phone will warn that this kind of file can harm your device, and
     ask permission to install from your browser. Both are normal for an app that
@@ -115,7 +135,7 @@ server.listen(PORT, "0.0.0.0", () => {
   if (wide) for (const line of art.split("\n")) console.log(`  ${line}`);
   else console.log(`  (window too narrow for the code)`);
   console.log(`\n    ${base}`);
-  console.log(`    pitch-rehab.apk, ${megabytes} MB\n`);
+  console.log(`    pitch-rehab.apk, ${megabytes} MB, built ${age}\n`);
   console.log(`  Tap Download, then open it from the notification shade.`);
   console.log(`  Android asks permission to install from your browser -- allow it once.\n`);
   console.log(`  This server stops after the download, or in ${MINUTES} minutes.\n`);

@@ -742,6 +742,7 @@ button,
 .notice.good {
   border-left-color: var(--pass);
 }
+.panel .sub code,
 .notice code {
   font-family: var(--mono);
   font-size: 0.9em;

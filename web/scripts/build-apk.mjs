@@ -17,7 +17,14 @@
  * chase an address would be ridiculous.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -126,11 +133,61 @@ console.log(
     " -- re-run scripts/make_snapshot.py if the data has moved on"}`,
 );
 
+/**
+ * A version that says which build this is.
+ *
+ * Every package used to be `1.0`, so a phone could not tell you whether it had
+ * this morning's app or last week's -- and with three people and a deadline that
+ * is a real question asked often. The name carries the date, the time and the
+ * commit; `dirty` means it was built with changes that are not committed, which
+ * is exactly the build nobody can reproduce later.
+ *
+ * The code is minutes since 2020, because Android needs an integer that only
+ * ever goes up and will refuse to install a package numbered below the one
+ * already on the phone.
+ */
+function version() {
+  const git = (args, fallback = "") => {
+    try {
+      return execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
+    } catch {
+      return fallback;
+    }
+  };
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp =
+    `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}` +
+    `.${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const commit = git(["rev-parse", "--short", "HEAD"]);
+  const dirty = git(["status", "--porcelain"]) ? ".dirty" : "";
+  const base = JSON.parse(readFileSync(join(web, "package.json"), "utf8")).version;
+  return {
+    code: Math.floor((Date.now() - Date.UTC(2020, 0, 1)) / 60_000),
+    name: `${base}+${stamp}${commit ? `.${commit}` : ""}${dirty}`,
+  };
+}
+
+const build = version();
+console.log(`  Version   ${build.name}  (code ${build.code})`);
+
 const env = { ...process.env, JAVA_HOME: jdk, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk };
 
-run("npx", ["vite", "build"], { cwd: web, env: { ...env, VITE_API_ORIGIN: origin } });
+run("npx", ["vite", "build"], {
+  cwd: web,
+  env: { ...env, VITE_API_ORIGIN: origin, VITE_APP_VERSION: build.name },
+});
 run("npx", ["cap", "sync", "android"], { cwd: web, env });
-run(join(android, "gradlew.bat"), ["assembleDebug", "--console=plain"], { cwd: android, env });
+run(
+  join(android, "gradlew.bat"),
+  [
+    "assembleDebug",
+    "--console=plain",
+    `-PrtpVersionCode=${build.code}`,
+    `-PrtpVersionName=${build.name}`,
+  ],
+  { cwd: android, env },
+);
 
 const built = join(android, "app", "build", "outputs", "apk", "debug", "app-debug.apk");
 const out = join(repo, "pitch-rehab.apk");
@@ -141,6 +198,7 @@ console.log(
     "",
     "=".repeat(64),
     `  Built: ${out}`,
+    `  Version: ${build.name}`,
     "",
     "  Put it on the phone -- USB, or send it to yourself and open it.",
     "  Android asks permission to install from that app the first time.",

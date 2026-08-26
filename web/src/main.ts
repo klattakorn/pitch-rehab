@@ -1489,6 +1489,18 @@ async function integrationsScreen(): Promise<void> {
   );
 }
 
+/**
+ * Which build this is.
+ *
+ * Stamped in by scripts/build-apk.mjs. Worth a line on screen because a phone
+ * otherwise cannot tell you whether it is running this morning's app or last
+ * week's, and with three people installing packages by hand that gets asked a
+ * lot. "dirty" on the end means it was built from uncommitted changes.
+ */
+function buildVersion(): string {
+  return (import.meta.env["VITE_APP_VERSION"] as string | undefined) ?? "development build";
+}
+
 function aboutScreen(): void {
   shell(
     `<div class="stack">
@@ -1510,6 +1522,15 @@ function aboutScreen(): void {
            <li><b>33 landmarks</b> per frame, scored in the browser and again on the server</li>
            <li><b>Every angle recomputed</b> server-side — the phone is never trusted</li>
          </ul>
+       </section>
+       <section class="panel">
+         <span class="label">This build</span>
+         <p class="sub"><code>${attr(buildVersion())}</code></p>
+         <p class="sub">Talking to ${
+           api.standaloneActive()
+             ? "nothing — running from the snapshot inside this app."
+             : `<code>${attr(api.serverOrigin() || "this machine")}</code>`
+         }</p>
        </section>
      </div>`,
     { title: "About", back: () => profileScreen() },
