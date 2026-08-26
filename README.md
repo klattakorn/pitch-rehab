@@ -164,7 +164,7 @@ hamstring is on the back.
 ### Running it on a phone
 
 The app is meant to be used with a phone propped up while you exercise, so it has to
-actually work on one. Five things were in the way, and all five are handled by
+actually work on one. Six things were in the way, and all six are handled by
 `start.bat`.
 
 **1. The camera needs https.** A browser will not call `getUserMedia` unless the page
@@ -216,7 +216,19 @@ Without a wake lock the screen sleeps mid-set, the video track stalls and the re
 stops — again, indistinguishable from the engine breaking. `keepScreenAwake()` holds one
 for as long as the camera is running and re-acquires it when you come back to the tab.
 
-**5. Nobody can type an IP address.** `https://192.168.0.48:5173` is twenty-five
+**5. Sometimes there is no server to reach.** Not a network problem — a room that
+will not let you install Python or start anything. Every other fix here assumes a
+laptop is there to be found, so the app carries the backend's answers with it:
+`scripts/make_snapshot.py` records what the real API says for every screen, and the
+installed app can replay it with nothing running anywhere.
+
+The camera keeps working untouched, because it never needed the server — rep counting
+and form scoring run on the phone in `pose/live.ts`. What the app will not do is
+recompute: a set logged that way is stored and reported as not yet counted, and a
+band on every screen says the app is running from a snapshot. See
+[docs/ANDROID.md](docs/ANDROID.md).
+
+**6. Nobody can type an IP address.** `https://192.168.0.48:5173` is twenty-five
 characters of digits and punctuation on a phone keyboard, and one wrong digit gives you
 a timeout that says nothing about which digit. So the server prints a **QR code**
 instead — in the terminal when it starts, and at `/phone` as an SVG for a projector.

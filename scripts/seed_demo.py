@@ -422,6 +422,14 @@ def report(db, episode: InjuryEpisode, sessions: int, blocker: str) -> None:  # 
 
 
 def main() -> None:
+    # The summary below uses arrows and a "<=" sign. Python picks the console's
+    # code page for those, and gets cp1252 whenever output is piped rather than
+    # shown -- so `seed_demo.py > log.txt` died on a character it could print
+    # perfectly well to a window. Replace rather than raise: a mangled dash in a
+    # log file is a nuisance, a crash halfway through seeding is a lost demo.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     parser = argparse.ArgumentParser(description="Build the demo player.")
     parser.add_argument(
         "--blocker",

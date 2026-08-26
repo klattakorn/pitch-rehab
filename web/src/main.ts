@@ -177,10 +177,28 @@ function tabbar(active: Tab | undefined): string {
     </nav>`;
 }
 
+/**
+ * Say so, on every screen, when the app is running without a backend.
+ *
+ * Not a nicety. Someone shown this in a classroom has no way to tell a live
+ * system from a recorded one, and letting them assume the first would be a
+ * lie told by omission. It also counts what is sitting on the phone unsent,
+ * because "saved" and "counted" are different things here.
+ */
+function standaloneBand(): string {
+  if (!api.standaloneActive()) return "";
+  const waiting = api.standalonePending();
+  return `<div class="offline-band">
+      <span class="tagline">Demo mode</span>
+      Running from a snapshot on this phone — no laptop connected.
+      ${waiting ? `<b>${waiting} logged here, not yet counted.</b>` : ""}
+    </div>`;
+}
+
 function shell(body: string, chrome: Chrome = {}): void {
   app.innerHTML = `
     ${header(chrome)}
-    <main class="${chrome.tab ? "with-tabs" : ""}${chrome.brand || chrome.greeting ? "" : ""}">${body}</main>
+    <main class="${chrome.tab ? "with-tabs" : ""}${chrome.brand || chrome.greeting ? "" : ""}">${standaloneBand()}${body}</main>
     ${tabbar(chrome.tab)}`;
 
   if (chrome.back) on("#nav-back", chrome.back);
@@ -321,12 +339,21 @@ function serverScreen(notice = ""): void {
        <p class="sub">Built into this app: <b>${attr(builtIn || "nothing")}</b>.
          The laptop prints its address when it starts.</p>
        <button class="primary block" id="save">Test and save</button>
+       ${
+         api.standaloneActive()
+           ? `<button class="linkbtn" id="live">Stop using the snapshot</button>`
+           : ""
+       }
        <button class="linkbtn" id="back">Back</button>
      </div>`,
     { title: "Server", back: () => welcomeScreen() },
   );
 
   on("#back", () => welcomeScreen());
+  on("#live", () => {
+    api.useStandalone(false);
+    void boot();
+  });
   on("#save", () => {
     const input = app.querySelector<HTMLInputElement>("#origin")!;
     const origin = input.value.trim().replace(/\/+$/, "");
@@ -1090,7 +1117,9 @@ function summaryScreen(
         });
         await api.completeSession(session.id, { rpe: 5 });
         await refresh();
-        note.textContent = "Saved. Your testing has been updated.";
+        note.textContent = api.standaloneActive()
+          ? "Stored on this phone. Your testing updates when the laptop is back."
+          : "Saved. Your testing has been updated.";
       } catch (error) {
         note.textContent =
           error instanceof api.ApiError ? String(error.detail) : String(error);
@@ -1851,11 +1880,20 @@ async function boot(): Promise<void> {
              firewall lets the API through.</div>
            <button class="primary block" id="retry">Try again</button>
            <button class="linkbtn" id="server">Change server address</button>
+           ${
+             api.standaloneAvailable()
+               ? `<button class="linkbtn" id="demo">Carry on without a laptop</button>`
+               : ""
+           }
          </div>`,
         { title: "No connection" },
       );
       on("#retry", () => void boot());
       on("#server", () => serverScreen());
+      on("#demo", () => {
+        api.useStandalone(true);
+        void boot();
+      });
       return;
     }
     shell(
@@ -1863,9 +1901,18 @@ async function boot(): Promise<void> {
          <div class="notice">The API is not running. Start it with
            <code>start.bat</code>, or <code>uvicorn app.main:app --reload</code>,
            then reload this page.</div>
+         ${
+           api.standaloneAvailable()
+             ? `<button class="linkbtn" id="demo">Carry on without a backend</button>`
+             : ""
+         }
        </div>`,
       { title: "Backend not running" },
     );
+    on("#demo", () => {
+      api.useStandalone(true);
+      void boot();
+    });
     return;
   }
   if (!api.isSignedIn()) return welcomeScreen();

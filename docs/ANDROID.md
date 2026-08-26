@@ -64,17 +64,71 @@ of the demo. Inside the app the files are served from the package itself over
 
 ## When it cannot reach the laptop
 
-The app says so on the sign-in screen — tap **Change server address**. Three things
-to check, in the order they go wrong:
+The app says so, names the address it tried, and offers three ways out: **Try again**,
+**Change server address**, and **Carry on without a laptop**.
 
-- **The laptop moved.** Its address is a DHCP lease; this one went `.46`, `.47`, `.48`
-  in three days. The address it prints on startup is the truth. Type it in.
+Reasons it happens, in the order they go wrong:
+
+- **The laptop moved.** Its address is a DHCP lease; this one went `.46`, `.47`, `.48`,
+  `.52` in four days. The address it prints on startup is the truth. Type it in — the
+  box tests the connection before saving, so it tells you whether that was the problem
+  rather than failing later.
 - **Different wifi.** Phone on mobile data, or on the 5 GHz band while the laptop is
   on 2.4 GHz and the router keeps them apart.
+- **Client isolation.** School and guest wifi usually stops two devices on it from
+  seeing each other at all. Both have internet, neither can reach the other, and no
+  firewall rule or admin right changes it. A phone hotspot with the laptop joined to
+  it sidesteps the whole thing.
 - **The firewall.** Step 1 above.
 
-The address box tests the connection before saving, so it tells you which of the three
-it is rather than failing later.
+---
+
+## Running with no laptop at all
+
+Some rooms will not let you start a server: no admin, no installs, nothing. Every fix
+above assumes there is something to connect to, so none of them help. For those, the
+app carries the backend's answers with it.
+
+Tap **Carry on without a laptop** and the app runs from a snapshot in the package.
+Every screen works — the plan, the exit criteria, the progress charts, the body map.
+A band across the top says **Demo mode** on every screen, so nobody watching can
+mistake it for a live system.
+
+### What is real in that mode
+
+More than you would guess. `scripts/make_snapshot.py` calls every screen's endpoint
+against the actual API and records the replies, so the protocols, the exercise rules,
+the exit criteria and the progress figures are genuine output from the real criteria
+engine. Nothing is hand-written. Regenerate the file and it changes with the code.
+
+**And the camera is completely real.** It never needed the server: pose detection, rep
+counting, the angle checks and the coaching word all run in `pose/live.ts` on the
+phone, against rules that came from the backend and now sit in the snapshot. The
+upload afterwards is storage, not scoring — the screen never reads its reply. So the
+part of this project actually worth demonstrating behaves identically with nothing
+switched on anywhere.
+
+### What it will not do
+
+Recompute. A set logged in this mode is kept on the phone and reported as *not yet
+counted*; the phase-advance button refuses and says why. The thing that would judge
+new work is a thousand lines of Python in `app/services/criteria/`, and a second copy
+of the rules that decide whether someone is fit to play football would drift from the
+first. An offline demo is fine. A dishonest one is not.
+
+The progress screen stays exactly as snapshotted rather than half-updating, for the
+same reason: a screen mixing fresh arithmetic with frozen judgement is harder to trust
+than one that is plainly a fixed picture.
+
+### Keeping the snapshot current
+
+```bash
+python scripts/make_snapshot.py
+```
+
+Re-seeds the demo player, records twelve endpoints, writes
+`web/src/demo/snapshot.json` (~150 KB). `npm run apk` refuses to build without one and
+tells you how old it is.
 
 ---
 

@@ -1,4 +1,5 @@
 /** Client for the Pitch Rehab backend. Same-origin via the Vite proxy. */
+import * as standalone from "./standalone";
 import type { Exercise, ExerciseRule } from "./pose/rules";
 
 const BASE = "/api/v1";
@@ -45,6 +46,31 @@ export function setServerOrigin(origin: string): void {
 export const builtInOrigin = (): string =>
   (import.meta.env["VITE_API_ORIGIN"] as string | undefined) ?? "";
 
+// --------------------------------------------------- running with no server
+/**
+ * Switch the app to the snapshot in the package, or back to the real backend.
+ *
+ * The token is set here rather than in standalone.ts so that one module owns
+ * signing in. There is nobody to authenticate against, so it is a placeholder --
+ * it exists only to make `isSignedIn()` true and skip a sign-in screen that
+ * could not do anything.
+ */
+export function useStandalone(on: boolean): void {
+  standalone.setActive(on);
+  if (on) {
+    token = "standalone";
+    localStorage.setItem(TOKEN_KEY, token);
+  } else if (token === "standalone") {
+    signOut();
+  }
+}
+
+export const standaloneActive = (): boolean => standalone.active();
+export const standaloneAvailable = (): boolean => standalone.available();
+/** Sets and pain logs sitting on the phone, waiting for a laptop to count them. */
+export const standalonePending = (): number => standalone.pending();
+export const standaloneReset = (): void => standalone.reset();
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -64,6 +90,14 @@ export function signOut(): void {
 }
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // Standalone short-circuits before any network call. Same paths, same shapes,
+  // answered from the snapshot in the package -- see standalone.ts.
+  if (standalone.active()) {
+    const reply = standalone.handle(path, init);
+    if (!reply.ok) throw new ApiError(reply.status, reply.detail);
+    return reply.body as T;
+  }
+
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
@@ -175,6 +209,8 @@ export interface SetResult {
 
 // ---------------------------------------------------------------- calls
 export async function backendUp(): Promise<boolean> {
+  // Nothing to reach, and nothing missing either.
+  if (standalone.active()) return true;
   try {
     // Through serverOrigin(), not a bare path. In a browser they are the same
     // thing; in the installed app a bare path asks the phone about itself, and

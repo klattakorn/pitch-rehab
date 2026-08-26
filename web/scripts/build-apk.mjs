@@ -17,7 +17,7 @@
  * chase an address would be ridiculous.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, readdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -86,6 +86,28 @@ writeFileSync(
   "utf8",
 );
 
+// The package carries a snapshot of the backend so it can run on a machine
+// that will not let you start a server. Shipping without one, or with a stale
+// one, turns "carry on without a laptop" into a dead button -- and you find out
+// in the room, not here.
+const snapshot = join(web, "src", "demo", "snapshot.json");
+if (!existsSync(snapshot)) {
+  console.error(
+    [
+      "",
+      "No offline snapshot at web/src/demo/snapshot.json.",
+      "",
+      "Without it the app cannot run on a machine where the server will not",
+      "start. Make one first:",
+      "",
+      "  python scripts/make_snapshot.py",
+      "",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+const snapshotAge = (Date.now() - statSync(snapshot).mtimeMs) / 86_400_000;
+
 const [address] = localAddresses();
 if (!address) {
   console.warn(
@@ -99,6 +121,10 @@ console.log(`\nBuilding Pitch Rehab for Android`);
 console.log(`  JDK       ${jdk}`);
 console.log(`  SDK       ${sdk}`);
 console.log(`  Server    ${origin || "(none -- set it in the app)"}`);
+console.log(
+  `  Snapshot  ${snapshotAge < 1 ? "fresh" : `${Math.floor(snapshotAge)} days old` +
+    " -- re-run scripts/make_snapshot.py if the data has moved on"}`,
+);
 
 const env = { ...process.env, JAVA_HOME: jdk, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk };
 

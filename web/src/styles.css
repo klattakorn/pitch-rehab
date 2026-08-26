@@ -2533,3 +2533,33 @@ main {
     transform: none;
   }
 }
+
+/* Running with no backend -------------------------------------------------
+   Deliberately not an accent colour. The palette rules give volt to "you can
+   act here", amber to "correct this" and red to "this is wrong", and none of
+   those is what this band means -- it is a statement of fact about what you
+   are looking at. So it reads as chrome: a raised surface, a mono label, and
+   text that clears 4.5:1 like everything else. */
+.offline-band {
+  margin: 0 0 var(--s4);
+  padding: var(--s3) var(--s4);
+  background: var(--inset);
+  border: 1px solid var(--edge);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+  line-height: 1.45;
+}
+.offline-band .tagline {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.offline-band b {
+  color: var(--ink);
+  font-weight: 600;
+}
