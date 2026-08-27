@@ -224,6 +224,12 @@ class AuthorableExerciseOut(BaseModel):
     key: str
     name_en: str
     category: str
+    #: "reps" or "seconds". Six of these are holds -- planks, a wall sit, a
+    #: single-leg balance -- and asking for twenty reps of a side plank is not a
+    #: sentence. The client picks the metric from this rather than guessing.
+    measure: str = "reps"
+    #: What the programme itself asks for, as a starting number.
+    suggested_target: float | None = None
 
 
 class AuthorableCatalogueOut(BaseModel):

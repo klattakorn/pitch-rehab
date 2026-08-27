@@ -342,6 +342,29 @@ def _best_reps(
     return float(max(s.valid_reps for s in sets)), "reps"
 
 
+def _best_hold(
+    r: MetricResolver, exercise_key: str, window_days: int | None
+) -> tuple[float | None, str]:
+    """The longest clean hold, for the movements that are timed rather than counted.
+
+    Six of the camera-scored exercises are holds -- planks, a wall sit, a
+    single-leg balance -- and "do 20 reps of a side plank" is not a sentence.
+    The analyser already times them and writes the result on each rep record,
+    so this is the seconds equivalent of ``_best_reps``: the best single effort,
+    not the sum of several.
+    """
+    sets = _exercise_sets(r, exercise_key, window_days)
+    holds = [
+        rep.hold_seconds
+        for one_set in sets
+        for rep in one_set.reps
+        if rep.is_valid and rep.hold_seconds is not None
+    ]
+    if not holds:
+        return None, "seconds"
+    return float(max(holds)), "seconds"
+
+
 def _mean_form_for_exercise(
     r: MetricResolver, exercise_key: str, window_days: int | None
 ) -> tuple[float | None, str]:
@@ -361,6 +384,7 @@ PerExerciseFn = Callable[
 #: Prefix -> reader. Anything after the prefix is the exercise key.
 _DERIVED_PER_EXERCISE: dict[str, PerExerciseFn] = {
     "session.reps.": _best_reps,
+    "session.hold.": _best_hold,
     "session.form.": _mean_form_for_exercise,
 }
 

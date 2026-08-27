@@ -882,6 +882,7 @@ async function planScreen(shown?: string): Promise<void> {
     card.onclick = () => {
       const rx = phase.prescriptions.find((p) => p.exercise.key === card.dataset["key"]);
       if (!rx) return;
+      sessionOrigin = () => void planScreen();
       if (!rx.exercise.pose_rule) return manualScreen(rx);
       howToScreen(rx);
     };
@@ -896,23 +897,84 @@ function manualScreen(rx: Prescription): void {
          is done.</div>
        <button class="primary block" id="done">Mark complete</button>
      </div>`,
-    { title: rx.exercise.name_en, back: () => void planScreen() },
+    { title: rx.exercise.name_en, back: () => sessionOrigin() },
   );
-  on("#done", () => void planScreen());
+  on("#done", () => sessionOrigin());
+}
+
+/**
+ * Where the session flow returns to when it finishes or backs out.
+ *
+ * A session normally starts from the plan, and now can also start from a target
+ * the player set on the Exit Criteria screen. The flow underneath is four
+ * screens deep -- how-to, camera, result, save -- and threading a callback
+ * through all of them to answer a question that is only asked at the entrance
+ * is more moving parts than it earns. Set on the way in instead.
+ */
+let sessionOrigin: () => void = () => void planScreen();
+
+/**
+ * Run the camera against a target the player wrote themselves.
+ *
+ * The camera never needed a real prescription -- it reads an exercise, a number
+ * and a side, and it already knows the difference between counting reps and
+ * timing a hold. So a target becomes a prescription of one set and goes through
+ * exactly the same screens the programme's own exercises do. Nothing here is a
+ * parallel implementation; it is the same session with a different source for
+ * the number.
+ */
+async function startTargetSession(criterion: api.CriterionResult): Promise<void> {
+  shell(`<div class="loading">Getting the exercise…</div>`, {
+    title: "Session",
+    back: () => testScreen(),
+  });
+  try {
+    const cat = await catalogue();
+    const { base, exerciseKey } = splitMetric(criterion.metric, cat);
+    if (!exerciseKey) return testScreen();
+
+    const exercise = (await api.listExercises()).find((e) => e.key === exerciseKey);
+    if (!exercise?.pose_rule) {
+      return void shell(
+        `<div class="notice">This exercise has no camera rule, so it cannot be
+           scored. Log it by hand instead.</div>`,
+        { title: exercise?.name_en ?? "Session", back: () => testScreen() },
+      );
+    }
+
+    const timed = base?.key === "session.hold";
+    const target = Math.round(criterion.target ?? (timed ? 30 : 10));
+    sessionOrigin = () => testScreen();
+    howToScreen({
+      // Not a row in the database: nothing downstream reads the id, and a set
+      // uploads against the exercise key rather than a prescription.
+      id: 0,
+      order_index: 0,
+      sets: 1,
+      reps: timed ? null : target,
+      hold_seconds: timed ? target : null,
+      rest_seconds: null,
+      tempo: null,
+      side_mode: "bilateral",
+      exercise,
+    });
+  } catch (error) {
+    fail(error);
+  }
 }
 
 // ------------------------------------------------------------------ how to
 function howToScreen(rx: Prescription): void {
   const exercise = rx.exercise;
   shell(
-    `<p class="sub">${rx.sets} sets ${
+    `<p class="sub">${rx.sets} set${rx.sets === 1 ? "" : "s"} ${
       rx.reps ? `× ${rx.reps} reps` : `× ${rx.hold_seconds}s hold`
     }</p>
      ${demoPanelHtml(exercise)}
      <div class="controls">
        <button class="primary block" id="go">I'm ready — start camera</button>
      </div>`,
-    { title: exercise.name_en, back: () => void planScreen() },
+    { title: exercise.name_en, back: () => sessionOrigin() },
   );
 
   const animation = runDemoAnimation(exercise);
@@ -920,7 +982,7 @@ function howToScreen(rx: Prescription): void {
     animation.stop();
     go();
   };
-  on("#nav-back", () => leave(() => void planScreen()));
+  on("#nav-back", () => leave(() => sessionOrigin()));
   on("#go", () => leave(() => void cameraScreen(rx).catch(fail)));
 }
 
@@ -972,7 +1034,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
      <div class="controls">
        <button class="primary block" id="finish">End Set</button>
      </div>`,
-    { title: exercise.name_en, back: () => stop(() => void planScreen()) },
+    { title: exercise.name_en, back: () => stop(() => sessionOrigin()) },
   );
 
   const video = app.querySelector<HTMLVideoElement>("#cam")!;
@@ -1024,7 +1086,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
     then();
   }
 
-  on("#nav-back", () => stop(() => void planScreen()));
+  on("#nav-back", () => stop(() => sessionOrigin()));
   on("#finish", () => {
     const outcome = session.finish();
     stop(() =>
@@ -1135,7 +1197,7 @@ function summaryScreen(
        <button class="ghost block" id="again">Do another set</button>
      </div>
      <p class="sub center" id="savestate"></p>`,
-    { title: rx.exercise.name_en, back: () => void planScreen() },
+    { title: rx.exercise.name_en, back: () => sessionOrigin() },
   );
 
   on("#again", () => cameraScreen(rx, facing).catch(fail));
@@ -1285,12 +1347,6 @@ function testScreen(): void {
   // very first paint, where they simply mean "no pencils yet".
   const cat = state.catalogue ?? { groups: [], metrics: [], exercises: [] };
   const yours = new Set((state.customCriteria ?? []).map((c) => c.key));
-  const percent = gatePercent(gate);
-  const info = PHASE_NAMES[gate.phase_key] ?? {
-    n: 1,
-    name: titleCase(gate.phase_key),
-  };
-
   const mark = (c: api.CriterionResult) =>
     c.status === "pass" ? TICK_FILLED : c.status === "fail" ? CROSS : DASH;
 
@@ -1314,36 +1370,6 @@ function testScreen(): void {
     if (!c.required) parts.push("optional");
     return parts.join(" · ");
   };
-
-  /**
-   * What is actually left, in one line.
-   *
-   * "4 of 5 tests completed" is a score, not an answer. The question a player
-   * opens this screen with is which thing is stopping them, and when it is a
-   * single test it is worth naming rather than making them hunt a list.
-   */
-  const remaining = gate.criteria
-    .filter((c) => c.required && c.status !== "pass")
-    .sort((a, b) => b.progress - a.progress);
-  // Time in phase is the one criterion nobody can influence, so it makes a poor
-  // answer to "what should I do next" -- and it is always fractionally underway,
-  // which otherwise floats it to the top of any ranking by progress. When it is
-  // the only thing left it still gets named, because then "wait" is the answer.
-  const actionable = remaining.filter((c) => c.key !== TIME_IN_PHASE);
-  const nearest = (actionable.length ? actionable : remaining)[0];
-  // On day one nothing has been measured, so everything a player can act on
-  // sits at zero and "closest" would be whichever happened to be listed first --
-  // a number dressed up as a recommendation. Say what is true instead.
-  const measured = actionable.some((c) => c.progress > 0);
-  const summary = gate.passed
-    ? "Everything cleared."
-    : !nearest
-      ? "Nothing required is outstanding."
-      : remaining.length === 1
-        ? `One left: ${nearest.label_en}`
-        : measured
-          ? `${remaining.length} left. Closest: ${nearest.label_en}`
-          : `${remaining.length} to go. Complete a session and these start filling in.`;
 
   const row = (c: api.CriterionResult) => {
            // Editable when the metric is one the builder understands. Clinician
@@ -1414,20 +1440,13 @@ function testScreen(): void {
       ? `<h3>${title}</h3><ul class="criteria">${items.map(row).join("")}</ul>`
       : "";
 
-  shell(
-    `<section class="panel accent">
-       <div class="row-between">
-         <div>
-           <div class="headline">${info.name} test</div>
-           <div class="caption">${gate.required_passed} of ${gate.required_total}
-             tests completed</div>
-         </div>
-         ${progressRing(percent, gate.passed ? "pass" : "not yet", "sm")}
-       </div>
-       <p class="gate-summary">${summary}</p>
-     </section>
+  /* Which targets the camera can actually score. A target on a hand-logged
+     drill has no rule to score against, so offering a session for it would open
+     a camera that could never count anything. */
+  const scorable = mine.filter((c) => splitMetric(c.metric, cat).exerciseKey !== null);
 
-     <h3>Your targets</h3>
+  shell(
+    `<h3>Your targets</h3>
      ${
        mine.length
          ? `<ul class="criteria">${mine.map(row).join("")}</ul>`
@@ -1438,8 +1457,16 @@ function testScreen(): void {
      <button class="addbtn" id="add-test">
        <span class="plus" aria-hidden="true">+</span>
        <span class="rowbody"><b>Add a target</b>
-         <small>Choose an exercise and how many reps</small></span>
+         <small>Choose an exercise, then reps or seconds</small></span>
      </button>
+
+     ${
+       scorable.length
+         ? `<div class="controls">
+              <button class="primary block" id="start-target">Start a session</button>
+            </div>`
+         : ""
+     }
 
      ${
        library.length
@@ -1454,15 +1481,11 @@ function testScreen(): void {
          : ""
      }
 
-     <div class="notice ${gate.passed ? "good" : ""}">${
-       gate.passed
-         ? "All tests passed. Return under coaching staff guidance."
-         : "You must pass all required tests to be cleared for return to play."
-     }</div>
-
      ${
        gate.passed
-         ? `<div class="controls"><button class="primary block" id="advance">
+         ? `<div class="notice good">All tests passed. Return under coaching
+              staff guidance.</div>
+            <div class="controls"><button class="primary block" id="advance">
               Move to next phase</button></div>`
          : ""
      }`,
@@ -1470,6 +1493,12 @@ function testScreen(): void {
   );
 
   on("#add-test", () => void addTargetScreen());
+  on("#start-target", () => {
+    // One target, one tap. Several, and the player has to say which -- picking
+    // for them would guess at the thing they opened this screen to choose.
+    if (scorable.length === 1 && scorable[0]) return void startTargetSession(scorable[0]);
+    pickTargetScreen(scorable);
+  });
   app.querySelectorAll<HTMLButtonElement>("[data-edit]").forEach((button) => {
     button.onclick = (event) => {
       event.stopPropagation();
@@ -1711,6 +1740,35 @@ async function catalogue(): Promise<api.AuthorableCatalogue> {
 }
 
 /** Step one: what do you want to measure? */
+/** Which of your targets to work on, when there is more than one. */
+function pickTargetScreen(targets: api.CriterionResult[]): void {
+  shell(
+    `<p class="sub">Which one are you working on?</p>
+     <div class="stack">
+       ${targets
+         .map(
+           (c, index) => `<button class="rowcard" data-target="${index}">
+             <span class="rowbody"><b>${c.label_en}</b>
+               <small>${
+                 c.observed == null
+                   ? "Nothing recorded yet"
+                   : `Best so far ${round(c.observed)}${c.unit ? ` ${c.unit}` : ""}`
+               }</small></span>
+             ${CHEVRON}
+           </button>`,
+         )
+         .join("")}
+     </div>`,
+    { title: "Start a session", back: () => testScreen() },
+  );
+  app.querySelectorAll<HTMLButtonElement>("[data-target]").forEach((button) => {
+    button.onclick = () => {
+      const chosen = targets[Number(button.dataset["target"])];
+      if (chosen) void startTargetSession(chosen);
+    };
+  });
+}
+
 /**
  * Add a target in two taps: which exercise, then how many.
  *
@@ -1737,10 +1795,15 @@ async function addTargetScreen(): Promise<void> {
     return fail(error);
   }
 
-  // If the catalogue ever stops offering reps, fall through to the full picker
-  // rather than showing a list of exercises that cannot be turned into a target.
-  const reps = cat.metrics.find((m) => m.key === "session.reps");
-  if (!reps) return void pickMetricScreen();
+  // A movement is either counted or timed, and the catalogue says which from
+  // the same pose rule the camera scores it with. If either metric ever
+  // disappears, fall through to the full picker rather than offering exercises
+  // that cannot be turned into a target.
+  const byMeasure = {
+    reps: cat.metrics.find((m) => m.key === "session.reps"),
+    seconds: cat.metrics.find((m) => m.key === "session.hold"),
+  };
+  if (!byMeasure.reps || !byMeasure.seconds) return void pickMetricScreen();
 
   shell(
     `<p class="sub">Which exercise? You set the number next.</p>
@@ -1750,22 +1813,29 @@ async function addTargetScreen(): Promise<void> {
            (e) => `<button class="rowcard" data-ex="${e.key}">
              <span class="rowbody"><b>${e.name_en}</b>
                <small>${titleCase(e.category)}</small></span>
-             ${CHEVRON}
+             <span class="chip">${e.measure === "seconds" ? "seconds" : "reps"}</span>
            </button>`,
          )
          .join("")}
      </div>
-     <button class="linkbtn" id="more">Measure something other than reps</button>`,
+     <button class="linkbtn" id="more">Measure something else</button>`,
     { title: "Add a target", back: () => testScreen() },
   );
 
   app.querySelectorAll<HTMLButtonElement>("[data-ex]").forEach((button) => {
-    button.onclick = () =>
+    button.onclick = () => {
+      const exercise = cat.exercises.find((e) => e.key === button.dataset["ex"]);
+      if (!exercise) return;
+      const item = byMeasure[exercise.measure] ?? byMeasure.reps;
       void buildCriterionScreen({
-        item: reps,
-        exerciseKey: button.dataset["ex"]!,
+        item: item!,
+        exerciseKey: exercise.key,
         exerciseChosen: true,
+        // Start from what the programme asks for, where it says. Better than a
+        // generic 30 that happens to be right for nothing in particular.
+        ...(exercise.suggested_target != null ? { value: exercise.suggested_target } : {}),
       });
+    };
   });
   on("#more", () => void pickMetricScreen());
 }

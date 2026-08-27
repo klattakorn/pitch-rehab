@@ -84,8 +84,28 @@ const catalogue: AuthorableCatalogue = {
   groups: ["Exercises", "Running", "Strength tests", "How you feel", "Empty group"],
   metrics: [reps, metric(), hop, pain],
   exercises: [
-    { key: "single_leg_calf_raise", name_en: "Single-leg calf raise", category: "strength" },
-    { key: "split_squat", name_en: "Split squat", category: "strength" },
+    {
+      key: "single_leg_calf_raise",
+      name_en: "Single-leg calf raise",
+      category: "strength",
+      measure: "reps",
+      suggested_target: null,
+    },
+    {
+      key: "split_squat",
+      name_en: "Split squat",
+      category: "strength",
+      measure: "reps",
+      suggested_target: null,
+    },
+    // A timed one, so anything reading the catalogue has to cope with both.
+    {
+      key: "side_plank",
+      name_en: "Side plank",
+      category: "strength",
+      measure: "seconds",
+      suggested_target: 30,
+    },
   ],
 };
 

@@ -155,7 +155,15 @@ def list_authorable(db: DbSession) -> AuthorableCatalogueOut:
     part of the system ever writes a value for, and it would sit unmet forever.
     """
     scored = [
-        AuthorableExerciseOut(key=e.key, name_en=e.name_en, category=e.category)
+        AuthorableExerciseOut(
+            key=e.key,
+            name_en=e.name_en,
+            category=e.category,
+            # Read off the rule the camera scores it with, so the two can never
+            # disagree about whether the movement is counted or timed.
+            measure="seconds" if (e.pose_rule or {}).get("mode") == "hold" else "reps",
+            suggested_target=(e.pose_rule or {}).get("hold_target_s"),
+        )
         for e in db.execute(select(Exercise).order_by(Exercise.name_en)).scalars()
         if e.pose_rule is not None
     ]

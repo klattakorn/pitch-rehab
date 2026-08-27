@@ -429,6 +429,15 @@ export interface AuthorableExercise {
   key: string;
   name_en: string;
   category: string;
+  /**
+   * "reps" or "seconds". Six of the camera-scored movements are holds -- planks,
+   * a wall sit, a single-leg balance -- and twenty reps of a side plank is not a
+   * thing. Comes from the pose rule the camera scores it with, so the two cannot
+   * disagree about whether the movement is counted or timed.
+   */
+  measure: "reps" | "seconds";
+  /** What the programme itself asks for, as a starting number. */
+  suggested_target: number | null;
 }
 
 export interface AuthorableCatalogue {

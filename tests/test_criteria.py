@@ -24,6 +24,7 @@ from app.models.session import PainLog, RehabSession
 from app.models.user import PlayerBaseline, User
 from app.services.criteria import authoring
 from app.services.criteria.engine import evaluate_phase
+from app.services.criteria.resolver import MetricResolver
 from app.services.progression import advance_if_ready
 from tests.conftest import make_episode, make_player
 
@@ -299,6 +300,44 @@ def test_time_in_phase_passes_once_served_and_stops_blocking(db, player) -> None
     assert clock.status is CriterionStatus.PASS
     assert gate.blocking == []
     assert gate.passed is True
+
+
+def test_a_timed_exercise_is_measured_in_seconds_not_reps(db, player) -> None:
+    """Six of the camera-scored movements are holds, and reps make no sense for them.
+
+    A side plank has no repetitions. Before there was a seconds metric, the only
+    per-exercise target the builder offered was reps, so anyone setting a target
+    on a plank got a criterion counting something the analyser never produces --
+    permanently unmet, with nothing on screen to explain it.
+    """
+    from app.models.session import RepRecord
+
+    episode = make_episode(db, player, days_ago=30)
+    sets = add_exercise_sets(db, episode, "side_plank", reps=[1, 1])
+    # The analyser writes the timed hold onto the rep, not the set.
+    db.add_all(
+        [
+            RepRecord(set_id=sets[0].id, rep_index=0, is_valid=True, hold_seconds=18.0),
+            RepRecord(set_id=sets[1].id, rep_index=0, is_valid=True, hold_seconds=34.5),
+        ]
+    )
+    db.flush()
+
+    resolver = MetricResolver(db, episode)
+    samples = resolver.fetch("session.hold.side_plank", None)
+    # The best single effort, not the total of both.
+    assert samples.values == [34.5]
+    assert samples.unit == "seconds"
+
+
+def test_a_hold_that_was_never_timed_reports_nothing_rather_than_zero(db, player) -> None:
+    episode = make_episode(db, player, days_ago=30)
+    add_exercise_sets(db, episode, "side_plank", reps=[1])
+    resolver = MetricResolver(db, episode)
+    # No rep records, so no hold was timed. Zero would read as "held for no time
+    # at all", which is a different and wrong claim.
+    assert MetricResolver(db, episode).fetch("session.hold.side_plank", None).values == []
+    assert resolver.fetch("session.hold.side_plank", None).unit == "seconds"
 
 
 def test_passing_the_last_phase_clears_the_player(db, player) -> None:

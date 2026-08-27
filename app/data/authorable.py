@@ -79,6 +79,23 @@ CATALOGUE: tuple[Authorable, ...] = (
         needs_exercise=True,
     ),
     Authorable(
+        key="session.hold",
+        source=CriterionSource.SESSION,
+        group="Exercises",
+        label_en="Seconds held in one go",
+        unit="seconds",
+        help_en=(
+            "For the movements that are timed rather than counted — planks, a "
+            "wall sit, standing on one leg. Your longest clean hold in the "
+            "window, not the total across several attempts."
+        ),
+        phrase_en="Hold for at least … seconds",
+        default_target=30,
+        step=5,
+        default_aggregate=Aggregate.LATEST,
+        needs_exercise=True,
+    ),
+    Authorable(
         key="session.form",
         source=CriterionSource.SESSION,
         group="Exercises",
