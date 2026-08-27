@@ -2564,3 +2564,14 @@ main {
   color: var(--ink);
   font-weight: 600;
 }
+
+/* The one-line answer under the gate ring. Chrome, not a signal, so it takes
+   no accent -- the ring beside it already carries the state. */
+.gate-summary {
+  margin: var(--s3) 0 0;
+  padding-top: var(--s3);
+  border-top: 1px solid var(--edge);
+  font-size: var(--t-small);
+  line-height: 1.5;
+  color: var(--ink-2);
+}

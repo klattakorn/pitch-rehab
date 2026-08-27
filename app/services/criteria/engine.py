@@ -198,6 +198,48 @@ def _describe(spec: CriterionSpec, target: float | None, unit: str | None) -> tu
 # --------------------------------------------------------------------------
 # evaluation
 # --------------------------------------------------------------------------
+#: The key the gate has always used for this in ``blocking``. Kept identical so
+#: anything already looking for it keeps working.
+TIME_IN_PHASE_KEY = "min_days_in_phase"
+
+
+def _time_in_phase(phase: ProtocolPhase, resolver: MetricResolver) -> CriterionEvaluation | None:
+    """How long they have been in this phase, as a criterion like any other.
+
+    Not a measurement of the player -- a measurement of the calendar. Healing
+    takes the time it takes, and a player who trains hard enough to clear every
+    number in nine days is still nine days post-op. That is the one criterion
+    here nobody can influence, which is exactly why it has to be visible: the
+    alternative is an app that says no and will not say why.
+    """
+    if not phase.min_days:
+        return None
+
+    values = resolver.fetch("session.days_in_phase", None).values
+    elapsed = values[0] if values else 0.0
+    passed = elapsed >= phase.min_days
+
+    return CriterionEvaluation(
+        key=TIME_IN_PHASE_KEY,
+        label_en=f"At least {phase.min_days} days in this phase",
+        label_th=f"At least {phase.min_days} days in this phase",
+        metric="session.days_in_phase",
+        source=CriterionSource.SESSION,
+        required=True,
+        status=CriterionStatus.PASS if passed else CriterionStatus.FAIL,
+        comparator=Comparator.GTE,
+        target_type=TargetType.ABSOLUTE,
+        observed=round(elapsed, 1),
+        target=float(phase.min_days),
+        unit="days",
+        progress=min(1.0, elapsed / phase.min_days) if phase.min_days else 1.0,
+        # One per day, and the day is the measurement.
+        samples=int(elapsed),
+        detail_en="Tissue heals on its own schedule. This is a floor, not a target.",
+        detail_th="Tissue heals on its own schedule. This is a floor, not a target.",
+    )
+
+
 def _needs_more(spec: CriterionSpec, have: int) -> str:
     if have == 0:
         return "Not measured yet"
@@ -392,15 +434,22 @@ def evaluate_phase(
         evaluate_criterion(resolver, c, signoffs)
         for c in merge_criteria(db, episode, phase_key, phase.exit_criteria)
     ]
+    # A minimum time in phase is a tissue-healing constraint, not a metric --
+    # it holds regardless of how good the numbers look. It used to be appended
+    # straight to `blocking`, which meant a player who had cleared every test
+    # but was three days early saw a full ring, every row ticked, and a footer
+    # telling them to pass tests they had already passed. The reason was in the
+    # payload and on no screen.
+    #
+    # It is a required condition for leaving the phase, so it belongs with the
+    # other required conditions, where anything rendering the gate will find it.
+    time_in_phase = _time_in_phase(phase, resolver)
+    if time_in_phase is not None:
+        evaluations.append(time_in_phase)
+
     required = [e for e in evaluations if e.required]
     required_passed = [e for e in required if e.passed]
-
-    # A minimum time in phase is a tissue-healing constraint, not a metric --
-    # enforce it regardless of how good the numbers look.
     blocking = [e.key for e in required if not e.passed]
-    elapsed_days = resolver.fetch("session.days_in_phase", None).values
-    if phase.min_days and (elapsed_days[0] if elapsed_days else 0.0) < phase.min_days:
-        blocking.append("min_days_in_phase")
 
     if required:
         progress = sum(e.progress for e in required) / len(required)

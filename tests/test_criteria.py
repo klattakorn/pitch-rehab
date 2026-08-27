@@ -263,6 +263,44 @@ def test_minimum_time_in_phase_blocks_even_with_perfect_numbers(db, player) -> N
     assert "min_days_in_phase" in gate.blocking
 
 
+def test_time_in_phase_is_a_visible_criterion_not_a_hidden_veto(db, player) -> None:
+    """A player who cleared everything but is too early must be told why.
+
+    This used to live only in ``gate.blocking``, which no screen reads. The
+    result was the worst kind of dead end: a full ring, every row ticked, and a
+    message telling the player to pass tests they had already passed -- with the
+    actual reason present in the payload and absent from the app.
+    """
+    episode = make_episode(db, player, days_ago=1)
+    _clear_phase_one(db, episode)
+    gate = evaluate_phase(db, episode)
+
+    assert gate.passed is False
+    # Whatever is stopping them has to be something they can see.
+    keys = {c.key for c in gate.criteria}
+    assert set(gate.blocking) <= keys, "a blocker with no row on the screen"
+
+    clock = next(c for c in gate.criteria if c.key == "min_days_in_phase")
+    assert clock.required is True
+    assert clock.status is CriterionStatus.FAIL
+    assert clock.observed is not None and clock.target is not None
+    assert clock.observed < clock.target
+    assert clock.unit == "days"
+    # And the counts must agree with it, or the screen contradicts itself.
+    assert gate.required_passed < gate.required_total
+
+
+def test_time_in_phase_passes_once_served_and_stops_blocking(db, player) -> None:
+    episode = make_episode(db, player, days_ago=30)
+    _clear_phase_one(db, episode)
+    gate = evaluate_phase(db, episode)
+
+    clock = next(c for c in gate.criteria if c.key == "min_days_in_phase")
+    assert clock.status is CriterionStatus.PASS
+    assert gate.blocking == []
+    assert gate.passed is True
+
+
 def test_passing_the_last_phase_clears_the_player(db, player) -> None:
     episode = make_episode(db, player, days_ago=90)
     episode.current_phase = PhaseKey.P4_RETURN

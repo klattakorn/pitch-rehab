@@ -126,6 +126,9 @@ interface Chrome {
   right?: string;
 }
 
+/** The gate's time-in-phase condition, keyed the same as the backend's. */
+const TIME_IN_PHASE = "min_days_in_phase";
+
 const TABS: { key: Tab; label: string; go: () => void }[] = [
   { key: "home", label: "Home", go: () => homeScreen() },
   { key: "plan", label: "Plan", go: () => void planScreen() },
@@ -1312,22 +1315,37 @@ function testScreen(): void {
     return parts.join(" · ");
   };
 
-  shell(
-    `<section class="panel accent">
-       <div class="row-between">
-         <div>
-           <div class="headline">${info.name} test</div>
-           <div class="caption">${gate.required_passed} of ${gate.required_total}
-             tests completed</div>
-         </div>
-         ${progressRing(percent, gate.passed ? "pass" : "not yet", "sm")}
-       </div>
-     </section>
+  /**
+   * What is actually left, in one line.
+   *
+   * "4 of 5 tests completed" is a score, not an answer. The question a player
+   * opens this screen with is which thing is stopping them, and when it is a
+   * single test it is worth naming rather than making them hunt a list.
+   */
+  const remaining = gate.criteria
+    .filter((c) => c.required && c.status !== "pass")
+    .sort((a, b) => b.progress - a.progress);
+  // Time in phase is the one criterion nobody can influence, so it makes a poor
+  // answer to "what should I do next" -- and it is always fractionally underway,
+  // which otherwise floats it to the top of any ranking by progress. When it is
+  // the only thing left it still gets named, because then "wait" is the answer.
+  const actionable = remaining.filter((c) => c.key !== TIME_IN_PHASE);
+  const nearest = (actionable.length ? actionable : remaining)[0];
+  // On day one nothing has been measured, so everything a player can act on
+  // sits at zero and "closest" would be whichever happened to be listed first --
+  // a number dressed up as a recommendation. Say what is true instead.
+  const measured = actionable.some((c) => c.progress > 0);
+  const summary = gate.passed
+    ? "Everything cleared."
+    : !nearest
+      ? "Nothing required is outstanding."
+      : remaining.length === 1
+        ? `One left: ${nearest.label_en}`
+        : measured
+          ? `${remaining.length} left. Closest: ${nearest.label_en}`
+          : `${remaining.length} to go. Complete a session and these start filling in.`;
 
-     <h3>Test battery</h3>
-     <ul class="criteria">
-       ${gate.criteria
-         .map((c) => {
+  const row = (c: api.CriterionResult) => {
            // Editable when the metric is one the builder understands. Clinician
            // sign-off never is, which is the point of it.
            const editable = c.source !== "manual" && splitMetric(c.metric, cat).base !== null;
@@ -1367,9 +1385,38 @@ function testScreen(): void {
              </span>
              ${detail || chips ? `<span class="crit-note">${chips}${detail}</span>` : ""}
            </li>`;
-         })
-         .join("")}
-     </ul>
+  };
+
+  /* Required first -- those block. The clock goes after them: it is required,
+     but it needs nothing from the player, so it should not sit above the things
+     that do. Optional last. */
+  const rank = (c: api.CriterionResult) =>
+    c.key === TIME_IN_PHASE ? 1 : c.required ? 0 : 2;
+  const left = gate.criteria
+    .filter((c) => c.status !== "pass")
+    .sort((a, b) => rank(a) - rank(b) || b.progress - a.progress);
+  const cleared = gate.criteria.filter((c) => c.status === "pass");
+
+  const list = (title: string, items: api.CriterionResult[]) =>
+    items.length
+      ? `<h3>${title}</h3><ul class="criteria">${items.map(row).join("")}</ul>`
+      : "";
+
+  shell(
+    `<section class="panel accent">
+       <div class="row-between">
+         <div>
+           <div class="headline">${info.name} test</div>
+           <div class="caption">${gate.required_passed} of ${gate.required_total}
+             tests completed</div>
+         </div>
+         ${progressRing(percent, gate.passed ? "pass" : "not yet", "sm")}
+       </div>
+       <p class="gate-summary">${summary}</p>
+     </section>
+
+     ${list("Still to clear", left)}
+     ${list(cleared.length === gate.criteria.length ? "Test battery" : "Cleared", cleared)}
 
      <button class="addbtn" id="add-test">
        <span class="plus" aria-hidden="true">+</span>
