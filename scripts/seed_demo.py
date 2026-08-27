@@ -48,14 +48,16 @@ from app.core.enums import (  # noqa: E402
     SessionStatus,
     Severity,
     Side,
+    TargetType,
 )
 from app.core.security import hash_password  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
-from app.models.injury import InjuryEpisode, PhaseAttempt  # noqa: E402
+from app.models.injury import EpisodeCriterion, InjuryEpisode, PhaseAttempt  # noqa: E402
 from app.models.metrics import MetricSample  # noqa: E402
 from app.models.protocol import Exercise  # noqa: E402
 from app.models.session import ExerciseSet, PainLog, RehabSession  # noqa: E402
 from app.models.user import PlayerBaseline, PlayerProfile, User  # noqa: E402
+from app.services.criteria import authoring  # noqa: E402
 from app.services.criteria.engine import evaluate_phase  # noqa: E402
 from app.services.progression import select_protocol  # noqa: E402
 
@@ -421,6 +423,52 @@ def report(db, episode: InjuryEpisode, sessions: int, blocker: str) -> None:  # 
     print()
 
 
+def add_own_targets(db, episode: InjuryEpisode) -> None:  # noqa: ANN001
+    """Two targets the player set for themselves.
+
+    Without these the Exit Criteria screen opens on an empty "Your targets"
+    section, and the one feature that is genuinely the player's own looks
+    unbuilt. Built through the same authoring service the app calls, so what the
+    demo shows is what the button does -- not a row inserted behind its back.
+
+    One is nearly there and one is not, because a screen where everything is
+    green teaches nobody what the screen is for.
+    """
+    targets = [
+        # Comfortably met: this player has been doing these for weeks.
+        ("session.reps", "single_leg_squat", 10.0, True),
+        # Not yet. Deliberately not required: `--blocker none` promises a phase
+        # ready to advance, and a second permanent blocker would quietly break
+        # that promise for anyone rehearsing the advance.
+        ("session.reps", "lateral_bound", 12.0, False),
+    ]
+    for index, (metric, exercise_key, value, required) in enumerate(targets, start=1):
+        item = authoring.resolve(metric)
+        exercise = authoring.check_exercise(db, item, exercise_key)
+        checked = authoring.check_value(item, TargetType.ABSOLUTE, value)
+        db.add(
+            EpisodeCriterion(
+                episode_id=episode.id,
+                phase_key=episode.current_phase,
+                key=authoring.build_key(item, exercise_key, TargetType.ABSOLUTE),
+                order_index=index,
+                label_en=authoring.build_label(
+                    item, exercise=exercise, target_type=TargetType.ABSOLUTE, value=checked
+                ),
+                label_th="",
+                help_en=item.help_en,
+                required=required,
+                spec=authoring.build_spec(
+                    item,
+                    exercise_key=exercise_key,
+                    target_type=TargetType.ABSOLUTE,
+                    value=checked,
+                    window_days=None,
+                ).model_dump(mode="json"),
+            )
+        )
+
+
 def main() -> None:
     # The summary below uses arrows and a "<=" sign. Python picks the console's
     # code page for those, and gets cp1252 whenever output is piped rather than
@@ -465,6 +513,7 @@ def main() -> None:
         sessions = add_sessions(db, episode, exercises, ceiling)
         add_pain_logs(db, episode)
         add_metrics(db, episode, valgus_passes=args.blocker != "slsq_valgus")
+        add_own_targets(db, episode)
         db.commit()
 
         print()

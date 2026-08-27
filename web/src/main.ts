@@ -1392,10 +1392,22 @@ function testScreen(): void {
      that do. Optional last. */
   const rank = (c: api.CriterionResult) =>
     c.key === TIME_IN_PHASE ? 1 : c.required ? 0 : 2;
-  const left = gate.criteria
+
+  /* What the player wrote themselves comes first and on its own, because that
+     is the part they act on. The clinical battery -- pain scales, symmetry
+     indices, adherence -- is what makes the gate mean anything, but it is not
+     something anyone does on a Tuesday, so it sits underneath, folded away.
+     
+     Folded, not hidden: the line under the ring names whatever is still in the
+     way whether it came from the battery or not, and the fold itself carries a
+     count. Collapsing a section is fine; leaving a player unable to find out
+     why the app will not let them through is the thing to avoid. */
+  const mine = gate.criteria.filter((c) => yours.has(c.key));
+  const library = gate.criteria.filter((c) => !yours.has(c.key));
+  const left = library
     .filter((c) => c.status !== "pass")
     .sort((a, b) => rank(a) - rank(b) || b.progress - a.progress);
-  const cleared = gate.criteria.filter((c) => c.status === "pass");
+  const cleared = library.filter((c) => c.status === "pass");
 
   const list = (title: string, items: api.CriterionResult[]) =>
     items.length
@@ -1415,15 +1427,32 @@ function testScreen(): void {
        <p class="gate-summary">${summary}</p>
      </section>
 
-     ${list("Still to clear", left)}
-     ${list(cleared.length === gate.criteria.length ? "Test battery" : "Cleared", cleared)}
+     <h3>Your targets</h3>
+     ${
+       mine.length
+         ? `<ul class="criteria">${mine.map(row).join("")}</ul>`
+         : `<p class="sub tiny">Nothing yet. Pick an exercise and a number — it
+              counts toward this phase like anything else here.</p>`
+     }
 
      <button class="addbtn" id="add-test">
        <span class="plus" aria-hidden="true">+</span>
-       <span class="rowbody"><b>Add your own test</b>
-         <small>Set a target that matters to you — reps, speed, pain, anything
-           the app can measure</small></span>
+       <span class="rowbody"><b>Add a target</b>
+         <small>Choose an exercise and how many reps</small></span>
      </button>
+
+     ${
+       library.length
+         ? `<details class="battery">
+              <summary>
+                <span>Full test battery</span>
+                <span class="battery-count">${cleared.length} of ${library.length} cleared</span>
+              </summary>
+              ${list("Still to clear", left)}
+              ${list("Cleared", cleared)}
+            </details>`
+         : ""
+     }
 
      <div class="notice ${gate.passed ? "good" : ""}">${
        gate.passed
@@ -1440,7 +1469,7 @@ function testScreen(): void {
     { tab: "test", title: "Exit Criteria", back: () => homeScreen() },
   );
 
-  on("#add-test", () => void pickMetricScreen());
+  on("#add-test", () => void addTargetScreen());
   app.querySelectorAll<HTMLButtonElement>("[data-edit]").forEach((button) => {
     button.onclick = (event) => {
       event.stopPropagation();
@@ -1682,6 +1711,65 @@ async function catalogue(): Promise<api.AuthorableCatalogue> {
 }
 
 /** Step one: what do you want to measure? */
+/**
+ * Add a target in two taps: which exercise, then how many.
+ *
+ * The builder underneath can express a great deal -- limb symmetry indices,
+ * percentages of a personal baseline, rolling windows across six groups of
+ * metrics. All of it is real and all of it is what makes the gate worth
+ * anything, and none of it is what a player wants at the moment they think
+ * "I should be able to do ten of these by now".
+ *
+ * So reps for an exercise is the front door, because it is the thought people
+ * actually have, and everything else is one link further on. Nothing is
+ * removed; the order is just the other way round from how the data model sees
+ * it.
+ */
+async function addTargetScreen(): Promise<void> {
+  shell(`<div class="loading">Loading exercises…</div>`, {
+    title: "Add a target",
+    back: () => testScreen(),
+  });
+  let cat: api.AuthorableCatalogue;
+  try {
+    cat = await catalogue();
+  } catch (error) {
+    return fail(error);
+  }
+
+  // If the catalogue ever stops offering reps, fall through to the full picker
+  // rather than showing a list of exercises that cannot be turned into a target.
+  const reps = cat.metrics.find((m) => m.key === "session.reps");
+  if (!reps) return void pickMetricScreen();
+
+  shell(
+    `<p class="sub">Which exercise? You set the number next.</p>
+     <div class="stack">
+       ${cat.exercises
+         .map(
+           (e) => `<button class="rowcard" data-ex="${e.key}">
+             <span class="rowbody"><b>${e.name_en}</b>
+               <small>${titleCase(e.category)}</small></span>
+             ${CHEVRON}
+           </button>`,
+         )
+         .join("")}
+     </div>
+     <button class="linkbtn" id="more">Measure something other than reps</button>`,
+    { title: "Add a target", back: () => testScreen() },
+  );
+
+  app.querySelectorAll<HTMLButtonElement>("[data-ex]").forEach((button) => {
+    button.onclick = () =>
+      void buildCriterionScreen({
+        item: reps,
+        exerciseKey: button.dataset["ex"]!,
+        exerciseChosen: true,
+      });
+  });
+  on("#more", () => void pickMetricScreen());
+}
+
 async function pickMetricScreen(): Promise<void> {
   shell(`<div class="loading">Loading what you can measure…</div>`, {
     title: "Add a test",
@@ -1719,6 +1807,8 @@ interface BuilderState {
   overrideKey?: string | null;
   /** Set when editing something already saved, so Remove can be offered. */
   existingKey?: string | null;
+  /** The exercise was chosen on the way in, so do not ask for it again. */
+  exerciseChosen?: boolean;
 }
 
 /** Step two: the number. */
@@ -1754,7 +1844,14 @@ async function buildCriterionScreen(initial: BuilderState): Promise<void> {
          <div class="caption">${windowText(item, null)}</div>
        </section>
 
-       ${item.needs_exercise ? `<section class="panel">${exercisePickerHtml(cat, exerciseKey)}</section>` : ""}
+       ${
+         // Asked already, one screen ago. The preview above names the exercise,
+         // and the back arrow goes to the list to change it, so repeating the
+         // whole dropdown here is one decision presented twice.
+         item.needs_exercise && !initial.exerciseChosen
+           ? `<section class="panel">${exercisePickerHtml(cat, exerciseKey)}</section>`
+           : ""
+       }
 
        ${
          item.target_types.length > 1

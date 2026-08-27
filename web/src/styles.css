@@ -2575,3 +2575,69 @@ main {
   line-height: 1.5;
   color: var(--ink-2);
 }
+
+/* The clinical battery, folded away ---------------------------------------
+   Present, and not the first thing anyone has to read. Styled as a control
+   rather than a panel: it is a thing you operate, so its boundary is held at
+   3:1 like every other control here. */
+details.battery {
+  margin-top: var(--s5);
+  border: 1px solid var(--edge-control);
+  border-radius: var(--r-md);
+  background: var(--card);
+  overflow: hidden;
+}
+details.battery > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  min-height: 52px;
+  padding: var(--s3) var(--s4);
+  cursor: pointer;
+  font-size: var(--t-lead);
+  font-weight: 600;
+  color: var(--ink);
+  /* The default triangle sits badly against a right-aligned count, and its
+     colour cannot be controlled. Drawn below instead. */
+  list-style: none;
+}
+details.battery > summary::-webkit-details-marker {
+  display: none;
+}
+.battery-count {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: var(--t-micro);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+details.battery > summary::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--ink-2);
+  border-bottom: 2px solid var(--ink-2);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 200ms var(--ease);
+  flex: none;
+}
+details.battery[open] > summary::after {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+details.battery > h3 {
+  margin: var(--s4) var(--s4) var(--s3);
+  font-size: var(--t-small);
+  letter-spacing: 0.04em;
+  color: var(--ink-3);
+}
+details.battery > ul.criteria {
+  margin: 0 0 var(--s4);
+}
+@media (prefers-reduced-motion: reduce) {
+  details.battery > summary::after {
+    transition: none;
+  }
+}
