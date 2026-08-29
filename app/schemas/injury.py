@@ -22,6 +22,17 @@ class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class StartWeekIn(BaseModel):
+    """Which week of their rehab a player says they are in.
+
+    Week 1 means the injury is today. Week 3 means it was a fortnight ago. The
+    app has no way to know this and no business guessing -- somebody who starts
+    using it a fortnight in should not be told they are on day one.
+    """
+
+    week: int = Field(ge=1, le=52)
+
+
 class EpisodeCreateIn(BaseModel):
     injury_site: InjurySite
     side: Side

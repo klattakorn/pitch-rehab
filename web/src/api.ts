@@ -319,6 +319,20 @@ export const createEpisode = (input: {
 export const logPain = (episodeId: number, body: Record<string, unknown>) =>
   post(`/injuries/${episodeId}/pain-logs`, body);
 
+/**
+ * Move the whole timeline so the player is in the week they say they are.
+ *
+ * Both `injured_on` and `phase_started_at` move together on the server -- one
+ * feeds the week counter and the other the minimum-days-in-phase gate, and
+ * moving one without the other shows a week that the gate disagrees with.
+ * Nothing measured is touched.
+ */
+export const setStartWeek = (episodeId: number, week: number) =>
+  request<Episode>(`/injuries/${episodeId}/start-week`, {
+    method: "PUT",
+    body: JSON.stringify({ week }),
+  });
+
 export const advancePhase = (episodeId: number) =>
   post<{ advanced: boolean; gate: Gate }>(`/injuries/${episodeId}/advance`, {});
 

@@ -550,10 +550,26 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
             full_name: intent.email.split("@")[0]!,
             position: chosen!,
           });
+          await boot();
         } else {
           await api.updateProfile({ position: chosen! });
+          // Changing position swaps the protocol underneath an existing rehab,
+          // so the timeline is worth confirming rather than assuming. Nothing
+          // logged is at risk -- only the date the rehab is counted from.
+          const episode = state.episode;
+          if (!episode) return void (await boot());
+          return startWeekScreen({
+            intro: `Your plan has been rebuilt for this position. Week 1 starts it
+              from today; if you are further along, set the week you are actually in.`,
+            initial: 1,
+            cta: "Save",
+            back: () => void boot(),
+            save: async (week) => {
+              await api.setStartWeek(episode.id, week);
+              await boot();
+            },
+          });
         }
-        await boot();
       } catch (error) {
         if (error instanceof api.ApiError && error.status === 409) {
           // The email is already registered, so the sign-in failure was a wrong
@@ -565,6 +581,88 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
         fail(error);
       }
     })();
+  });
+}
+
+// ---------------------------------------------------------- how far in are you
+/**
+ * Which week of their rehab the player says they are in.
+ *
+ * The app cannot know this and has no business guessing. Somebody who tore
+ * something a fortnight ago and downloads this today is in week three, and
+ * telling them they are on day one is both wrong and discouraging -- it also
+ * holds them behind a minimum-days gate they have already served.
+ *
+ * Week one is the honest default: it is the only answer that is true unless the
+ * player says otherwise, and the injury being today is the commonest case.
+ */
+function startWeekScreen(options: {
+  steps?: string;
+  intro: string;
+  initial: number;
+  cta: string;
+  back: () => void;
+  save: (week: number) => Promise<void>;
+}): void {
+  let week = options.initial;
+
+  // The same control the criterion builder uses, so a number that is stepped or
+  // typed behaves identically in both places and neither needs its own styles.
+  shell(
+    `${options.steps ?? ""}
+     <h2>How far in are you?</h2>
+     <p class="sub">${options.intro}</p>
+     <section class="panel">
+       <div class="numberrow">
+         <button class="stepbtn" id="minus" aria-label="A week earlier">−</button>
+         <div class="numberbox">
+           <input id="week" type="number" inputmode="numeric" step="1"
+             min="1" max="52" value="${week}" />
+           <span class="unit">week</span>
+         </div>
+         <button class="stepbtn" id="plus" aria-label="A week later">+</button>
+       </div>
+       <p class="sub tiny" id="week-note"></p>
+     </section>
+     <p class="sub tiny">This sets when your rehab began. It does not change
+       anything you have already logged.</p>
+     <div class="controls">
+       <button class="primary block" id="go">${options.cta}</button>
+     </div>`,
+    { brand: true, back: options.back },
+  );
+
+  const input = app.querySelector<HTMLInputElement>("#week")!;
+  const note = app.querySelector<HTMLElement>("#week-note")!;
+  const repaint = (): void => {
+    const days = (week - 1) * 7;
+    note.textContent =
+      days === 0
+        ? "Starting from today — the injury is new."
+        : `Injured about ${days} days ago, so the plan picks up there.`;
+  };
+  const setWeek = (next: number): void => {
+    week = Math.min(52, Math.max(1, Math.round(next) || 1));
+    input.value = String(week);
+    repaint();
+  };
+  repaint();
+
+  // Typed values are clamped on the way out rather than as you type, so a
+  // half-finished number is not rewritten under the cursor.
+  input.oninput = () => {
+    week = Number(input.value);
+    repaint();
+  };
+  input.onblur = () => setWeek(week);
+  on("#minus", () => setWeek(week - 1));
+  on("#plus", () => setWeek(week + 1));
+  on("#go", () => {
+    setWeek(week);
+    const button = app.querySelector<HTMLButtonElement>("#go")!;
+    button.disabled = true;
+    button.textContent = "Building your plan…";
+    void options.save(week).catch(fail);
   });
 }
 
@@ -633,25 +731,30 @@ function injuryScreen(): void {
 
     on("#next", () => {
       if (!chosen) return;
-      const button = app.querySelector<HTMLButtonElement>("#next")!;
-      button.disabled = true;
-      button.textContent = "Building your plan…";
-      void (async () => {
-        try {
-          const injuredOn = new Date(Date.now() - 12 * 864e5).toISOString().slice(0, 10);
-          const started = new Date(Date.now() - 8 * 864e5).toISOString();
+      startWeekScreen({
+        steps: `<div class="steps"><span class="step done">1 · Position</span>
+                  <span class="step done">2 · Injury</span>
+                  <span class="step on">3 · Timing</span></div>`,
+        intro: `Week 1 means it happened today. If you are already part-way
+          through, say so and the plan starts where you actually are.`,
+        initial: 1,
+        cta: "Build my plan",
+        back: () => render(),
+        save: async (week) => {
+          // Both dates come from the same day, for the reason the endpoint
+          // documents: the week counter and the minimum-days gate read
+          // different fields and must not disagree.
+          const start = new Date(Date.now() - (week - 1) * 7 * 864e5);
           await api.createEpisode({
             injury_site: chosen!,
             side,
-            injured_on: injuredOn,
+            injured_on: start.toISOString().slice(0, 10),
             severity: "grade_2",
-            phase_started_at: started,
+            phase_started_at: start.toISOString(),
           });
           await boot();
-        } catch (error) {
-          fail(error);
-        }
-      })();
+        },
+      });
     });
   };
 

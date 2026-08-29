@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
@@ -32,6 +32,7 @@ from app.schemas.injury import (
     ProgressOut,
     SignoffIn,
     SignoffOut,
+    StartWeekIn,
 )
 from app.schemas.protocol import PhaseOut, ProtocolOut
 from app.schemas.session import MetricSampleOut, PainLogIn, PainLogOut, TestResultIn
@@ -72,6 +73,31 @@ def create_episode(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"no protocol exists for {player.position} + {payload.injury_site}",
         )
+    db.commit()
+    db.refresh(episode)
+    return episode
+
+
+@router.put("/{episode_id}/start-week", response_model=EpisodeOut)
+def set_start_week(
+    payload: StartWeekIn, episode: Episode, db: DbSession
+) -> InjuryEpisode:
+    """Move the whole timeline so the player is in the week they say they are.
+
+    Both clocks move together. `injured_on` is what the week counter reads, and
+    `phase_started_at` is what the minimum-days-in-phase gate counts from -- and
+    a player who genuinely tore something a fortnight ago has had a fortnight of
+    healing whether or not this app was watching. Moving one without the other
+    would either show them week 3 while refusing to let them out of day one, or
+    the reverse.
+
+    What it does not touch is anything measured. Sessions, pain logs and camera
+    scores stay exactly where they are: this changes when the rehab started, not
+    what has happened in it.
+    """
+    start = date.today() - timedelta(weeks=payload.week - 1)
+    episode.injured_on = start
+    episode.phase_started_at = datetime.combine(start, time.min, tzinfo=UTC)
     db.commit()
     db.refresh(episode)
     return episode

@@ -340,6 +340,30 @@ def test_a_hold_that_was_never_timed_reports_nothing_rather_than_zero(db, player
     assert resolver.fetch("session.hold.side_plank", None).unit == "seconds"
 
 
+def test_saying_you_are_weeks_in_moves_both_clocks(db, player) -> None:
+    """A player who starts using the app a fortnight in is a fortnight in.
+
+    The week counter reads `injured_on` and the minimum-days gate counts from
+    `phase_started_at`. Moving one without the other would show week 3 while
+    refusing to let them out of day one, or the reverse.
+    """
+    from datetime import date, timedelta
+
+    episode = make_episode(db, player, days_ago=0)
+    resolver = MetricResolver(db, episode)
+    assert resolver.fetch("session.days_in_phase", None).values[0] < 1
+
+    # What PUT /injuries/{id}/start-week does.
+    start = date.today() - timedelta(weeks=2)
+    episode.injured_on = start
+    episode.phase_started_at = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
+    db.flush()
+
+    assert (date.today() - episode.injured_on).days == 14
+    days = MetricResolver(db, episode).fetch("session.days_in_phase", None).values[0]
+    assert 13 <= days <= 15, days
+
+
 def test_passing_the_last_phase_clears_the_player(db, player) -> None:
     episode = make_episode(db, player, days_ago=90)
     episode.current_phase = PhaseKey.P4_RETURN
