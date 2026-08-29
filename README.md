@@ -67,6 +67,17 @@ page came from a secure origin — `localhost` is exempt, a plain `http://192.16
 address is not — so the dev server signs its own certificate, which no phone has any
 reason to trust. See [Running it on a phone](#running-it-on-a-phone).
 
+**Sending it to someone with an iPhone, or anyone not on your wifi?** The built
+front end runs with no backend at all, so it can simply be hosted:
+
+```bash
+cd web && npm run deploy
+```
+
+One address, any device, real https so the camera works without a warning. See
+[docs/WEB.md](docs/WEB.md) — and [docs/ANDROID.md](docs/ANDROID.md) for the
+Android package.
+
 **Want something to look at?** A fresh account is honest and useless to show anyone —
 every chart says "nothing measured yet". This builds a player three weeks into an ACL
 rehab, with sessions behind them and a gate that has something to say:

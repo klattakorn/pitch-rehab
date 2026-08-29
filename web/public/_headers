@@ -1,0 +1,12 @@
+# Cache rules for Cloudflare Pages (ignored everywhere else, including inside
+# the Android package, which reads these files off disk).
+#
+# The pose runtime and the models are the only large downloads in the app, and
+# they never change without changing name -- they are vendored copies of a
+# pinned release. Without this a phone re-fetches 8 MB every visit; with it,
+# once.
+/mediapipe/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/models/*
+  Cache-Control: public, max-age=31536000, immutable

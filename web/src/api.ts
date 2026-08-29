@@ -224,11 +224,21 @@ export async function backendUp(): Promise<boolean> {
     const response = await fetch(`${serverOrigin()}/healthz`, {
       signal: AbortSignal.timeout(5000),
     });
+    if (!response.ok) return false;
+
+    // A 200 is not enough. Most static hosts answer an unknown path with
+    // index.html rather than a 404, so a build served from one gets a cheerful
+    // 200 of HTML here and concludes the backend is fine -- then fails on every
+    // call afterwards, with nothing pointing at the cause. Only the API says
+    // this, so only the API gets believed.
+    const body = (await response.json().catch(() => null)) as { status?: string } | null;
+    if (body?.status !== "ok") return false;
+
     // Remember that a server was once reachable. It changes what a failure
     // means: for someone who has connected before this is a fault to fix, and
     // for someone who was handed the app it is simply how things are.
-    if (response.ok) localStorage.setItem(SEEN_KEY, "1");
-    return response.ok;
+    localStorage.setItem(SEEN_KEY, "1");
+    return true;
   } catch {
     return false;
   }
