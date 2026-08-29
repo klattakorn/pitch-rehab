@@ -73,12 +73,31 @@ const POSITIONS = [
   { key: "striker", label: "Forward" },
 ];
 
+/**
+ * Fallback names for the four phases.
+ *
+ * The protocol carries a real title for each phase, written for the injury and
+ * the position -- a hamstring phase 3 is "Running and change of direction",
+ * which says far more than a generic label. These are only used before the
+ * protocol has loaded, or where it is not to hand: `phaseName()` prefers the
+ * real one, because the app showing two names for one phase on one screen is
+ * how a player stops trusting either.
+ */
 const PHASE_NAMES: Record<string, { n: number; name: string; weeks: string }> = {
   p1_protect: { n: 1, name: "Protection Phase", weeks: "Weeks 1–4" },
   p2_strength: { n: 2, name: "Strength & Control", weeks: "Weeks 4–8" },
   p3_running: { n: 3, name: "Power & Perform", weeks: "Weeks 8–12" },
   p4_return: { n: 4, name: "Return to Play", weeks: "Weeks 12+" },
 };
+
+/** The programme's own name for a phase, falling back to the generic one. */
+function phaseName(phaseKey: string): string {
+  if (state.phase?.phase_key === phaseKey && state.phase.title_en) {
+    return state.phase.title_en;
+  }
+  const fromProtocol = state.protocol?.phases.find((p) => p.phase_key === phaseKey);
+  return fromProtocol?.title_en ?? PHASE_NAMES[phaseKey]?.name ?? titleCase(phaseKey);
+}
 
 const PHASE_ORDER = ["p1_protect", "p2_strength", "p3_running", "p4_return"];
 
@@ -558,16 +577,14 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
           // logged is at risk -- only the date the rehab is counted from.
           const episode = state.episode;
           if (!episode) return void (await boot());
-          return startWeekScreen({
-            intro: `Your plan has been rebuilt for this position. Week 1 starts it
-              from today; if you are further along, set the week you are actually in.`,
-            initial: 1,
+          return void startingPhaseScreen({
+            episodeId: episode.id,
+            intro: `Your plan has been rebuilt for this position. Confirm where you
+              are in it — the phases below are the ones written for this position
+              and your injury.`,
             cta: "Save",
             back: () => void boot(),
-            save: async (week) => {
-              await api.setStartWeek(episode.id, week);
-              await boot();
-            },
+            done: async () => void (await boot()),
           });
         }
       } catch (error) {
@@ -584,86 +601,93 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
   });
 }
 
-// ---------------------------------------------------------- how far in are you
+// ------------------------------------------------------------- which phase
 /**
- * Which week of their rehab the player says they are in.
+ * Which phase of their programme the player is already in.
  *
- * The app cannot know this and has no business guessing. Somebody who tore
- * something a fortnight ago and downloads this today is in week three, and
- * telling them they are on day one is both wrong and discouraging -- it also
- * holds them behind a minimum-days gate they have already served.
+ * The app has no way to know this and no business guessing. Somebody two months
+ * into an ACL rehab is not in the protection phase, and putting them there
+ * hands them heel slides they finished weeks ago.
  *
- * Week one is the honest default: it is the only answer that is true unless the
- * player says otherwise, and the injury being today is the commonest case.
+ * The phases come from their own protocol rather than a generic list, so a
+ * goalkeeper with a shoulder problem reads the phases written for that, with
+ * the real minimum lengths. Which also makes this the first screen that shows
+ * a player what the programme ahead of them actually is.
  */
-function startWeekScreen(options: {
+async function startingPhaseScreen(options: {
+  episodeId: number;
   steps?: string;
   intro: string;
-  initial: number;
   cta: string;
   back: () => void;
-  save: (week: number) => Promise<void>;
-}): void {
-  let week = options.initial;
-
-  // The same control the criterion builder uses, so a number that is stepped or
-  // typed behaves identically in both places and neither needs its own styles.
-  shell(
-    `${options.steps ?? ""}
-     <h2>How far in are you?</h2>
-     <p class="sub">${options.intro}</p>
-     <section class="panel">
-       <div class="numberrow">
-         <button class="stepbtn" id="minus" aria-label="A week earlier">−</button>
-         <div class="numberbox">
-           <input id="week" type="number" inputmode="numeric" step="1"
-             min="1" max="52" value="${week}" />
-           <span class="unit">week</span>
-         </div>
-         <button class="stepbtn" id="plus" aria-label="A week later">+</button>
-       </div>
-       <p class="sub tiny" id="week-note"></p>
-     </section>
-     <p class="sub tiny">This sets when your rehab began. It does not change
-       anything you have already logged.</p>
-     <div class="controls">
-       <button class="primary block" id="go">${options.cta}</button>
-     </div>`,
-    { brand: true, back: options.back },
-  );
-
-  const input = app.querySelector<HTMLInputElement>("#week")!;
-  const note = app.querySelector<HTMLElement>("#week-note")!;
-  const repaint = (): void => {
-    const days = (week - 1) * 7;
-    note.textContent =
-      days === 0
-        ? "Starting from today — the injury is new."
-        : `Injured about ${days} days ago, so the plan picks up there.`;
-  };
-  const setWeek = (next: number): void => {
-    week = Math.min(52, Math.max(1, Math.round(next) || 1));
-    input.value = String(week);
-    repaint();
-  };
-  repaint();
-
-  // Typed values are clamped on the way out rather than as you type, so a
-  // half-finished number is not rewritten under the cursor.
-  input.oninput = () => {
-    week = Number(input.value);
-    repaint();
-  };
-  input.onblur = () => setWeek(week);
-  on("#minus", () => setWeek(week - 1));
-  on("#plus", () => setWeek(week + 1));
-  on("#go", () => {
-    setWeek(week);
-    const button = app.querySelector<HTMLButtonElement>("#go")!;
-    button.disabled = true;
-    button.textContent = "Building your plan…";
-    void options.save(week).catch(fail);
+  done: () => Promise<void>;
+}): Promise<void> {
+  shell(`<div class="loading">Loading your programme…</div>`, {
+    brand: true,
+    back: options.back,
   });
+
+  let protocol: api.Protocol;
+  try {
+    protocol = await api.protocolFor(options.episodeId);
+  } catch (error) {
+    return fail(error);
+  }
+
+  const phases = [...protocol.phases].sort((a, b) => a.order_index - b.order_index);
+  let chosen = phases[0]?.phase_key ?? "";
+
+  const render = (): void => {
+    shell(
+      `${options.steps ?? ""}
+       <h2>Which phase are you in?</h2>
+       <p class="sub">${options.intro}</p>
+       <div class="stack">
+         ${phases
+           .map(
+             (phase, index) => `<button class="rowcard phase-pick${
+               phase.phase_key === chosen ? " on" : ""
+             }" data-phase="${phase.phase_key}"
+               aria-pressed="${phase.phase_key === chosen}">
+               <span class="phase-n">${index + 1}</span>
+               <span class="rowbody"><b>${phase.title_en}</b>
+                 <small>${phase.goal_en ?? ""}</small></span>
+               <span class="chip">${phase.min_days}d min</span>
+             </button>`,
+           )
+           .join("")}
+       </div>
+       <p class="sub tiny">Pick the first one if the injury is new. Choosing a
+         later phase dates your rehab back accordingly — it does not mark the
+         earlier phases as passed, because this app did not watch you do them.</p>
+       <div class="controls">
+         <button class="primary block" id="go">${options.cta}</button>
+       </div>`,
+      { brand: true, back: options.back },
+    );
+
+    app.querySelectorAll<HTMLButtonElement>("[data-phase]").forEach((card) => {
+      card.onclick = () => {
+        chosen = card.dataset["phase"]!;
+        render();
+      };
+    });
+    on("#go", () => {
+      const button = app.querySelector<HTMLButtonElement>("#go")!;
+      button.disabled = true;
+      button.textContent = "Building your plan…";
+      void (async () => {
+        try {
+          await api.setStartingPhase(options.episodeId, chosen);
+          await options.done();
+        } catch (error) {
+          fail(error);
+        }
+      })();
+    });
+  };
+
+  render();
 }
 
 // -------------------------------------------------------- where is the injury
@@ -731,30 +755,37 @@ function injuryScreen(): void {
 
     on("#next", () => {
       if (!chosen) return;
-      startWeekScreen({
-        steps: `<div class="steps"><span class="step done">1 · Position</span>
-                  <span class="step done">2 · Injury</span>
-                  <span class="step on">3 · Timing</span></div>`,
-        intro: `Week 1 means it happened today. If you are already part-way
-          through, say so and the plan starts where you actually are.`,
-        initial: 1,
-        cta: "Build my plan",
-        back: () => render(),
-        save: async (week) => {
-          // Both dates come from the same day, for the reason the endpoint
-          // documents: the week counter and the minimum-days gate read
-          // different fields and must not disagree.
-          const start = new Date(Date.now() - (week - 1) * 7 * 864e5);
-          await api.createEpisode({
+      const button = app.querySelector<HTMLButtonElement>("#next")!;
+      button.disabled = true;
+      button.textContent = "Building your plan…";
+      void (async () => {
+        try {
+          // The episode has to exist before the phases can be shown: which
+          // phases there are, what they are called and how long they run for
+          // all come from the protocol chosen for this position and injury.
+          const today = new Date().toISOString();
+          const episode = await api.createEpisode({
             injury_site: chosen!,
             side,
-            injured_on: start.toISOString().slice(0, 10),
+            injured_on: today.slice(0, 10),
             severity: "grade_2",
-            phase_started_at: start.toISOString(),
+            phase_started_at: today,
           });
-          await boot();
-        },
-      });
+          await startingPhaseScreen({
+            episodeId: episode.id,
+            steps: `<div class="steps"><span class="step done">1 · Position</span>
+                      <span class="step done">2 · Injury</span>
+                      <span class="step on">3 · Phase</span></div>`,
+            intro: `Your programme has four phases. Pick the one you are in now —
+              the first if the injury is new.`,
+            cta: "Build my plan",
+            back: () => render(),
+            done: async () => void (await boot()),
+          });
+        } catch (error) {
+          fail(error);
+        }
+      })();
     });
   };
 
@@ -818,7 +849,7 @@ function homeScreen(): void {
          <div class="hero-copy">
            <span class="label">Injury</span>
            <h2 class="hero-title">${injury}</h2>
-           <p class="hero-sub">${titleCase(episode.side)} side · Phase ${info.n} — ${info.name}</p>
+           <p class="hero-sub">${titleCase(episode.side)} side · Phase ${info.n} — ${phaseName(episode.current_phase)}</p>
          </div>
          <div class="hero-progress">
            <div class="bar-row top"><span>Progress</span><b>${percent}%</b></div>

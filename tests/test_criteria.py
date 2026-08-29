@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.enums import (
+    PHASE_ORDER,
     Comparator,
     CriterionSource,
     CriterionStatus,
@@ -18,7 +19,7 @@ from app.core.enums import (
     Side,
     TargetType,
 )
-from app.models.injury import ClinicianSignoff, EpisodeCriterion
+from app.models.injury import ClinicianSignoff, EpisodeCriterion, PhaseAttempt
 from app.models.metrics import MetricSample
 from app.models.session import PainLog, RehabSession
 from app.models.user import PlayerBaseline, User
@@ -340,28 +341,51 @@ def test_a_hold_that_was_never_timed_reports_nothing_rather_than_zero(db, player
     assert resolver.fetch("session.hold.side_plank", None).unit == "seconds"
 
 
-def test_saying_you_are_weeks_in_moves_both_clocks(db, player) -> None:
-    """A player who starts using the app a fortnight in is a fortnight in.
+def test_starting_part_way_through_dates_the_injury_backwards(db, player) -> None:
+    """Phase 3 and week 1 cannot both be true.
 
-    The week counter reads `injured_on` and the minimum-days gate counts from
-    `phase_started_at`. Moving one without the other would show week 3 while
-    refusing to let them out of day one, or the reverse.
+    Backdating by the minimum length of the phases behind them is the least the
+    rehab can have taken, and it keeps the week counter and the phase agreeing.
+    What must not happen is a phase attempt being written for phases the app
+    never watched: that record is meant to be evidence.
     """
-    from datetime import date, timedelta
+    from datetime import date
+
+    from app.models.protocol import ProtocolPhase
 
     episode = make_episode(db, player, days_ago=0)
-    resolver = MetricResolver(db, episode)
-    assert resolver.fetch("session.days_in_phase", None).values[0] < 1
+    phases = {
+        p.phase_key: p
+        for p in db.execute(
+            select(ProtocolPhase).where(ProtocolPhase.protocol_id == episode.protocol_id)
+        ).scalars()
+    }
+    target = PhaseKey.P3_RUNNING
+    served = sum(
+        phases[k].min_days or 0 for k in PHASE_ORDER[: PHASE_ORDER.index(target)] if k in phases
+    )
+    assert served > 0, "the phases before this one should have a minimum length"
 
-    # What PUT /injuries/{id}/start-week does.
-    start = date.today() - timedelta(weeks=2)
-    episode.injured_on = start
-    episode.phase_started_at = datetime.combine(start, datetime.min.time(), tzinfo=UTC)
+    # What PUT /injuries/{id}/starting-phase does.
+    episode.current_phase = target
+    episode.injured_on = date.today() - timedelta(days=served)
+    episode.phase_started_at = datetime.now(UTC)
     db.flush()
 
-    assert (date.today() - episode.injured_on).days == 14
-    days = MetricResolver(db, episode).fetch("session.days_in_phase", None).values[0]
-    assert 13 <= days <= 15, days
+    gate = evaluate_phase(db, episode)
+    assert gate.phase_key is target
+    # The clock for this phase starts now: the app cannot vouch for time served
+    # in a phase it never saw.
+    clock = next(c for c in gate.criteria if c.key == "min_days_in_phase")
+    assert clock.observed is not None and clock.observed < 1
+    # And nothing was marked as passed on the player's behalf. Entering a phase
+    # is recorded; clearing one is not, because the app never watched them do it.
+    passed = db.execute(
+        select(PhaseAttempt)
+        .where(PhaseAttempt.episode_id == episode.id)
+        .where(PhaseAttempt.passed.is_(True))
+    ).scalars().all()
+    assert passed == []
 
 
 def test_passing_the_last_phase_clears_the_player(db, player) -> None:

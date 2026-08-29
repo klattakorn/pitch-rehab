@@ -2727,3 +2727,39 @@ main {
     max-width: 58%;
   }
 }
+
+/* Picking the phase you are already in --------------------------------------
+   The one screen that shows a player the shape of the programme ahead of them,
+   so each row carries its number, its name, its goal and how long it runs. */
+.rowcard.phase-pick {
+  align-items: flex-start;
+  padding: var(--s4);
+}
+.rowcard.phase-pick.on {
+  border-color: var(--volt);
+  background: var(--inset);
+}
+.phase-n {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--edge-control);
+  border-radius: 50%;
+  font-family: var(--display);
+  font-size: var(--t-lead);
+  font-weight: 700;
+  line-height: 1;
+  color: var(--ink-2);
+}
+/* Volt marks the chosen one and nothing else on this screen, which is what
+   keeps it a signal rather than decoration. */
+.rowcard.phase-pick.on .phase-n {
+  border-color: var(--volt);
+  color: var(--volt);
+}
+.rowcard.phase-pick .chip {
+  flex: none;
+  align-self: center;
+}

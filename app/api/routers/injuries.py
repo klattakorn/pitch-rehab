@@ -1,13 +1,13 @@
 ﻿from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import Clinician, CurrentPlayer, DbSession, Episode
-from app.core.enums import CriterionSource, EpisodeStatus, PhaseKey, Side
+from app.core.enums import PHASE_ORDER, CriterionSource, EpisodeStatus, PhaseKey, Side
 from app.data.authorable import CATALOGUE, GROUP_ORDER
 from app.models.injury import (
     ClinicianSignoff,
@@ -32,7 +32,7 @@ from app.schemas.injury import (
     ProgressOut,
     SignoffIn,
     SignoffOut,
-    StartWeekIn,
+    StartingPhaseIn,
 )
 from app.schemas.protocol import PhaseOut, ProtocolOut
 from app.schemas.session import MetricSampleOut, PainLogIn, PainLogOut, TestResultIn
@@ -78,26 +78,68 @@ def create_episode(
     return episode
 
 
-@router.put("/{episode_id}/start-week", response_model=EpisodeOut)
-def set_start_week(
-    payload: StartWeekIn, episode: Episode, db: DbSession
+@router.put("/{episode_id}/starting-phase", response_model=EpisodeOut)
+def set_starting_phase(
+    payload: StartingPhaseIn, episode: Episode, db: DbSession
 ) -> InjuryEpisode:
-    """Move the whole timeline so the player is in the week they say they are.
+    """Put the player in the phase they say they are already in.
 
-    Both clocks move together. `injured_on` is what the week counter reads, and
-    `phase_started_at` is what the minimum-days-in-phase gate counts from -- and
-    a player who genuinely tore something a fortnight ago has had a fortnight of
-    healing whether or not this app was watching. Moving one without the other
-    would either show them week 3 while refusing to let them out of day one, or
-    the reverse.
+    Someone who starts using this two months into an ACL rehab is not in the
+    protection phase, and putting them there hands them heel slides they
+    finished weeks ago.
 
-    What it does not touch is anything measured. Sessions, pain logs and camera
-    scores stay exactly where they are: this changes when the rehab started, not
-    what has happened in it.
+    Three things move, and the reasoning differs for each.
+
+    `current_phase` is the answer itself. `injured_on` is backdated by the
+    minimum length of every phase before this one, because that is the least
+    time it can have taken to arrive here -- it drives the week counter, and
+    week 1 beside phase 3 would be nonsense on its face. `phase_started_at`
+    is set to now, because the app can vouch for the phases behind them only
+    as a floor, and cannot vouch for time already served in this one.
+
+    What does not move is anything measured. No phase attempt is recorded for
+    the phases skipped over: the player says they passed them, the app did not
+    watch them do it, and writing a pass it never saw would be a lie in the one
+    record that is supposed to be evidence.
     """
-    start = date.today() - timedelta(weeks=payload.week - 1)
-    episode.injured_on = start
-    episode.phase_started_at = datetime.combine(start, time.min, tzinfo=UTC)
+    phases = {
+        p.phase_key: p
+        for p in db.execute(
+            select(ProtocolPhase).where(ProtocolPhase.protocol_id == episode.protocol_id)
+        ).scalars()
+    } if episode.protocol_id else {}
+    if payload.phase_key not in phases:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
+            f"this programme has no {payload.phase_key} phase",
+        )
+
+    index = PHASE_ORDER.index(payload.phase_key)
+    served = sum(
+        phases[key].min_days or 0 for key in PHASE_ORDER[:index] if key in phases
+    )
+
+    episode.current_phase = payload.phase_key
+    episode.injured_on = date.today() - timedelta(days=served)
+    episode.phase_started_at = datetime.now(UTC)
+
+    # Entering a phase is recorded the same way assign_protocol records it, so
+    # the attempt history stays coherent. Entered, not passed -- the difference
+    # is the whole point.
+    entered = db.execute(
+        select(PhaseAttempt)
+        .where(PhaseAttempt.episode_id == episode.id)
+        .where(PhaseAttempt.phase_key == payload.phase_key)
+    ).scalars().first()
+    if entered is None:
+        db.add(
+            PhaseAttempt(
+                episode_id=episode.id,
+                phase_key=payload.phase_key,
+                entered_at=episode.phase_started_at,
+            )
+        )
+
     db.commit()
     db.refresh(episode)
     return episode

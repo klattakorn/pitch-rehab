@@ -320,17 +320,16 @@ export const logPain = (episodeId: number, body: Record<string, unknown>) =>
   post(`/injuries/${episodeId}/pain-logs`, body);
 
 /**
- * Move the whole timeline so the player is in the week they say they are.
+ * Put the player in the phase they say they are already in.
  *
- * Both `injured_on` and `phase_started_at` move together on the server -- one
- * feeds the week counter and the other the minimum-days-in-phase gate, and
- * moving one without the other shows a week that the gate disagrees with.
- * Nothing measured is touched.
+ * The server backdates the injury by the minimum length of the phases behind
+ * them, so the week counter and the phase agree, and records entering the phase
+ * without recording a pass for the ones skipped. Nothing measured is touched.
  */
-export const setStartWeek = (episodeId: number, week: number) =>
-  request<Episode>(`/injuries/${episodeId}/start-week`, {
+export const setStartingPhase = (episodeId: number, phaseKey: string) =>
+  request<Episode>(`/injuries/${episodeId}/starting-phase`, {
     method: "PUT",
-    body: JSON.stringify({ week }),
+    body: JSON.stringify({ phase_key: phaseKey }),
   });
 
 export const advancePhase = (episodeId: number) =>
