@@ -2710,18 +2710,25 @@ details.battery > ul.criteria {
   right: -2%;
   bottom: 0;
   height: 100%;
-  max-width: 52%;
+  max-width: 46%;
   object-fit: contain;
   object-position: bottom right;
   /* The rim light the design leans on, done as a drop shadow rather than baked
      into the file, so swapping the photograph keeps the effect. */
   filter: drop-shadow(-6px 0 18px rgba(216, 255, 62, 0.22));
+  /* The left edge dissolves instead of ending. Two reasons: the figure reads as
+     emerging from the card rather than pasted onto it, and a long injury name
+     that reaches across can pass behind a fade without colliding with a hard
+     edge. Whatever photograph goes in gets this for free. */
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 26%);
+  mask-image: linear-gradient(to right, transparent 0, #000 26%);
 }
 
 .hero-copy {
   position: relative;
-  /* Room for the figure. Without one the copy takes the width back. */
-  max-width: 56%;
+  /* Room for the figure, with clearance. Measured with a figure in the slot:
+     at 56% the injury name ran under the photograph on a 375px phone. */
+  max-width: 50%;
 }
 .plan-hero.no-figure .hero-copy {
   max-width: 78%;
@@ -2764,10 +2771,10 @@ details.battery > ul.criteria {
    line, so it steps back and the type takes the room. */
 @media (max-width: 360px) {
   .hero-figure {
-    opacity: 0.5;
-    max-width: 40%;
+    opacity: 0.55;
+    max-width: 38%;
   }
   .hero-copy {
-    max-width: 72%;
+    max-width: 66%;
   }
 }
