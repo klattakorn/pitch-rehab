@@ -19,17 +19,20 @@ You get a `https://pitch-rehab.pages.dev` address; send that to anyone.
 cd web && npx wrangler login
 ```
 
-Then tell it which account to publish to. Wrangler normally works this out
-itself by asking Cloudflare which accounts you belong to, but that call
-(`GET /memberships`) returns a 500 from Cloudflare's side on some accounts. When
-it does, wrangler stops with a message about permissions and expired
-authentication — which sends you off re-authenticating something that was never
-wrong. The login is fine; it simply does not know where to put the files.
+Then tell it which account to publish to.
 
-Naming the account skips the call. Open <https://dash.cloudflare.com>: the
-address bar reads `dash.cloudflare.com/<a long string>/…`, and that string is
-the account id — also shown as **Account ID** on the account's overview page.
-Put it on its own line in:
+Wrangler normally works this out itself by asking which accounts you belong to.
+If that call fails — a 500 on `GET /memberships`, which wrangler reports as
+*"Internal authentication error"* — the usual reason is that **there are none to
+list**. A Cloudflare login and a Cloudflare account are separate things, and
+signing up does not always create the second. The message points at
+authentication, which is misleading: `npx wrangler whoami` will happily confirm
+the login is good.
+
+Open <https://dash.cloudflare.com>. If the Accounts page is empty, press
+**Create Account** — any name, the free plan covers Pages and asks for no card.
+Then copy **Account ID** from the right of the account's overview page; it is
+also the long string in the address bar. Put it on its own line in:
 
 ```
 web/.cloudflare-account
