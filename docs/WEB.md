@@ -11,37 +11,46 @@ folder is a complete, self-contained app. Put it on any static host and it works
 cd web && npm run deploy
 ```
 
-You get a `https://pitch-rehab.pages.dev` address; send that to anyone.
+You get a `https://pitch-rehab.netlify.app` address; send that to anyone.
 
-**Two things once, before the first deploy.** Sign in:
+**The first run** asks you to sign in to Netlify and whether to create the site.
+It remembers both, so after that it is just the one command.
+
+Netlify because the signup is instant and free, it needs no card, and it reads
+the same `web/public/_headers` this repo already carries — the caching rules that
+stop a phone re-fetching 8 MB of pose runtime on every visit travel with the
+build.
+
+### No CLI, no account
 
 ```bash
-cd web && npx wrangler login
+cd web && npm run deploy -- --folder
 ```
 
-Then tell it which account to publish to.
+Builds and opens `web/dist`. Drag that folder onto
+<https://app.netlify.com/drop> and it gives you an address immediately —
+nothing installed, and no account needed for a first upload. Making one keeps
+the address and lets you replace the files later.
 
-Wrangler normally works this out itself by asking which accounts you belong to.
-If that call fails — a 500 on `GET /memberships`, which wrangler reports as
-*"Internal authentication error"* — the usual reason is that **there are none to
-list**. A Cloudflare login and a Cloudflare account are separate things, and
-signing up does not always create the second. The message points at
-authentication, which is misleading: `npx wrangler whoami` will happily confirm
-the login is good.
+This is the fastest route if something is wrong with the CLI, or if you are
+setting up in a hurry on a machine that is not yours.
 
-Open <https://dash.cloudflare.com>. If the Accounts page is empty, press
-**Create Account** — any name, the free plan covers Pages and asks for no card.
-Then copy **Account ID** from the right of the account's overview page; it is
-also the long string in the address bar. Put it on its own line in:
+### Cloudflare Pages instead
 
-```
-web/.cloudflare-account
+```bash
+cd web && npm run deploy -- --cloudflare
 ```
 
-That file is not in git. The id is not a secret — it is in every dashboard URL
-and is useless without a token — but it belongs to whoever is deploying, so each
-person sets their own. `CLOUDFLARE_ACCOUNT_ID` in the environment works too and
-takes precedence.
+Supported, and it needs one extra thing: an account id, on its own line in
+`web/.cloudflare-account`. Wrangler normally discovers that by asking which
+accounts you belong to, and reports a 500 from that call as *"Internal
+authentication error"* — misleading twice over, because the login is fine and
+the usual cause is having **no account at all**. A Cloudflare login and a
+Cloudflare account are separate things, and signing up does not always create
+the second. `npx wrangler whoami` will confirm the login was never the problem.
+
+Cloudflare also holds some new accounts for several days before they can be
+created, which is why it is not the default.
 
 ---
 

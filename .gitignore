@@ -62,3 +62,6 @@ web/assets/
 # in every dashboard URL and is useless without a token -- but it belongs to
 # whoever is deploying, so each person sets their own.
 web/.cloudflare-account
+
+# Netlify CLI's record of which site this folder deploys to. Machine-local.
+web/.netlify/
