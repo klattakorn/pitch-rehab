@@ -11,8 +11,34 @@ folder is a complete, self-contained app. Put it on any static host and it works
 cd web && npm run deploy
 ```
 
-The first run opens a browser to sign in to Cloudflare. After that it is one
-command. You get a `https://pitch-rehab.pages.dev` address; send that to anyone.
+You get a `https://pitch-rehab.pages.dev` address; send that to anyone.
+
+**Two things once, before the first deploy.** Sign in:
+
+```bash
+cd web && npx wrangler login
+```
+
+Then tell it which account to publish to. Wrangler normally works this out
+itself by asking Cloudflare which accounts you belong to, but that call
+(`GET /memberships`) returns a 500 from Cloudflare's side on some accounts. When
+it does, wrangler stops with a message about permissions and expired
+authentication — which sends you off re-authenticating something that was never
+wrong. The login is fine; it simply does not know where to put the files.
+
+Naming the account skips the call. Open <https://dash.cloudflare.com>: the
+address bar reads `dash.cloudflare.com/<a long string>/…`, and that string is
+the account id — also shown as **Account ID** on the account's overview page.
+Put it on its own line in:
+
+```
+web/.cloudflare-account
+```
+
+That file is not in git. The id is not a secret — it is in every dashboard URL
+and is useless without a token — but it belongs to whoever is deploying, so each
+person sets their own. `CLOUDFLARE_ACCOUNT_ID` in the environment works too and
+takes precedence.
 
 ---
 

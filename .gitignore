@@ -57,3 +57,8 @@ web/android/capacitor-cordova-android-plugins/
 
 # Generated from scripts/make_app_icon.py, then fanned out by capacitor-assets.
 web/assets/
+
+# Which Cloudflare account `npm run deploy` publishes to. Not a secret -- it is
+# in every dashboard URL and is useless without a token -- but it belongs to
+# whoever is deploying, so each person sets their own.
+web/.cloudflare-account
