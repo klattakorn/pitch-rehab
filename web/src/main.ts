@@ -126,9 +126,6 @@ interface Chrome {
   right?: string;
 }
 
-/** The gate's time-in-phase condition, keyed the same as the backend's. */
-const TIME_IN_PHASE = "min_days_in_phase";
-
 const TABS: { key: Tab; label: string; go: () => void }[] = [
   { key: "home", label: "Home", go: () => homeScreen() },
   { key: "plan", label: "Plan", go: () => void planScreen() },
@@ -1445,29 +1442,16 @@ function testScreen(): void {
   /* Required first -- those block. The clock goes after them: it is required,
      but it needs nothing from the player, so it should not sit above the things
      that do. Optional last. */
-  const rank = (c: api.CriterionResult) =>
-    c.key === TIME_IN_PHASE ? 1 : c.required ? 0 : 2;
+  /* This screen shows what the player wrote for themselves and nothing else.
+     The clinical criteria -- pain scales, symmetry indices, adherence -- still
+     run, still gate the phase, and are still the reason any of this means
+     anything; they are simply not what a player came here to do.
 
-  /* What the player wrote themselves comes first and on its own, because that
-     is the part they act on. The clinical battery -- pain scales, symmetry
-     indices, adherence -- is what makes the gate mean anything, but it is not
-     something anyone does on a Tuesday, so it sits underneath, folded away.
-     
-     Folded, not hidden: the line under the ring names whatever is still in the
-     way whether it came from the battery or not, and the fold itself carries a
-     count. Collapsing a section is fine; leaving a player unable to find out
-     why the app will not let them through is the thing to avoid. */
+     They have to remain findable, or the app can refuse to advance for a reason
+     that exists nowhere on screen. The bell carries them: it names what is
+     outstanding rather than counting it. If that ever stops being true, this
+     screen becomes a dead end again. */
   const mine = gate.criteria.filter((c) => yours.has(c.key));
-  const library = gate.criteria.filter((c) => !yours.has(c.key));
-  const left = library
-    .filter((c) => c.status !== "pass")
-    .sort((a, b) => rank(a) - rank(b) || b.progress - a.progress);
-  const cleared = library.filter((c) => c.status === "pass");
-
-  const list = (title: string, items: api.CriterionResult[]) =>
-    items.length
-      ? `<h3>${title}</h3><ul class="criteria">${items.map(row).join("")}</ul>`
-      : "";
 
   /* Which targets the camera can actually score. A target on a hand-logged
      drill has no rule to score against, so offering a session for it would open
@@ -1497,18 +1481,6 @@ function testScreen(): void {
          : ""
      }
 
-     ${
-       library.length
-         ? `<details class="battery">
-              <summary>
-                <span>Full test battery</span>
-                <span class="battery-count">${cleared.length} of ${library.length} cleared</span>
-              </summary>
-              ${list("Still to clear", left)}
-              ${list("Cleared", cleared)}
-            </details>`
-         : ""
-     }
 
      ${
        gate.passed
@@ -1725,9 +1697,18 @@ function notificationsScreen(): void {
       kind: "good",
     });
   } else if (gate && gate.required_total) {
+    // Named, not counted. The Test tab shows the player's own targets and
+    // nothing else, so this is the one place the clinical side of the gate is
+    // spelled out -- and "open the Test tab to see" would now be a lie.
+    const outstanding = gate.required_total - gate.required_passed;
+    const blocking = gate.criteria.filter((c) => c.required && c.status !== "pass");
+    const named = blocking.slice(0, 3).map((c) => c.label_en);
+    const rest = blocking.length - named.length;
     items.push({
-      label: `${gate.required_total - gate.required_passed} tests still to pass`,
-      detail: "Open the Test tab to see what is blocking you",
+      label: `${outstanding} test${outstanding === 1 ? "" : "s"} still to pass`,
+      detail: named.length
+        ? named.join(" · ") + (rest > 0 ? ` · and ${rest} more` : "")
+        : "Complete a session and these start filling in",
       kind: "",
     });
   }
