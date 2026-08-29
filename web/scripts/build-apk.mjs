@@ -17,17 +17,11 @@
  * chase an address would be ridiculous.
  */
 import { execFileSync } from "node:child_process";
-import {
-  copyFileSync,
-  existsSync,
-  readFileSync,
-  readdirSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { copyFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { requireSnapshot, snapshotSummary } from "./check-snapshot.mjs";
 import { localAddresses } from "./make-cert.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -93,27 +87,13 @@ writeFileSync(
   "utf8",
 );
 
-// The package carries a snapshot of the backend so it can run on a machine
-// that will not let you start a server. Shipping without one, or with a stale
-// one, turns "carry on without a laptop" into a dead button -- and you find out
-// in the room, not here.
-const snapshot = join(web, "src", "demo", "snapshot.json");
-if (!existsSync(snapshot)) {
-  console.error(
-    [
-      "",
-      "No offline snapshot at web/src/demo/snapshot.json.",
-      "",
-      "Without it the app cannot run on a machine where the server will not",
-      "start. Make one first:",
-      "",
-      "  python scripts/make_snapshot.py",
-      "",
-    ].join("\n"),
-  );
-  process.exit(1);
-}
-const snapshotAge = (Date.now() - statSync(snapshot).mtimeMs) / 86_400_000;
+// The package carries a snapshot of the backend so it can run on a machine that
+// will not let you start a server. Shipping without one turns "carry on without
+// a laptop" into a dead button -- and you find out in the room, not here. Same
+// rule as the hosted build, kept in one place.
+requireSnapshot({
+  context: "Without it the app cannot run on a machine where the server will not start.",
+});
 
 const [address] = localAddresses();
 if (!address) {
@@ -128,10 +108,7 @@ console.log(`\nBuilding Pitch Rehab for Android`);
 console.log(`  JDK       ${jdk}`);
 console.log(`  SDK       ${sdk}`);
 console.log(`  Server    ${origin || "(none -- set it in the app)"}`);
-console.log(
-  `  Snapshot  ${snapshotAge < 1 ? "fresh" : `${Math.floor(snapshotAge)} days old` +
-    " -- re-run scripts/make_snapshot.py if the data has moved on"}`,
-);
+console.log(`  Snapshot  ${snapshotSummary()}`);
 
 /**
  * A version that says which build this is.

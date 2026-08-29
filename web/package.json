@@ -14,7 +14,7 @@
     "phone": "node scripts/phone.mjs",
     "apk": "node scripts/build-apk.mjs",
     "apk:send": "node scripts/serve-apk.mjs",
-    "deploy": "npm run build && npx wrangler pages deploy dist --project-name=pitch-rehab",
+    "deploy": "node scripts/check-snapshot.mjs && npm run build && npx wrangler pages deploy dist --project-name=pitch-rehab",
     "assets": "node scripts/vendor-assets.mjs"
   },
   "dependencies": {

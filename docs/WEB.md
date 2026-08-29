@@ -65,12 +65,34 @@ serves files on request, and the app fetches exactly one pose runtime and one
 model, chosen for the device. `public/_headers` marks both immutable, so it
 happens once and never again.
 
-## Re-deploying
+## Updating it
 
-Same command. It rebuilds and uploads; the URL stays the same.
+Same command. It rebuilds and uploads, and the URL stays the same — so the link
+you have already sent people keeps working and starts serving the new version.
 
-Re-run `python scripts/make_snapshot.py` first if the protocols, criteria or the
-demo player have changed, or the site will keep showing the old recording.
+```bash
+cd web && npm run deploy
+```
+
+Visitors get it on their next load. The JavaScript and CSS are named by content
+hash, so a new build cannot be served from an old cache; only the pose runtime
+and the models are pinned for a year, and those are a vendored release that does
+not change.
+
+**Re-run `python scripts/make_snapshot.py` first if anything the site shows has
+changed** — protocols, exit criteria, the demo player. The hosted site has no
+backend, so the snapshot is not a fallback there, it is the entire content: a
+stale one is a site quietly showing last week's data to everyone you sent the
+link to. `npm run deploy` refuses outright if the snapshot is missing and prints
+its age if it is not, but it cannot know whether the recording still matches the
+code. That call is yours.
+
+Changing the app usually means updating both things you have handed out:
+
+| | Command |
+|---|---|
+| The hosted link | `npm run deploy` |
+| The Android package | `npm run apk`, then `send-to-phone.bat` |
 
 ## If you would rather use a different host
 
