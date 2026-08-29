@@ -108,6 +108,17 @@ upload afterwards is storage, not scoring — the screen never reads its reply. 
 part of this project actually worth demonstrating behaves identically with nothing
 switched on anywhere.
 
+### Changing your programme
+
+Works. All 42 protocols are recorded alongside the snapshot, so choosing a
+different injury or position genuinely rebuilds the plan — different exercises,
+different phases, different exit criteria — rather than saying it did and
+serving the same one.
+
+They live in `web/public/demo-protocols.json`, out of the bundle at 1.6 MB, and
+are fetched the first time somebody actually changes something. Anyone who never
+does never downloads them.
+
 ### What it will not do
 
 Recompute. A set logged in this mode is kept on the phone and reported as *not yet

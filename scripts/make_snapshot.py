@@ -41,6 +41,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 OUT = ROOT / "web" / "src" / "demo" / "snapshot.json"
+#: Every protocol, kept out of the bundle and fetched only if somebody changes
+#: their injury or position with no laptop. See `_write_protocols`.
+PROTOCOLS = ROOT / "web" / "public" / "demo-protocols.json"
 
 EMAIL = "demo@pitchrehab.app"
 PASSWORD = "correct-horse-battery"
@@ -64,6 +67,48 @@ def _reseed() -> None:
         print(result.stdout)
         print(result.stderr, file=sys.stderr)
         raise SystemExit("Could not seed the demo player.")
+
+
+def _write_protocols() -> None:
+    """Every one of the 42 programmes, so the demo can switch between them.
+
+    The snapshot proper records one player's answers, which is enough until
+    somebody changes their position or their injury -- and then the app was
+    telling them their plan had been rebuilt while serving the same one. Six
+    positions times seven injury sites is the whole claim this project makes,
+    and a demo that cannot show it is demonstrating the wrong thing.
+
+    Kept in ``public/`` rather than bundled: 1.6 MB raw, and only somebody who
+    actually changes injury ever needs it. Most visitors never fetch it.
+    """
+    from sqlalchemy import select
+
+    from app.db.session import SessionLocal
+    from app.models.protocol import Protocol
+    from app.schemas.protocol import ProtocolOut
+
+    with SessionLocal() as db:
+        rows = list(
+            db.execute(select(Protocol).where(Protocol.is_active.is_(True))).scalars()
+        )
+        # Keyed by what the app knows about the player, so the lookup is a
+        # dictionary hit rather than a search.
+        protocols = {
+            f"{row.position}|{row.injury_site}": json.loads(
+                ProtocolOut.model_validate(row).model_dump_json()
+            )
+            for row in rows
+        }
+
+    PROTOCOLS.parent.mkdir(parents=True, exist_ok=True)
+    PROTOCOLS.write_text(
+        json.dumps(protocols, separators=(",", ":"), ensure_ascii=False), encoding="utf-8"
+    )
+    size = PROTOCOLS.stat().st_size
+    print(
+        f"\nWrote {PROTOCOLS.relative_to(ROOT)}  "
+        f"({len(protocols)} protocols, {size / 1024 / 1024:.2f} MB)"
+    )
 
 
 def main() -> None:
@@ -119,6 +164,8 @@ def main() -> None:
                 f"/injuries/{episode_id}/criteria",
             ):
                 grab(path)
+
+    _write_protocols()
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
     # Compact: this is bundled into a 30 MB package that a phone downloads over

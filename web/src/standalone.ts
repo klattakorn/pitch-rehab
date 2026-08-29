@@ -78,6 +78,8 @@ interface LocalState {
   profile: Body | null;
   /** The phase the player said they were in, if they have said. */
   phase: string | null;
+  /** An injury chosen on the phone, replacing the recorded one. */
+  injury: { injury_site: string; side: string } | null;
   nextId: number;
 }
 
@@ -87,6 +89,7 @@ const EMPTY: LocalState = {
   criteria: [],
   profile: null,
   phase: null,
+  injury: null,
   // Well above any id the snapshot contains, so a local session can never be
   // mistaken for a recorded one when the two lists are shown together.
   nextId: 900_001,
@@ -140,9 +143,64 @@ function episodeId(): number {
   return recorded?.[0]?.id ?? 0;
 }
 
-/** The programme, which the snapshot carries in full -- all four phases. */
+/**
+ * Every protocol, loaded once and only if it is needed.
+ *
+ * The snapshot records one player's programme, which is all anybody needs until
+ * they change their position or their injury. Then it is the wrong programme --
+ * and the app was saying "your plan has been rebuilt for this position" while
+ * serving the same one, which is a worse failure than an error message because
+ * nothing on screen contradicts it.
+ *
+ * Six positions times seven injury sites is the whole claim this project makes,
+ * so a demo that cannot show it is demonstrating the wrong thing. All 42 are
+ * recorded, kept out of the bundle at 1.6 MB, and fetched the first time
+ * somebody actually changes something. Most visitors never ask for it.
+ */
+let library: Record<string, { phases: Body[] }> | null = null;
+let loading: Promise<void> | null = null;
+
+export function ready(): Promise<void> {
+  if (library || !active()) return Promise.resolve();
+  loading ??= fetch("/demo-protocols.json")
+    .then((response) => (response.ok ? response.json() : null))
+    .then((loaded) => {
+      library = loaded;
+    })
+    .catch(() => {
+      // Offline in the other sense -- no network at all. The recorded protocol
+      // still works for the player as they were snapshotted.
+      library = null;
+    });
+  return loading;
+}
+
+/** What the app currently believes about the player, for choosing a protocol. */
+function playerKey(): string | null {
+  const me = RESPONSES["/auth/me"] as Body | undefined;
+  const profile = { ...((me?.["profile"] as Body) ?? {}), ...(local.profile ?? {}) };
+  const position = profile["position"];
+  const episode = (RESPONSES["/injuries?status_filter=active"] as Body[] | undefined)?.[0];
+  const site = local.injury?.injury_site ?? episode?.["injury_site"];
+  return position && site ? `${position}|${site}` : null;
+}
+
+/**
+ * The programme for who the player is now, falling back to the recorded one.
+ *
+ * The recorded protocol is the right answer whenever nothing has been changed,
+ * and the only answer if the library never loaded.
+ */
 function protocol(id: number): { phases: Body[] } | undefined {
-  return RESPONSES[`/injuries/${id}/protocol`] as { phases: Body[] } | undefined;
+  const key = playerKey();
+  const chosen = key ? library?.[key] : undefined;
+  return chosen ?? (RESPONSES[`/injuries/${id}/protocol`] as { phases: Body[] } | undefined);
+}
+
+/** Has the player moved off the programme the snapshot was recorded against? */
+function movedOff(id: number): boolean {
+  const key = playerKey();
+  return Boolean(key && library?.[key] && library[key] !== RESPONSES[`/injuries/${id}/protocol`]);
 }
 
 function phaseOf(id: number, key: string): Body | undefined {
@@ -290,23 +348,37 @@ export function handle(path: string, init: RequestInit = {}): Reply {
 /** The episode list, with the phase the player chose applied over it. */
 function episodes(): Body[] {
   const recorded = (RESPONSES["/injuries?status_filter=active"] as Body[] | undefined) ?? [];
-  if (!local.phase) return recorded;
-  return recorded.map((e) => ({ ...e, current_phase: local.phase }));
+  if (!local.phase && !local.injury) return recorded;
+  return recorded.map((e) => ({
+    ...e,
+    ...(local.injury ?? {}),
+    ...(local.phase ? { current_phase: local.phase } : {}),
+  }));
 }
 
 function get(path: string, id: number): Reply {
   if (path === "/injuries?status_filter=active") return ok(episodes());
 
+  if (path === `/injuries/${id}/protocol`) {
+    const chosen = protocol(id);
+    return chosen ? ok(chosen) : no(503, NEEDS_LAPTOP);
+  }
+
   // Today's plan for the phase they said they are in. The protocol carries
   // every phase and in exactly the shape this endpoint returns, so this is the
   // same data by another route rather than anything reconstructed.
-  if (local.phase && path === `/injuries/${id}/today`) {
-    const phase = phaseOf(id, local.phase);
+  // A phase chosen on the phone, or a programme swapped underneath: either way
+  // the recorded answers are for a different thing and the protocol is the
+  // source instead.
+  const shifted = local.phase ?? (movedOff(id) ? phaseOrder(id)[0] : null);
+
+  if (shifted && path === `/injuries/${id}/today`) {
+    const phase = phaseOf(id, shifted);
     if (phase) return ok(phase);
   }
 
-  if (local.phase && path === `/injuries/${id}/exit-criteria`) {
-    const gate = unmeasuredGate(id, local.phase);
+  if (shifted && path === `/injuries/${id}/exit-criteria`) {
+    const gate = unmeasuredGate(id, shifted);
     if (gate) {
       return ok({
         ...gate,
@@ -315,18 +387,18 @@ function get(path: string, id: number): Reply {
     }
   }
 
-  if (local.phase && path === `/injuries/${id}/progress`) {
+  if (shifted && path === `/injuries/${id}/progress`) {
     const recorded = RESPONSES[path] as Body | undefined;
-    const gate = unmeasuredGate(id, local.phase);
+    const gate = unmeasuredGate(id, shifted);
     if (recorded && gate) {
       const order = phaseOrder(id);
-      const index = order.indexOf(local.phase);
+      const index = order.indexOf(shifted);
       // Counting, not judging. Everything in the new phase is unmeasured, so
       // these are all zero -- the history below them is left exactly as it was,
       // because it happened.
       return ok({
         ...recorded,
-        phase_key: local.phase,
+        phase_key: shifted,
         phase_order: index + 1,
         phase_pct: 0,
         criteria_passed: 0,
@@ -420,6 +492,30 @@ function putCriterion(draft: Body): Reply {
 
 function post(path: string, body: Body, id: number): Reply {
   if (path === "/auth/login") return ok({ access_token: "standalone" });
+
+  // Choosing an injury. Every protocol is recorded, so this is a real change of
+  // programme rather than a promise the demo cannot keep -- the plan, the
+  // exercises and the gate all move to the one written for this position and
+  // this injury. What it is not is a second episode: the demo has one player,
+  // and this replaces what they are being treated for.
+  if (path === "/injuries") {
+    const site = String(body["injury_site"] ?? "");
+    const side = String(body["side"] ?? "left");
+    local.injury = { injury_site: site, side };
+    local.phase = null;
+    if (!playerKey() || !library?.[playerKey()!]) {
+      local.injury = null;
+      return no(
+        503,
+        "That programme is not in the demo. It exists -- there are 42 of them -- " +
+          "but this copy only carries the ones recorded into it.",
+      );
+    }
+    // A new injury starts at the beginning, the way the real one does.
+    local.phase = phaseOrder(id)[0] ?? null;
+    save(local);
+    return ok({ ...(episodes()[0] ?? {}), injury_site: site, side, current_phase: local.phase });
+  }
 
   if (path === `/injuries/${id}/sessions`) {
     const session: LocalSession = {

@@ -40,6 +40,15 @@ const storage = new MemoryStorage();
 (globalThis as unknown as { localStorage: Storage }).localStorage =
   storage as unknown as Storage;
 
+// `ready()` fetches the protocol library over the network in a browser. Here it
+// comes off disk, so the switching behaviour is testable rather than assumed.
+const protocolsFile = new URL("../public/demo-protocols.json", import.meta.url);
+(globalThis as unknown as { fetch: unknown }).fetch = async (url: string) => {
+  const { readFile } = await import("node:fs/promises");
+  if (!String(url).includes("demo-protocols")) return { ok: false };
+  return { ok: true, json: async () => JSON.parse(await readFile(protocolsFile, "utf8")) };
+};
+
 const standalone = await import("./standalone");
 
 /** Call an endpoint and insist it worked. */
@@ -253,6 +262,68 @@ describe("saying which phase you are in", () => {
     expect(body(`/injuries/${id}/exit-criteria`).phase_key).not.toBe(original);
     standalone.reset();
     expect(body(`/injuries/${id}/exit-criteria`).phase_key).toBe(original);
+  });
+});
+
+describe("changing the programme with no laptop", () => {
+  const id = () => episodeId();
+
+  it("serves a different injury's programme, not the recorded one", async () => {
+    standalone.setActive(true);
+    await standalone.ready();
+
+    const before = body(`/injuries/${id()}/protocol`);
+    const beforeExercises = before.phases
+      .flatMap((p: any) => p.prescriptions)
+      .map((rx: any) => rx.exercise.key);
+
+    const changed = body("/injuries", {
+      method: "POST",
+      body: JSON.stringify({ injury_site: "hamstring", side: "left" }),
+    });
+    expect(changed.injury_site).toBe("hamstring");
+
+    const after = body(`/injuries/${id()}/protocol`);
+    const afterExercises = after.phases
+      .flatMap((p: any) => p.prescriptions)
+      .map((rx: any) => rx.exercise.key);
+
+    // The claim the app makes is that the plan is rebuilt. The exercises are
+    // what would show that, so they are what is checked.
+    expect(afterExercises).not.toEqual(beforeExercises);
+    expect(afterExercises.join(" ")).toMatch(/nordic|hamstring/i);
+    // And every screen that reads a programme follows it.
+    expect(body(`/injuries/${id()}/today`).prescriptions.length).toBeGreaterThan(0);
+    expect(body("/injuries?status_filter=active")[0].injury_site).toBe("hamstring");
+  });
+
+  it("starts a new injury at the first phase", async () => {
+    standalone.setActive(true);
+    await standalone.ready();
+    body("/injuries", {
+      method: "POST",
+      body: JSON.stringify({ injury_site: "ankle", side: "right" }),
+    });
+    const gate = body(`/injuries/${id()}/exit-criteria`);
+    const order = body(`/injuries/${id()}/protocol`)
+      .phases.sort((a: any, b: any) => a.order_index - b.order_index)
+      .map((p: any) => p.phase_key);
+    expect(gate.phase_key).toBe(order[0]);
+    // Nothing has been measured against a programme just started.
+    expect(gate.required_passed).toBe(0);
+  });
+
+  it("refuses an injury the library does not carry, and stays where it was", async () => {
+    standalone.setActive(true);
+    await standalone.ready();
+    const before = body("/injuries?status_filter=active")[0].injury_site;
+    const reply = standalone.handle("/injuries", {
+      method: "POST",
+      body: JSON.stringify({ injury_site: "not_a_real_site", side: "left" }),
+    });
+    expect(reply.ok).toBe(false);
+    // The refusal must not leave the player on a programme that does not exist.
+    expect(body("/injuries?status_filter=active")[0].injury_site).toBe(before);
   });
 });
 

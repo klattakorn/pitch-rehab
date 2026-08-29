@@ -708,28 +708,6 @@ async function startingPhaseScreen(options: {
 
 // -------------------------------------------------------- where is the injury
 function injuryScreen(): void {
-  // The snapshot carries one programme, for one injury, because that is what
-  // was recorded. Picking a different injury needs a protocol that is not in
-  // there, so the demo cannot honour it -- and finding that out after choosing
-  // is worse than being told before.
-  if (api.standaloneActive()) {
-    const current = INJURY_SITES.find((i) => i.key === state.episode?.injury_site);
-    shell(
-      `<div class="stack narrow">
-         <h2>${current?.label ?? "Your injury"}</h2>
-         <p class="sub">${titleCase(state.episode?.side ?? "")} side. This is the
-           programme the demo carries — 42 of them exist, one for every position
-           and injury, but only this one was recorded into the app.</p>
-         <div class="notice">Choosing a different injury builds a different
-           programme, and that needs the laptop.</div>
-         <button class="primary block" id="back">Back</button>
-       </div>`,
-      { title: "Injury", back: () => profileScreen() },
-    );
-    on("#back", () => profileScreen());
-    return;
-  }
-
   const position = POSITIONS.find((p) => p.key === state.user?.profile?.position);
   let chosen: string | null = null;
   let side = "left";

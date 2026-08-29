@@ -94,6 +94,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   // Standalone short-circuits before any network call. Same paths, same shapes,
   // answered from the snapshot in the package -- see standalone.ts.
   if (standalone.active()) {
+    // Loads the protocol library the first time it is needed, and returns
+    // immediately every time after. Awaiting here keeps `handle` synchronous,
+    // which is what lets it stay a plain lookup rather than a state machine.
+    await standalone.ready();
     const reply = standalone.handle(path, init);
     if (!reply.ok) throw new ApiError(reply.status, reply.detail);
     return reply.body as T;
