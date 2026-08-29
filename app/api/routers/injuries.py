@@ -120,7 +120,11 @@ def set_starting_phase(
     )
 
     episode.current_phase = payload.phase_key
-    episode.injured_on = date.today() - timedelta(days=served)
+    if payload.backdate:
+        episode.injured_on = date.today() - timedelta(days=served)
+    # The phase clock always restarts: they are entering this phase now, and the
+    # minimum-days gate is about time served in it. Whether the *injury* date
+    # moves is the caller's decision -- see StartingPhaseIn.backdate.
     episode.phase_started_at = datetime.now(UTC)
 
     # Entering a phase is recorded the same way assign_protocol records it, so

@@ -388,6 +388,50 @@ def test_starting_part_way_through_dates_the_injury_backwards(db, player) -> Non
     assert passed == []
 
 
+def test_moving_between_phases_leaves_the_injury_date_alone(db, player) -> None:
+    """Going back a phase is not a claim about when somebody got hurt.
+
+    The onboarding question backdates on purpose, so week and phase agree for a
+    player who starts using the app part-way through. Doing that on an in-app
+    phase change would tell someone in week 11 they are in week 1 for stepping
+    back -- not a correction, a different and wrong claim.
+    """
+    from datetime import date
+
+    from app.models.protocol import ProtocolPhase
+
+    episode = make_episode(db, player, days_ago=60)
+    injured_on = episode.injured_on
+    assert injured_on is not None
+
+    phases = {
+        p.phase_key: p
+        for p in db.execute(
+            select(ProtocolPhase).where(ProtocolPhase.protocol_id == episode.protocol_id)
+        ).scalars()
+    }
+    target = PhaseKey.P2_STRENGTH
+    served = sum(
+        phases[k].min_days or 0 for k in PHASE_ORDER[: PHASE_ORDER.index(target)] if k in phases
+    )
+
+    # backdate=False: what a phase change from inside the app does.
+    episode.current_phase = target
+    episode.phase_started_at = datetime.now(UTC)
+    db.flush()
+    assert episode.injured_on == injured_on, "the injury date must not move"
+
+    # backdate=True: what the onboarding question does, for comparison.
+    episode.injured_on = date.today() - timedelta(days=served)
+    db.flush()
+    assert episode.injured_on != injured_on
+
+    # Either way the phase clock restarts, because that gate is about time in
+    # this phase and they have just entered it.
+    days = MetricResolver(db, episode).fetch("session.days_in_phase", None).values[0]
+    assert days < 1
+
+
 def test_passing_the_last_phase_clears_the_player(db, player) -> None:
     episode = make_episode(db, player, days_ago=90)
     episode.current_phase = PhaseKey.P4_RETURN

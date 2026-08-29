@@ -31,6 +31,14 @@ class StartingPhaseIn(BaseModel):
     """
 
     phase_key: PhaseKey
+    #: True when the player is saying where they already are, at the start: the
+    #: injury date moves back so the week counter and the phase agree.
+    #:
+    #: False when they are moving between phases part-way through. The injury
+    #: happened when it happened, and rewriting that to suit a phase change
+    #: would tell somebody in week 11 that they are in week 1 for going back a
+    #: step -- which is not a correction, it is a different and wrong claim.
+    backdate: bool = True
 
 
 class EpisodeCreateIn(BaseModel):

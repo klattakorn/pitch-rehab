@@ -1042,10 +1042,21 @@ async function planScreen(shown?: string): Promise<void> {
      ${
        isCurrent
          ? ""
-         : `<div class="notice">${
+         : `<div class="controls">
+              <button class="${shownIndex < currentIndex ? "ghost" : "primary"} block"
+                id="move-phase">${
+                  shownIndex < currentIndex
+                    ? "Go back to this phase"
+                    : "Move to this phase"
+                }</button>
+            </div>
+            <div class="notice">${
              shownIndex < currentIndex
-               ? "You have already cleared this phase."
-               : "This phase unlocks when you pass the current one's testing."
+               ? `You cleared this phase. Going back does not undo that — it
+                  moves your plan here, which is what a setback needs.`
+               : `Normally this opens when you pass the current phase's testing.
+                  Moving here yourself does not record a pass: the tests you have
+                  not met stay unmet, and the app will still say so.`
            }</div>`
      }`,
     { tab: "plan", title: "Your Rehab Plan", back: () => homeScreen() },
@@ -1053,6 +1064,23 @@ async function planScreen(shown?: string): Promise<void> {
 
   app.querySelectorAll<HTMLButtonElement>(".phasetab").forEach((button) => {
     button.onclick = () => void planScreen(button.dataset["phase"]!);
+  });
+  on("#move-phase", () => {
+    const button = app.querySelector<HTMLButtonElement>("#move-phase")!;
+    button.disabled = true;
+    button.textContent = "Moving…";
+    void (async () => {
+      try {
+        // backdate:false -- this is a move, not a statement about when the
+        // injury happened. Nothing is recorded as passed either; the gate is
+        // re-evaluated from the measurements, which have not changed.
+        await api.setStartingPhase(state.episode!.id, phase.phase_key, { backdate: false });
+        await boot();
+        await planScreen();
+      } catch (error) {
+        fail(error, () => void planScreen(phase.phase_key));
+      }
+    })();
   });
   app.querySelectorAll<HTMLButtonElement>(".rowcard").forEach((card) => {
     card.onclick = () => {

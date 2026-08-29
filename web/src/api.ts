@@ -340,10 +340,18 @@ export const logPain = (episodeId: number, body: Record<string, unknown>) =>
  * them, so the week counter and the phase agree, and records entering the phase
  * without recording a pass for the ones skipped. Nothing measured is touched.
  */
-export const setStartingPhase = (episodeId: number, phaseKey: string) =>
+export const setStartingPhase = (
+  episodeId: number,
+  phaseKey: string,
+  { backdate = true }: { backdate?: boolean } = {},
+) =>
   request<Episode>(`/injuries/${episodeId}/starting-phase`, {
     method: "PUT",
-    body: JSON.stringify({ phase_key: phaseKey }),
+    // `backdate` separates the two reasons for changing phase. Saying where you
+    // already are, at the start, moves the injury date so the week counter
+    // agrees. Moving between phases later must not: the injury happened when it
+    // happened.
+    body: JSON.stringify({ phase_key: phaseKey, backdate }),
   });
 
 export const advancePhase = (episodeId: number) =>
