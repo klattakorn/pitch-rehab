@@ -2641,3 +2641,133 @@ details.battery > ul.criteria {
     transition: none;
   }
 }
+
+/* ==========================================================================
+   The plan hero
+   --------------------------------------------------------------------------
+   The one card on the home screen that is allowed to look like a poster. It
+   carries the single fact the whole app is about -- what is wrong and how far
+   through it you are -- so it gets the display face at a size nothing else
+   here uses, and a composition rather than a stack of rows.
+
+   Three layers, back to front: pitch geometry, the phase numeral, the player.
+   All three are decoration and none of them carries meaning on its own; the
+   words on the left say everything the card actually claims.
+   ========================================================================== */
+.plan-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding: var(--s5) var(--s4) var(--s4);
+  border: 1px solid var(--edge);
+  border-left: 3px solid var(--volt);
+  border-radius: var(--r-lg);
+  /* Lit from the top left, falling away to the right, so the figure has
+     somewhere dark to stand against. */
+  background:
+    radial-gradient(120% 90% at 8% 0%, #1b212b 0%, transparent 60%),
+    linear-gradient(160deg, #141922 0%, var(--card) 45%, #0c0f14 100%);
+}
+
+.hero-art {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.hero-pitch {
+  position: absolute;
+  inset: auto 0 0 0;
+  width: 100%;
+  height: 78%;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 0.8;
+  opacity: 0.06;
+}
+
+.hero-phase {
+  position: absolute;
+  top: 50%;
+  right: 6%;
+  transform: translateY(-50%);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(120px, 42vw, 210px);
+  line-height: 0.8;
+  color: transparent;
+  -webkit-text-stroke: 2px var(--volt);
+  opacity: 0.13;
+  user-select: none;
+}
+
+/* The cut-out player. Anchored to the bottom right and allowed to bleed off
+   both edges, because a figure floating clear of the corner reads as a sticker
+   rather than as part of the card. */
+.hero-figure {
+  position: absolute;
+  right: -2%;
+  bottom: 0;
+  height: 100%;
+  max-width: 52%;
+  object-fit: contain;
+  object-position: bottom right;
+  /* The rim light the design leans on, done as a drop shadow rather than baked
+     into the file, so swapping the photograph keeps the effect. */
+  filter: drop-shadow(-6px 0 18px rgba(216, 255, 62, 0.22));
+}
+
+.hero-copy {
+  position: relative;
+  /* Room for the figure. Without one the copy takes the width back. */
+  max-width: 56%;
+}
+.plan-hero.no-figure .hero-copy {
+  max-width: 78%;
+}
+.plan-hero.no-figure .hero-phase {
+  right: 8%;
+  opacity: 0.16;
+}
+
+.hero-title {
+  margin: var(--s2) 0 var(--s2);
+  font-family: var(--display);
+  font-weight: 700;
+  /* Condensed is what lets an injury name this large fit a 375px phone. */
+  font-size: clamp(30px, 9vw, 46px);
+  line-height: 1.02;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.hero-sub {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: var(--t-lead);
+  line-height: 1.25;
+  /* The one place volt is used for text. It is the card's subject line, and
+     the accent here says "this is your programme", not "tap me". */
+  color: var(--volt);
+}
+
+.hero-progress {
+  position: relative;
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--edge);
+}
+
+/* Narrow phones: the figure would crowd the title down to two or three words a
+   line, so it steps back and the type takes the room. */
+@media (max-width: 360px) {
+  .hero-figure {
+    opacity: 0.5;
+    max-width: 40%;
+  }
+  .hero-copy {
+    max-width: 72%;
+  }
+}

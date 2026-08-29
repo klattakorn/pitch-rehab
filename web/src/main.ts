@@ -700,13 +700,31 @@ function homeScreen(): void {
 
   shell(
     `<div class="dash">
-       <section class="panel accent">
-         <span class="label">Current plan</span>
-         <div class="headline">${injury}</div>
-         <div class="caption">${episode.side} side · Phase ${info.n} — ${info.name}</div>
-         <div class="bar-row top"><span>Progress</span><b>${percent}%</b></div>
-         ${bar(percent)}
-         ${week ? `<div class="caption week">${week}</div>` : ""}
+       <section class="plan-hero no-figure">
+         <div class="hero-art" aria-hidden="true">
+           <!-- A centre circle and a penalty arc, the way they fall across a
+                corner of a pitch. Vector rather than a photograph, so it stays
+                sharp at any density and costs nothing to ship. -->
+           <svg class="hero-pitch" viewBox="0 0 200 120" preserveAspectRatio="xMinYMax slice">
+             <circle cx="34" cy="112" r="46" />
+             <path d="M-10 74 H96" />
+             <path d="M96 40 V120" />
+           </svg>
+           <!-- The phase, at the size the phase deserves. Outlined rather than
+                filled: it is the backdrop, not a number anyone reads. -->
+           <span class="hero-phase">${info.n}</span>
+           <img class="hero-figure" src="/player.png" alt="" />
+         </div>
+         <div class="hero-copy">
+           <span class="label">Injury</span>
+           <h2 class="hero-title">${injury}</h2>
+           <p class="hero-sub">${titleCase(episode.side)} side · Phase ${info.n} — ${info.name}</p>
+         </div>
+         <div class="hero-progress">
+           <div class="bar-row top"><span>Progress</span><b>${percent}%</b></div>
+           ${bar(percent)}
+           ${week ? `<div class="caption week">${week}</div>` : ""}
+         </div>
        </section>
 
        <section class="panel">
@@ -749,6 +767,17 @@ function homeScreen(): void {
      </div>`,
     { tab: "home", greeting: true },
   );
+
+  const figure = app.querySelector<HTMLImageElement>(".hero-figure");
+  if (figure) {
+    const reveal = () => figure.closest(".plan-hero")?.classList.remove("no-figure");
+    const hide = () => figure.remove();
+    if (figure.complete) (figure.naturalWidth ? reveal : hide)();
+    else {
+      figure.onload = reveal;
+      figure.onerror = hide;
+    }
+  }
 
   on("#start", () => void planScreen());
 }
