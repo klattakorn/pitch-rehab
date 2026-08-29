@@ -982,7 +982,7 @@ async function planScreen(shown?: string): Promise<void> {
      <section class="panel">
        <div class="row-between">
          <div>
-           <div class="headline">Phase ${info.n}: ${info.name}</div>
+           <div class="headline">Phase ${info.n}: ${phaseName(phase.phase_key)}</div>
            <div class="caption">${phase.min_days} days minimum ·
              ${phase.sessions_per_week}× a week</div>
          </div>
@@ -1418,7 +1418,7 @@ async function progressScreen(): Promise<void> {
                 reading a different one, and the panel was mostly empty space. -->
            <div class="bignum" data-count="${Math.round(p.overall_pct)}"
              data-suffix="%">0%</div>
-           <div class="caption">Phase ${info.n} of 4 — ${info.name}</div>
+           <div class="caption">Phase ${info.n} of 4 — ${phaseName(p.phase_key)}</div>
            <div class="caption">${
              p.week_of <= p.weeks_total
                ? `Week ${p.week_of} of ${p.weeks_total}`

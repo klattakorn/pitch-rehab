@@ -164,6 +164,98 @@ describe("a session logged with no laptop", () => {
   });
 });
 
+describe("saying which phase you are in", () => {
+  const phaseKeys = (): string[] => {
+    const id = episodeId();
+    return body(`/injuries/${id}/protocol`)
+      .phases.sort((a: any, b: any) => a.order_index - b.order_index)
+      .map((p: any) => p.phase_key);
+  };
+
+  const setPhase = (key: string) =>
+    body(`/injuries/${episodeId()}/starting-phase`, {
+      method: "PUT",
+      body: JSON.stringify({ phase_key: key }),
+    });
+
+  it("works for every phase, not just the one in the snapshot", () => {
+    const id = episodeId();
+    const keys = phaseKeys();
+    expect(keys).toHaveLength(4);
+    for (const key of keys) {
+      expect(setPhase(key).current_phase).toBe(key);
+      // The three screens that read a phase all have to agree with the answer.
+      expect(body("/injuries?status_filter=active")[0].current_phase).toBe(key);
+      expect(body(`/injuries/${id}/today`).phase_key).toBe(key);
+      expect(body(`/injuries/${id}/exit-criteria`).phase_key).toBe(key);
+      expect(body(`/injuries/${id}/progress`).phase_key).toBe(key);
+    }
+  });
+
+  it("brings that phase's own exercises with it", () => {
+    const id = episodeId();
+    const [first, , , last] = phaseKeys();
+    setPhase(first!);
+    const early = body(`/injuries/${id}/today`).prescriptions.map((p: any) => p.exercise.key);
+    setPhase(last!);
+    const late = body(`/injuries/${id}/today`).prescriptions.map((p: any) => p.exercise.key);
+    expect(early.length).toBeGreaterThan(0);
+    expect(late.length).toBeGreaterThan(0);
+    expect(late).not.toEqual(early);
+  });
+
+  it("reports the new phase as unmeasured rather than inventing results", () => {
+    const id = episodeId();
+    setPhase(phaseKeys()[3]!);
+    const gate = body(`/injuries/${id}/exit-criteria`);
+
+    expect(gate.passed).toBe(false);
+    expect(gate.required_passed).toBe(0);
+    expect(gate.required_total).toBeGreaterThan(0);
+    // Nothing has been measured against a phase the player just walked into.
+    for (const c of gate.criteria.filter((c: any) => c.key !== "min_days_in_phase")) {
+      expect(c.observed, c.key).toBeNull();
+      expect(c.progress, c.key).toBe(0);
+      expect(["no_data"], c.key).toContain(c.status);
+    }
+    // And whatever blocks has a row, the same rule the live gate follows.
+    const keys = new Set(gate.criteria.map((c: any) => c.key));
+    for (const blocked of gate.blocking) expect(keys.has(blocked)).toBe(true);
+  });
+
+  it("keeps the labels and targets the programme actually specifies", () => {
+    const id = episodeId();
+    setPhase(phaseKeys()[3]!);
+    const gate = body(`/injuries/${id}/exit-criteria`);
+    const definitions = body(`/injuries/${id}/protocol`).phases.find(
+      (p: any) => p.phase_key === phaseKeys()[3],
+    ).exit_criteria;
+    for (const definition of definitions) {
+      const shown = gate.criteria.find((c: any) => c.key === definition.key);
+      expect(shown, definition.key).toBeDefined();
+      expect(shown.label_en).toBe(definition.label_en);
+      expect(shown.required).toBe(definition.required);
+    }
+  });
+
+  it("refuses a phase the programme does not have", () => {
+    const reply = standalone.handle(`/injuries/${episodeId()}/starting-phase`, {
+      method: "PUT",
+      body: JSON.stringify({ phase_key: "p9_invented" }),
+    });
+    expect(reply.ok).toBe(false);
+  });
+
+  it("goes back to the snapshot when the local state is cleared", () => {
+    const id = episodeId();
+    const original = body(`/injuries/${id}/exit-criteria`).phase_key;
+    setPhase(phaseKeys()[3]!);
+    expect(body(`/injuries/${id}/exit-criteria`).phase_key).not.toBe(original);
+    standalone.reset();
+    expect(body(`/injuries/${id}/exit-criteria`).phase_key).toBe(original);
+  });
+});
+
 describe("what needs the laptop", () => {
   it("will not advance a phase", () => {
     const reply = refusal(`/injuries/${episodeId()}/advance`, {

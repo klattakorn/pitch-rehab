@@ -74,6 +74,8 @@ interface LocalState {
   painLogs: Body[];
   criteria: Body[];
   profile: Body | null;
+  /** The phase the player said they were in, if they have said. */
+  phase: string | null;
   nextId: number;
 }
 
@@ -82,6 +84,7 @@ const EMPTY: LocalState = {
   painLogs: [],
   criteria: [],
   profile: null,
+  phase: null,
   // Well above any id the snapshot contains, so a local session can never be
   // mistaken for a recorded one when the two lists are shown together.
   nextId: 900_001,
@@ -131,8 +134,107 @@ export function reset(): void {
 
 /** The episode the snapshot is about. */
 function episodeId(): number {
-  const episodes = RESPONSES["/injuries?status_filter=active"] as { id: number }[] | undefined;
-  return episodes?.[0]?.id ?? 0;
+  const recorded = RESPONSES["/injuries?status_filter=active"] as { id: number }[] | undefined;
+  return recorded?.[0]?.id ?? 0;
+}
+
+/** The programme, which the snapshot carries in full -- all four phases. */
+function protocol(id: number): { phases: Body[] } | undefined {
+  return RESPONSES[`/injuries/${id}/protocol`] as { phases: Body[] } | undefined;
+}
+
+function phaseOf(id: number, key: string): Body | undefined {
+  return protocol(id)?.phases.find((p) => p["phase_key"] === key);
+}
+
+/** Phase keys in programme order, taken from the protocol rather than assumed. */
+function phaseOrder(id: number): string[] {
+  return [...(protocol(id)?.phases ?? [])]
+    .sort((a, b) => Number(a["order_index"]) - Number(b["order_index"]))
+    .map((p) => String(p["phase_key"]));
+}
+
+/**
+ * The gate for a phase nothing has been measured against.
+ *
+ * Not an evaluation -- the opposite of one. Every criterion is reported as
+ * never measured, which is exactly true: the player has just told the app they
+ * are in this phase, and the app has watched them do nothing in it. The labels
+ * and targets are the phase's own definitions, read straight from the protocol.
+ *
+ * This is the honest answer to "what does the gate look like over there", and
+ * it is nothing like reimplementing the engine: no reading is judged, because
+ * there are no readings.
+ */
+function unmeasuredGate(id: number, phaseKey: string): Body | null {
+  const phase = phaseOf(id, phaseKey);
+  if (!phase) return null;
+
+  const criteria = (phase["exit_criteria"] as Body[]).map((definition) => {
+    const spec = (definition["spec"] ?? {}) as Body;
+    const target = (spec["target"] ?? {}) as Body;
+    return {
+      key: definition["key"],
+      label_en: definition["label_en"],
+      label_th: definition["label_th"],
+      metric: spec["metric"] ?? "",
+      source: spec["source"] ?? "session",
+      required: definition["required"],
+      status: "no_data",
+      comparator: spec["comparator"] ?? "gte",
+      target_type: target["type"] ?? "absolute",
+      observed: null,
+      // A target relative to a baseline needs the baseline, which is a
+      // measurement. Absolute targets stand on their own; the rest say nothing
+      // rather than guessing a number.
+      target: target["type"] === "absolute" ? (target["value"] ?? null) : null,
+      unit: target["unit"] ?? null,
+      progress: 0,
+      samples: 0,
+      baseline: null,
+      baseline_origin: null,
+      detail_en: "Not measured yet",
+      detail_th: "Not measured yet",
+    } as Body;
+  });
+
+  // The clock the real engine appends. Entering the phase is what starts it.
+  criteria.push({
+    key: "min_days_in_phase",
+    label_en: `At least ${phase["min_days"]} days in this phase`,
+    label_th: `At least ${phase["min_days"]} days in this phase`,
+    metric: "session.days_in_phase",
+    source: "session",
+    required: true,
+    status: "fail",
+    comparator: "gte",
+    target_type: "absolute",
+    observed: 0,
+    target: phase["min_days"],
+    unit: "days",
+    progress: 0,
+    samples: 0,
+    baseline: null,
+    baseline_origin: null,
+    detail_en: "Tissue heals on its own schedule. This is a floor, not a target.",
+    detail_th: "Tissue heals on its own schedule. This is a floor, not a target.",
+  });
+
+  const required = criteria.filter((c) => c["required"]);
+  const order = phaseOrder(id);
+  const next = order[order.indexOf(phaseKey) + 1] ?? null;
+  return {
+    episode_id: id,
+    phase_key: phaseKey,
+    passed: false,
+    progress: 0,
+    required_total: required.length,
+    required_passed: 0,
+    next_phase: next,
+    criteria,
+    blocking: required.map((c) => c["key"]),
+    evaluated_at: new Date().toISOString(),
+  };
 }
 
 type Reply =
@@ -165,6 +267,13 @@ export function handle(path: string, init: RequestInit = {}): Reply {
     save(local);
     return ok(local.profile);
   }
+  if (method === "PUT" && path === `/injuries/${id}/starting-phase`) {
+    const key = String(body["phase_key"] ?? "");
+    if (!phaseOf(id, key)) return no(422, "this programme has no such phase");
+    local.phase = key;
+    save(local);
+    return ok({ ...(episodes()[0] ?? {}), current_phase: key });
+  }
   if (method === "PUT" && path === `/injuries/${id}/criteria`) return putCriterion(body);
   if (method === "DELETE" && path.startsWith(`/injuries/${id}/criteria/`)) {
     const key = decodeURIComponent(path.split("/criteria/")[1]?.split("?")[0] ?? "");
@@ -176,7 +285,55 @@ export function handle(path: string, init: RequestInit = {}): Reply {
   return no(404, `${method} ${path} is not part of the offline snapshot.`);
 }
 
+/** The episode list, with the phase the player chose applied over it. */
+function episodes(): Body[] {
+  const recorded = (RESPONSES["/injuries?status_filter=active"] as Body[] | undefined) ?? [];
+  if (!local.phase) return recorded;
+  return recorded.map((e) => ({ ...e, current_phase: local.phase }));
+}
+
 function get(path: string, id: number): Reply {
+  if (path === "/injuries?status_filter=active") return ok(episodes());
+
+  // Today's plan for the phase they said they are in. The protocol carries
+  // every phase and in exactly the shape this endpoint returns, so this is the
+  // same data by another route rather than anything reconstructed.
+  if (local.phase && path === `/injuries/${id}/today`) {
+    const phase = phaseOf(id, local.phase);
+    if (phase) return ok(phase);
+  }
+
+  if (local.phase && path === `/injuries/${id}/exit-criteria`) {
+    const gate = unmeasuredGate(id, local.phase);
+    if (gate) {
+      return ok({
+        ...gate,
+        criteria: [...(gate["criteria"] as Body[]), ...local.criteria],
+      });
+    }
+  }
+
+  if (local.phase && path === `/injuries/${id}/progress`) {
+    const recorded = RESPONSES[path] as Body | undefined;
+    const gate = unmeasuredGate(id, local.phase);
+    if (recorded && gate) {
+      const order = phaseOrder(id);
+      const index = order.indexOf(local.phase);
+      // Counting, not judging. Everything in the new phase is unmeasured, so
+      // these are all zero -- the history below them is left exactly as it was,
+      // because it happened.
+      return ok({
+        ...recorded,
+        phase_key: local.phase,
+        phase_order: index + 1,
+        phase_pct: 0,
+        criteria_passed: 0,
+        criteria_total: gate["required_total"],
+        overall_pct: Math.round((1000 * index) / order.length) / 10,
+      });
+    }
+  }
+
   if (path === "/auth/me") {
     const me = RESPONSES["/auth/me"] as Body | undefined;
     if (!me) return no(503, NEEDS_LAPTOP);
