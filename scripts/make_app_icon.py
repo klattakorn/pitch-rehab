@@ -24,6 +24,8 @@ from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "web" / "assets"
+#: The web build serves these directly, so they live where Vite copies from.
+PUBLIC = ROOT / "web" / "public"
 
 #: Straight from styles.css. The icon is the one place the accent gets to be
 #: the whole subject rather than a signal, because a launcher grid is not an
@@ -109,7 +111,42 @@ def main() -> None:
     for name in ("splash.png", "splash-dark.png"):
         draw_mark(2732, 0.18, PAGE).save(OUT / name)
 
-    for path in sorted(OUT.glob("*.png")):
+    # The same mark for the web build, at the sizes each platform looks for.
+    #
+    # iOS reads `apple-touch-icon` and nothing else when you Add to Home Screen;
+    # without one it screenshots the page and uses that, which looks like a
+    # mistake. 180 is what current iPhones ask for, and it must be opaque --
+    # transparency comes out black behind the rounded corners iOS adds itself,
+    # so the dark background here is doing a job.
+    #
+    # Android and desktop Chrome read the manifest instead, which wants 192 and
+    # 512. The favicon is the same drawing again, small.
+    for size, name in (
+        (180, "apple-touch-icon.png"),
+        (192, "icon-192.png"),
+        (512, "icon-512.png"),
+        (32, "favicon.png"),
+        # Android crops a maskable icon to about 80% of the square, so this one
+        # is drawn at the launcher's scale rather than the browser's. Without
+        # it, Chrome pads the ordinary icon onto a white circle.
+        (512, "icon-maskable.png"),
+    ):
+        # A little tighter than the launcher icon: iOS and the browser tab crop
+        # far less than an Android adaptive icon does, so the same 0.52 would
+        # leave the mark swimming in empty space.
+        scale = 0.52 if "maskable" in name else 0.68 if size > 64 else 0.78
+        draw_mark(size, scale, PAGE).save(PUBLIC / name)
+
+    for path in sorted(OUT.glob("*.png")) + [
+        PUBLIC / n
+        for n in (
+            "apple-touch-icon.png",
+            "icon-192.png",
+            "icon-512.png",
+            "icon-maskable.png",
+            "favicon.png",
+        )
+    ]:
         size = Image.open(path).size
         print(f"{path.relative_to(ROOT)}  {size[0]}x{size[1]}  {path.stat().st_size / 1024:.0f} KB")
 

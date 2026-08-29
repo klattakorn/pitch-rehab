@@ -8,7 +8,19 @@
       name="description"
       content="Rehab plans built around your position and your injury, with pose detection checking every rep."
     />
-    <meta name="theme-color" content="#070b09" />
+    <!-- Matches --page in styles.css. iOS tints the status bar with this and
+         Android the task-switcher card, so a stale value shows as a seam
+         against the app's own background. -->
+    <meta name="theme-color" content="#07080a" />
+
+    <!-- The home-screen icon. iOS reads apple-touch-icon and nothing else when
+         you Add to Home Screen; without one it screenshots the page and uses
+         that. Android and desktop Chrome read the manifest instead. All of them
+         are the same running figure the Android launcher icon uses, drawn by
+         scripts/make_app_icon.py. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <!-- Full-screen when saved to a phone home screen, with the status bar
          drawn over the app's own dark header rather than a white strip. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
