@@ -40,6 +40,8 @@
  * harder to trust than one that is plainly a fixed picture. The app says which
  * it is showing.
  */
+import type { Authorable, AuthorableCatalogue } from "./api";
+import { preview } from "./criteria";
 import snapshot from "./demo/snapshot.json";
 
 const MODE_KEY = "rf_standalone";
@@ -369,11 +371,40 @@ function withoutSets(session: LocalSession): Body {
   return { ...row, sets_logged: sets.length };
 }
 
+/**
+ * The sentence a target reads as -- "Wall sit: hold for at least 45 seconds".
+ *
+ * The server builds this with `authoring.build_label`, so a criterion saved
+ * with no laptop had no label at all and the screen showed the word
+ * "undefined" where the target should be. It is the same sentence the builder
+ * puts under "Your test will read", from the same function, so what a player
+ * confirms is exactly what they get.
+ */
+function labelFor(draft: Body): string {
+  const catalogue = RESPONSES["/injuries/criteria/authorable"] as
+    | AuthorableCatalogue
+    | undefined;
+  const item = catalogue?.metrics.find((m) => m.key === draft["metric"]) as
+    | Authorable
+    | undefined;
+  if (!item) return String(draft["metric"] ?? "Your target");
+  const exercise = catalogue?.exercises.find((e) => e.key === draft["exercise_key"]);
+  return preview(
+    item,
+    String(draft["target_type"] ?? "absolute"),
+    Number(draft["value"] ?? 0),
+    exercise?.name_en ?? null,
+  );
+}
+
 function putCriterion(draft: Body): Reply {
   const key = String(draft["key"] ?? `custom_${Date.now()}`);
+  const label = labelFor(draft);
   const criterion: Body = {
     ...draft,
     key,
+    label_en: label,
+    label_th: label,
     status: "no_data",
     observed: null,
     progress: 0,

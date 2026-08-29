@@ -293,6 +293,35 @@ describe("a criterion written on the phone", () => {
     expect(body(`/injuries/${id}/criteria`)).toHaveLength(1);
   });
 
+  it("reads as the sentence the builder showed, not as undefined", () => {
+    const id = episodeId();
+    // What the builder actually sends: no label. The server computes it, and
+    // with no server this used to leave the screen showing the word
+    // "undefined" where the player's own target should be.
+    const saved = body(`/injuries/${id}/criteria`, {
+      method: "PUT",
+      body: JSON.stringify({
+        metric: "session.hold",
+        exercise_key: "wall_sit",
+        target_type: "absolute",
+        value: 45,
+        required: true,
+        phase_key: "p2_strength",
+      }),
+    });
+    expect(saved.label_en).toBeTruthy();
+    expect(saved.label_en).not.toMatch(/undefined/i);
+    // The exercise and the number both have to survive into it.
+    expect(saved.label_en).toMatch(/wall sit/i);
+    expect(saved.label_en).toContain("45");
+
+    // And it is the same sentence once it is read back on the gate.
+    const shown = body(`/injuries/${id}/exit-criteria`).criteria.find(
+      (c: any) => c.key === saved.key,
+    );
+    expect(shown.label_en).toBe(saved.label_en);
+  });
+
   it("can be taken away again", () => {
     const id = episodeId();
     body(`/injuries/${id}/criteria`, {
