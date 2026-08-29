@@ -1,10 +1,19 @@
-"""Draw the Android app icon and splash screen from the brand mark.
+"""Make every icon an operating system shows for this app.
 
-The mark lives in ``web/src/ui.ts`` as an SVG, which is the right form for the
-app and the wrong form for Android -- the launcher wants PNGs at a dozen sizes,
-and there is no rasteriser in this project. So the same figure is redrawn here
-with the same coordinates, and ``@capacitor/assets`` fans the output out into
-every density and shape the launcher asks for.
+Two sources, for two different jobs.
+
+``design/crest-source.png`` is the club crest, and it is what a launcher or a
+home screen shows -- it is the identity people recognise. It is a photograph, so
+the code cannot produce it; without the file everything here falls back to the
+drawn mark and still works.
+
+That drawn mark lives in ``web/src/ui.ts`` as an SVG, which is the right form
+for the app and the wrong form for an icon -- the launcher wants PNGs at a dozen
+sizes and there is no rasteriser here. So the same figure is redrawn below from
+the same coordinates. It keeps the 32px favicon, where the crest is a smudge.
+
+``@capacitor/assets`` fans ``web/assets/icon.png`` out into every density and
+shape Android asks for.
 
     python scripts/make_app_icon.py
 
@@ -98,44 +107,79 @@ def draw_mark(size: int, scale: float, background) -> Image.Image:
     return image.resize((size, size), Image.LANCZOS)
 
 
+#: The club crest, if it has been put here. Everything an operating system shows
+#: as "the app" uses it; the drawn mark stays for the places a photograph cannot
+#: survive. See `_crest`.
+CREST = ROOT / "design" / "crest-source.png"
+
+
+def _crest(size: int, scale: float) -> Image.Image | None:
+    """The crest, scaled onto its own background so a crop cannot bite it.
+
+    Returns ``None`` when there is no crest to use, and the caller falls back to
+    the drawn mark -- which is what happens on a fresh clone, since the artwork
+    is not something the code can produce.
+
+    ``scale`` below 1 is not decoration. Android crops a maskable icon to about
+    80% of the square and an adaptive launcher icon to about two thirds, and the
+    crest's banner runs the full width -- at full bleed the club's name is the
+    first thing cut off.
+    """
+    if not CREST.exists():
+        return None
+    art = Image.open(CREST).convert("RGB")
+    if scale >= 1:
+        return art.resize((size, size), Image.LANCZOS)
+
+    inner = max(1, round(size * scale))
+    # Pad with the crest's own corner rather than a guess, so the join is
+    # invisible on every launcher that rounds the square differently.
+    canvas = Image.new("RGB", (size, size), art.getpixel((2, 2)))
+    canvas.paste(art.resize((inner, inner), Image.LANCZOS), ((size - inner) // 2,) * 2)
+    return canvas
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
+    using_crest = CREST.exists()
 
-    # 0.52 of the canvas: Android crops an adaptive icon to a circle, a squircle
-    # or a rounded square depending on the launcher, and anything drawn past
-    # about two thirds loses its edges in at least one of them.
-    draw_mark(1024, 0.52, PAGE).save(OUT / "icon.png")
+    # The Android launcher icon. Its adaptive shape crops to roughly two thirds,
+    # whatever the launcher, so nothing important may sit outside that.
+    (_crest(1024, 0.66) or draw_mark(1024, 0.52, PAGE)).save(OUT / "icon.png")
 
-    # The splash is the same figure much smaller, because it shows at full
-    # screen and a launcher-sized mark blown up to a tablet reads as a mistake.
+    # The splash stays the drawn mark: it shows at full screen, and a crest with
+    # readable lettering blown up to a tablet is a different picture from a
+    # crest at 180px.
     for name in ("splash.png", "splash-dark.png"):
         draw_mark(2732, 0.18, PAGE).save(OUT / name)
 
-    # The same mark for the web build, at the sizes each platform looks for.
+    # The web build, at the sizes each platform looks for.
     #
     # iOS reads `apple-touch-icon` and nothing else when you Add to Home Screen;
-    # without one it screenshots the page and uses that, which looks like a
-    # mistake. 180 is what current iPhones ask for, and it must be opaque --
-    # transparency comes out black behind the rounded corners iOS adds itself,
-    # so the dark background here is doing a job.
-    #
-    # Android and desktop Chrome read the manifest instead, which wants 192 and
-    # 512. The favicon is the same drawing again, small.
+    # without one it screenshots the page and uses that. 180 is what current
+    # iPhones ask for, and it must be opaque -- transparency comes out black
+    # behind the rounded corners iOS adds itself. Android and desktop Chrome read
+    # the manifest instead, which wants 192 and 512.
     for size, name in (
         (180, "apple-touch-icon.png"),
         (192, "icon-192.png"),
         (512, "icon-512.png"),
-        (32, "favicon.png"),
-        # Android crops a maskable icon to about 80% of the square, so this one
-        # is drawn at the launcher's scale rather than the browser's. Without
-        # it, Chrome pads the ordinary icon onto a white circle.
+        # Chrome pads a non-maskable icon onto a white circle, so this one exists
+        # to stop that -- drawn smaller, because it is the one that gets cropped.
         (512, "icon-maskable.png"),
     ):
-        # A little tighter than the launcher icon: iOS and the browser tab crop
-        # far less than an Android adaptive icon does, so the same 0.52 would
-        # leave the mark swimming in empty space.
-        scale = 0.52 if "maskable" in name else 0.68 if size > 64 else 0.78
-        draw_mark(size, scale, PAGE).save(PUBLIC / name)
+        art = _crest(size, 0.72 if "maskable" in name else 1.0)
+        if art is None:
+            art = draw_mark(size, 0.52 if "maskable" in name else 0.68, PAGE)
+        art.save(PUBLIC / name)
+
+    # The favicon stays the drawn mark even when there is a crest. At 32px the
+    # crest is a dark smudge -- a face, a shield, a ball and a line of Thai
+    # lettering cannot survive that, and a browser tab is the one place legible
+    # beats faithful. Checked by looking at it, not assumed.
+    draw_mark(32, 0.78, PAGE).save(PUBLIC / "favicon.png")
+
+    print(f"Source: {'design/crest-source.png' if using_crest else 'the drawn mark'}\n")
 
     for path in sorted(OUT.glob("*.png")) + [
         PUBLIC / n
