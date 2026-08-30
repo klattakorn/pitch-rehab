@@ -1,7 +1,7 @@
 """What a player is allowed to build their own exit criteria from.
 
 The criterion engine can gate on any metric key at all. That is the wrong thing
-to expose: a free-text metric field would let someone type ``health.runningspeed``
+to expose: a free-text metric field would let someone type ``pose.kneeflexion``
 and quietly create a test that can never pass, because nothing will ever write
 that key. So authoring goes through this catalogue, and the API refuses anything
 not in it.
@@ -197,59 +197,6 @@ CATALOGUE: tuple[Authorable, ...] = (
         phrase_en="Raise the heel to at least … of full height",
         default_target=0.45,
         step=0.05,
-    ),
-    # -------------------------------------------------------------------- running
-    Authorable(
-        key="health.running_speed",
-        source=CriterionSource.HEALTH,
-        group="Running",
-        label_en="Top running speed",
-        unit="m/s",
-        help_en="Fastest speed your watch or phone recorded in the window.",
-        phrase_en="Run at least … m/s",
-        default_target=7.5,
-        target_types=WITH_BASELINE,
-        step=0.1,
-    ),
-    Authorable(
-        key="health.distance_total",
-        source=CriterionSource.HEALTH,
-        group="Running",
-        label_en="Weekly running distance",
-        unit="m",
-        help_en="Everything you covered in the window, added up.",
-        phrase_en="Cover at least … metres",
-        default_target=12000,
-        default_aggregate=Aggregate.SUM,
-        default_window_days=7,
-        target_types=WITH_BASELINE,
-        step=500,
-    ),
-    Authorable(
-        key="health.distance_high_speed",
-        source=CriterionSource.HEALTH,
-        group="Running",
-        label_en="Weekly high-speed distance",
-        unit="m",
-        help_en="Distance covered above 5.5 m/s — the part that reinjures hamstrings.",
-        phrase_en="Cover at least … metres at high speed",
-        default_target=800,
-        default_aggregate=Aggregate.SUM,
-        default_window_days=7,
-        target_types=WITH_BASELINE,
-        step=100,
-    ),
-    Authorable(
-        key="health.walking_asymmetry",
-        source=CriterionSource.HEALTH,
-        group="Running",
-        label_en="Walking asymmetry",
-        unit="%",
-        help_en="How uneven your walk is, from your phone. Lower is better.",
-        phrase_en="Walk with no more than …% asymmetry",
-        default_target=4,
-        default_comparator=Comparator.LTE,
-        default_aggregate=Aggregate.MEAN,
     ),
     # -------------------------------------------------------------------- testing
     Authorable(
@@ -483,7 +430,6 @@ BY_KEY: dict[str, Authorable] = {item.key: item for item in CATALOGUE}
 GROUP_ORDER: tuple[str, ...] = (
     "Exercises",
     "Movement",
-    "Running",
     "Strength tests",
     "How you feel",
     "Consistency",

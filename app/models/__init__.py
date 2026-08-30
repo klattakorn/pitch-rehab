@@ -11,7 +11,6 @@ from app.models.protocol import (
 )
 from app.models.session import (
     ExerciseSet,
-    HealthSyncState,
     PainLog,
     RehabSession,
     RepRecord,
@@ -23,7 +22,6 @@ __all__ = [
     "Exercise",
     "ExerciseSet",
     "ExitCriterion",
-    "HealthSyncState",
     "InjuryEpisode",
     "MetricSample",
     "PainLog",

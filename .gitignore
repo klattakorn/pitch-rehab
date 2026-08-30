@@ -6,6 +6,11 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
+# --- local settings, copied from .env.example and edited ---
+.env
+.env.*
+!.env.example
+
 # --- the database (each person keeps their own; reseed with scripts/) ---
 rtp.db
 rtp.db-shm

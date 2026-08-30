@@ -146,7 +146,6 @@ def main() -> None:
         grab("/auth/me")
         grab("/catalog/positions")
         grab("/catalog/exercises")
-        grab("/health/supported-metrics")
         grab("/injuries/criteria/authorable")
 
         episodes = grab("/injuries?status_filter=active")

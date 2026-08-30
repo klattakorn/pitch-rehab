@@ -14,7 +14,6 @@ from app.core.enums import (
     EpisodeStatus,
     InjurySite,
     PhaseKey,
-    Position,
     Role,
     Side,
     TargetType,
@@ -22,7 +21,7 @@ from app.core.enums import (
 from app.models.injury import ClinicianSignoff, EpisodeCriterion, PhaseAttempt
 from app.models.metrics import MetricSample
 from app.models.session import PainLog, RehabSession
-from app.models.user import PlayerBaseline, User
+from app.models.user import User
 from app.services.criteria import authoring
 from app.services.criteria.engine import evaluate_phase
 from app.services.criteria.resolver import MetricResolver
@@ -136,38 +135,6 @@ def test_injured_limb_scope_ignores_the_healthy_side(db, player) -> None:
     assert rom.status is CriterionStatus.NO_DATA
 
 
-def test_personal_baseline_beats_the_position_norm(db, player) -> None:
-    episode = make_episode(db, player)  # winger
-    db.add(
-        PlayerBaseline(
-            player_id=player.id,
-            metric_key="health.running_speed",
-            side=Side.BILATERAL,
-            value=9.6,
-            unit="m/s",
-            origin="manual",
-        )
-    )
-    db.flush()
-    speed = find(evaluate_phase(db, episode, PhaseKey.P3_RUNNING), "speed_vs_baseline")
-    assert speed.baseline_origin == "manual"
-    assert speed.target == pytest.approx(9.6 * 0.90, abs=0.01)  # winger phase-3 gate is 90%
-
-
-def test_the_same_injury_gets_a_different_speed_target_per_position(db) -> None:
-    winger = make_player(db, "winger@rtpapp.com", Position.WINGER)
-    centre_back = make_player(db, "cb@rtpapp.com", Position.CENTRE_BACK)
-    w_gate = evaluate_phase(db, make_episode(db, winger), PhaseKey.P3_RUNNING)
-    c_gate = evaluate_phase(db, make_episode(db, centre_back), PhaseKey.P3_RUNNING)
-
-    w_speed = find(w_gate, "speed_vs_baseline")
-    c_speed = find(c_gate, "speed_vs_baseline")
-    assert w_speed.baseline_origin == "position_norm"
-    assert w_speed.target > c_speed.target  # 90% of 8.9 vs 85% of 8.0
-    assert w_speed.target == pytest.approx(8.9 * 0.90, abs=0.01)
-    assert c_speed.target == pytest.approx(8.0 * 0.85, abs=0.01)
-
-
 def test_limb_symmetry_index_compares_injured_against_healthy(db, player) -> None:
     episode = make_episode(db, player, site=InjurySite.HAMSTRING, side=Side.LEFT)
     add_metric(
@@ -228,11 +195,11 @@ def test_clinician_signoff_is_pending_until_a_clinician_signs(db, player) -> Non
 
 
 def test_optional_criteria_never_block_a_phase(db, episode) -> None:
-    gate = evaluate_phase(db, episode, PhaseKey.P1_PROTECT)
-    walking = find(gate, "walking_symmetry")
-    assert walking.required is False
-    assert walking.status is CriterionStatus.NO_DATA
-    assert "walking_symmetry" not in gate.blocking
+    gate = evaluate_phase(db, episode, PhaseKey.P2_STRENGTH)
+    symmetry = find(gate, "hamstring_lsi")
+    assert symmetry.required is False
+    assert symmetry.status is CriterionStatus.NO_DATA
+    assert "hamstring_lsi" not in gate.blocking
 
 
 def _clear_phase_one(db: Session, episode) -> None:
@@ -439,17 +406,6 @@ def test_passing_the_last_phase_clears_the_player(db, player) -> None:
 
     add_pain_logs(db, episode, days=8, pain=0.0)
     add_sessions(db, episode, 40)
-    add_metric(
-        db, episode, "health.running_speed", 20.0, source=CriterionSource.HEALTH, unit="m/s"
-    )
-    add_metric(
-        db,
-        episode,
-        "health.distance_high_speed",
-        99999.0,
-        source=CriterionSource.HEALTH,
-        unit="m",
-    )
     add_metric(db, episode, "pro.confidence", 95.0, source=CriterionSource.PRO)
     add_metric(
         db, episode, "test.change_of_direction", 99.0, source=CriterionSource.TEST
@@ -560,19 +516,19 @@ def add_custom(
 
 def test_a_custom_criterion_joins_the_gate(db, episode) -> None:
     before = evaluate_phase(db, episode)
-    add_custom(db, episode, metric="health.running_speed", value=7.5)
+    add_custom(db, episode, metric="test.yo_yo_ir1", value=1200)
     after = evaluate_phase(db, episode)
 
     assert after.required_total == before.required_total + 1
-    mine = find(after, "custom_health_running_speed")
-    assert mine.label_en == "Run at least 7.5 m/s"
+    mine = find(after, "custom_test_yo_yo_ir1")
+    assert mine.label_en == "Cover at least 1200 metres"
     assert mine.status is CriterionStatus.NO_DATA
 
     add_metric(
-        db, episode, "health.running_speed", 7.9,
-        source=CriterionSource.HEALTH, unit="m/s",
+        db, episode, "test.yo_yo_ir1", 1400.0,
+        source=CriterionSource.TEST, unit="m",
     )
-    assert find(evaluate_phase(db, episode), "custom_health_running_speed").passed
+    assert find(evaluate_phase(db, episode), "custom_test_yo_yo_ir1").passed
 
 
 def test_reps_of_an_exercise_read_the_best_single_set(db, episode) -> None:
@@ -639,7 +595,7 @@ def test_one_players_custom_criterion_stays_theirs(db) -> None:
     theirs = make_episode(db, make_player(db, "theirs@rtpapp.com"), InjurySite.CALF)
     assert mine.protocol_id == theirs.protocol_id  # same programme
 
-    add_custom(db, mine, metric="health.running_speed", value=7.5)
+    add_custom(db, mine, metric="test.yo_yo_ir1", value=1200)
 
     assert any(c.key.startswith("custom") for c in evaluate_phase(db, mine).criteria)
     assert not any(c.key.startswith("custom") for c in evaluate_phase(db, theirs).criteria)
@@ -669,7 +625,7 @@ def test_the_builder_refuses_a_metric_nothing_ever_writes(db, episode) -> None:
     """A free-text metric field would let someone create a test that can never
     pass, because no part of the system produces that key."""
     with pytest.raises(authoring.AuthoringError, match="not something you can build"):
-        authoring.resolve("health.runningspeed")
+        authoring.resolve("test.yoyo")
 
 
 def test_the_builder_refuses_reps_on_a_hand_logged_drill(db, episode) -> None:
@@ -679,14 +635,14 @@ def test_the_builder_refuses_reps_on_a_hand_logged_drill(db, episode) -> None:
 
 
 def test_the_builder_refuses_a_comparison_the_metric_cannot_make(db) -> None:
-    # Limb symmetry needs two limbs. Running speed is one number for the player.
-    item = authoring.resolve("health.running_speed")
+    # Limb symmetry needs two limbs. A shuttle test is one number for the player.
+    item = authoring.resolve("test.yo_yo_ir1")
     with pytest.raises(authoring.AuthoringError, match="cannot be compared"):
         authoring.check_value(item, TargetType.LSI, 90)
 
 
 def test_the_builder_refuses_a_number_that_is_not_a_target(db) -> None:
-    item = authoring.resolve("health.running_speed")
+    item = authoring.resolve("test.yo_yo_ir1")
     for bad in (0, -3, float("nan"), float("inf")):
         with pytest.raises(authoring.AuthoringError):
             authoring.check_value(item, TargetType.ABSOLUTE, bad)
@@ -698,7 +654,7 @@ def test_the_direction_of_the_comparison_is_not_the_players_to_choose(db, episod
     spec = find(evaluate_phase(db, episode), "my_pain")
     assert spec.comparator is Comparator.LTE
 
-    add_custom(db, episode, metric="health.running_speed", value=7, key="my_speed")
+    add_custom(db, episode, metric="test.yo_yo_ir1", value=1200, key="my_speed")
     assert find(evaluate_phase(db, episode), "my_speed").comparator is Comparator.GTE
 
 

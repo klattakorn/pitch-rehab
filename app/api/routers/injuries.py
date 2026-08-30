@@ -252,6 +252,8 @@ def list_authorable(db: DbSession) -> AuthorableCatalogueOut:
                 phrase_en=item.phrase_en,
                 default_target=item.default_target,
                 comparator=item.default_comparator,
+                default_aggregate=item.default_aggregate,
+                scope=item.scope,
                 lower_is_better=item.lower_is_better,
                 default_window_days=item.default_window_days,
                 target_types=list(item.target_types),
@@ -488,11 +490,7 @@ def record_test(payload: TestResultIn, episode: Episode, db: DbSession) -> Metri
         player_id=episode.player_id,
         episode_id=episode.id,
         metric_key=payload.metric_key,
-        source=(
-            CriterionSource.HEALTH
-            if payload.metric_key.startswith("health.")
-            else CriterionSource.TEST
-        ),
+        source=CriterionSource.TEST,
         value=payload.value,
         unit=payload.unit,
         side=payload.side,

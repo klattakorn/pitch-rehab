@@ -133,17 +133,3 @@ class PainLog(Base, TimestampMixin):
     note: Mapped[str | None] = mapped_column(Text())
 
 
-class HealthSyncState(Base, TimestampMixin):
-    """Per-device watermark so the phone only uploads new health records."""
-
-    __tablename__ = "health_sync_state"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    player_id: Mapped[int] = mapped_column(
-        ForeignKey("player_profile.id", ondelete="CASCADE"), index=True
-    )
-    platform: Mapped[str] = mapped_column(String(32))
-    device_id: Mapped[str] = mapped_column(String(128))
-    last_synced_at: Mapped[datetime | None] = mapped_column(UTCDateTime)
-    anchor: Mapped[str | None] = mapped_column(String(255))  # HKQueryAnchor / HC change token
-    samples_ingested: Mapped[int] = mapped_column(default=0)

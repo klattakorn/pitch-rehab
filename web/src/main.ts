@@ -504,10 +504,10 @@ type RoleIntent =
 /**
  * Choose a position before rehab starts.
  *
- * This is a real fork, not a profile field: the position sets the sprint gates
- * a player has to clear before they are allowed back and adds drills specific
- * to the job. So the screen shows what each choice changes, sourced from the
- * same profiles the server uses to build the programme.
+ * This is a real fork, not a profile field: the position adds drills specific
+ * to the job and tests other roles do not have to pass. So the screen shows what
+ * each choice changes, sourced from the same profiles the server uses to build
+ * the programme.
  */
 async function roleScreen(intent: RoleIntent): Promise<void> {
   shell(`<div class="loading">Loading positions…</div>`, { brand: true });
@@ -532,8 +532,8 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
         : ""
     }
      <h2>What's your primary position?</h2>
-     <p class="sub">This customises your rehab for your role on the pitch. A winger
-       has to sprint faster than a keeper before either is let back on.</p>
+     <p class="sub">This customises your rehab for your role on the pitch. A keeper
+       trains landings a winger never does, and is tested on them.</p>
      <div class="role-grid">
        ${positions.map((p) => roleCardHtml(p, p.key === chosen)).join("")}
      </div>
@@ -980,6 +980,12 @@ async function planScreen(shown?: string): Promise<void> {
   const currentIndex = PHASE_ORDER.indexOf(current);
   const shownIndex = PHASE_ORDER.indexOf(phase.phase_key);
   const isCurrent = phase.phase_key === current;
+  const isBehind = shownIndex < currentIndex;
+  /* The one move that is an achievement rather than a correction: the next
+     phase, with every required test passed. It goes through the gate, which is
+     what records the phase as cleared. Everything else is the player telling
+     the app where they are. */
+  const clearsTheGate = shownIndex === currentIndex + 1 && Boolean(state.gate?.passed);
 
   const doneCount = state.sessions.filter((s) => s.status === "completed").length;
 
@@ -1043,20 +1049,25 @@ async function planScreen(shown?: string): Promise<void> {
        isCurrent
          ? ""
          : `<div class="controls">
-              <button class="${shownIndex < currentIndex ? "ghost" : "primary"} block"
-                id="move-phase">${
-                  shownIndex < currentIndex
-                    ? "Go back to this phase"
+              <button class="${isBehind ? "ghost" : "primary"} block" id="move-phase">${
+                isBehind
+                  ? "Go back to this phase"
+                  : clearsTheGate
+                    ? "Advance to this phase"
                     : "Move to this phase"
-                }</button>
+              }</button>
             </div>
-            <div class="notice">${
-             shownIndex < currentIndex
+            <div class="notice${clearsTheGate ? " good" : ""}">${
+             isBehind
                ? `You cleared this phase. Going back does not undo that — it
                   moves your plan here, which is what a setback needs.`
-               : `Normally this opens when you pass the current phase's testing.
-                  Moving here yourself does not record a pass: the tests you have
-                  not met stay unmet, and the app will still say so.`
+               : clearsTheGate
+                 ? `You have passed every required test in
+                    ${phaseName(current)}. This one is earned, and is recorded
+                    as clearing that phase.`
+                 : `Normally this opens when you pass the current phase's testing.
+                    Moving here yourself does not record a pass: the tests you have
+                    not met stay unmet, and the app will still say so.`
            }</div>`
      }`,
     { tab: "plan", title: "Your Rehab Plan", back: () => homeScreen() },
@@ -1071,10 +1082,19 @@ async function planScreen(shown?: string): Promise<void> {
     button.textContent = "Moving…";
     void (async () => {
       try {
-        // backdate:false -- this is a move, not a statement about when the
-        // injury happened. Nothing is recorded as passed either; the gate is
-        // re-evaluated from the measurements, which have not changed.
-        await api.setStartingPhase(state.episode!.id, phase.phase_key, { backdate: false });
+        if (clearsTheGate) {
+          // Through the gate, which re-checks every criterion server-side and
+          // records the phase as cleared. The button only offers this when the
+          // gate already passes, but the server decides -- not this screen.
+          await api.advancePhase(state.episode!.id);
+        } else {
+          // backdate:false -- this is a move, not a statement about when the
+          // injury happened. Nothing is recorded as passed either; the gate is
+          // re-evaluated from the measurements, which have not changed.
+          await api.setStartingPhase(state.episode!.id, phase.phase_key, { backdate: false });
+        }
+        state.protocol = null;
+        state.progress = null;
         await boot();
         await planScreen();
       } catch (error) {
@@ -1656,16 +1676,25 @@ function testScreen(): void {
          ? `<div class="controls">
               <button class="primary block" id="start-target">Start a session</button>
             </div>`
-         : ""
+         : /* Targets that exist but cannot be started. A watch reading or a
+              clinician's measurement is not something the camera can open, and
+              saying nothing here leaves a screen whose only working button adds
+              another target that will not start either. */
+           mine.length
+           ? `<div class="notice">These are read from your sessions and your
+                watch rather than started on their own. Add a target on an
+                exercise to score one with the camera.</div>`
+           : ""
      }
 
 
      ${
+       // Says the gate is clear, and nothing more. Moving between phases lives
+       // on the Plan screen, so that one screen owns it -- this screen is for
+       // the tests themselves.
        gate.passed
-         ? `<div class="notice good">All tests passed. Return under coaching
-              staff guidance.</div>
-            <div class="controls"><button class="primary block" id="advance">
-              Move to next phase</button></div>`
+         ? `<div class="notice good">All tests passed. Open Plan to move to the
+              next phase.</div>`
          : ""
      }`,
     { tab: "test", title: "Exit Criteria", back: () => homeScreen() },
@@ -1684,20 +1713,6 @@ function testScreen(): void {
       void editCriterionScreen(button.dataset["edit"]!);
     };
   });
-
-  on("#advance", () =>
-    void (async () => {
-      try {
-        await api.advancePhase(state.episode!.id);
-        state.protocol = null;
-        state.progress = null;
-        await refresh();
-        homeScreen();
-      } catch (error) {
-        fail(error);
-      }
-    })(),
-  );
 }
 
 // ----------------------------------------------------------------- profile
@@ -1729,7 +1744,6 @@ function profileScreen(): void {
        ${row("edit-injury", "Injury profile", `${injury}${
          state.episode ? ` · ${state.episode.side} side` : ""
        }`)}
-       ${row("integrations", "Connected apps", "Apple Health, Health Connect")}
        ${row("about", "About Pitch Rehab")}
      </div>
 
@@ -1741,7 +1755,6 @@ function profileScreen(): void {
 
   on("#edit-role", () => void roleScreen({ mode: "edit" }));
   on("#edit-injury", () => injuryScreen());
-  on("#integrations", () => void integrationsScreen());
   on("#about", () => aboutScreen());
   on("#signout", () => {
     api.signOut();
@@ -1751,61 +1764,6 @@ function profileScreen(): void {
     state.progress = null;
     welcomeScreen();
   });
-}
-
-async function integrationsScreen(): Promise<void> {
-  shell(`<div class="loading">Checking what we can read…</div>`, {
-    title: "Connected apps",
-    back: () => profileScreen(),
-  });
-
-  let supported: api.SupportedMetrics;
-  try {
-    supported = await api.supportedMetrics();
-  } catch (error) {
-    return fail(error);
-  }
-
-  const platform = (name: string, count: number, note: string) => `
-    <div class="rowcard static">
-      <span class="rowbody"><b>${name}</b><small>${note}</small></span>
-      <span class="chip on">${count} metrics</span>
-    </div>`;
-
-  shell(
-    `<p class="sub">Health data arrives through one ingest path that maps a platform's
-       own types onto the metrics your exit criteria use.</p>
-
-     <h3>Wired up</h3>
-     <div class="stack">
-       ${platform(
-         "Apple Health",
-         Object.keys(supported.apple_health).length,
-         "HealthKit sample types",
-       )}
-       ${platform(
-         "Google Health Connect",
-         Object.keys(supported.health_connect).length,
-         "Health Connect record types",
-       )}
-     </div>
-
-     <h3>Not connected</h3>
-     <div class="stack">
-       ${["Garmin Connect", "WHOOP", "Strava"]
-         .map(
-           (name) => `<div class="rowcard static muted">
-             <span class="rowbody"><b>${name}</b>
-               <small>Same mapping table, different names — not wired up yet</small></span>
-             <span class="chip">Not connected</span>
-           </div>`,
-         )
-         .join("")}
-     </div>
-
-     <div class="notice">${supported.note}</div>`,
-    { title: "Connected apps", back: () => profileScreen() },
-  );
 }
 
 /**
@@ -2386,8 +2344,8 @@ async function boot(): Promise<void> {
 
   try {
     state.user = await api.me();
-    // A player with no position cannot be given a programme -- the sprint gates
-    // come from it. Ask before anything else.
+    // A player with no position cannot be given a programme -- the drills and
+    // the role-specific testing come from it. Ask before anything else.
     if (state.user.role === "player" && !state.user.profile?.position) {
       return void roleScreen({ mode: "edit" });
     }

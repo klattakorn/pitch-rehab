@@ -358,7 +358,7 @@ def merge_criteria(
     """The library's criteria for this phase, plus whatever the player added.
 
     A custom criterion sharing a key with a library one **replaces** it. That is
-    how "the standard sprint gate, but 95%" is said: the player is not adding a
+    how "the standard hop test, but 95%" is said: the player is not adding a
     second, contradictory rule that both have to pass -- they are changing the
     one that already exists.
 

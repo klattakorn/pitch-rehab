@@ -6,11 +6,13 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.enums import (
+    Aggregate,
     Comparator,
     CriterionSource,
     CriterionStatus,
     EpisodeStatus,
     InjurySite,
+    MetricScope,
     PhaseKey,
     Severity,
     Side,
@@ -230,6 +232,12 @@ class AuthorableOut(BaseModel):
     default_target: float
     #: Fixed by the metric, not chosen -- "pain of at least 8/10" is not a goal.
     comparator: Comparator
+    #: How several readings become one, and which limb counts. Published
+    #: because a client building a spec from this catalogue -- the offline app
+    #: does -- would otherwise have to guess them, and a guess here is a rule
+    #: that reads a different number than the one the player was shown.
+    default_aggregate: Aggregate
+    scope: MetricScope
     lower_is_better: bool
     default_window_days: int | None
     target_types: list[TargetType]

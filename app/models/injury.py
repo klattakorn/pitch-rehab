@@ -114,7 +114,7 @@ class EpisodeCriterion(Base, TimestampMixin):
 
     ``key`` is what ties the two together. A custom criterion whose key matches
     a library one *replaces* it for this player, which is how "the standard
-    sprint gate, but 95% instead of 90%" is expressed. A new key is simply an
+    hop test, but 95% instead of 90%" is expressed. A new key is simply an
     extra test on top.
 
     Deliberately shaped like ``ExitCriterion``: the same field names, so the

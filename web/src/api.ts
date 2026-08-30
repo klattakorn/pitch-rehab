@@ -282,9 +282,6 @@ export interface PositionInfo {
   label_en: string;
   label_th: string;
   blurb_en: string;
-  speed_p3: number;
-  speed_p4: number;
-  hsr_p4: number;
   extra_exercises: PositionExtra[];
   extra_criteria: PositionExtra[];
 }
@@ -427,18 +424,6 @@ export interface Protocol {
 export const protocolFor = (episodeId: number) =>
   request<Protocol>(`/injuries/${episodeId}/protocol`);
 
-/** What the health-sync path can actually take in, per platform. */
-export interface SupportedMetrics {
-  apple_health: Record<string, string>;
-  health_connect: Record<string, string>;
-  canonical_units: Record<string, string>;
-  derived: string[];
-  note: string;
-}
-
-export const supportedMetrics = () =>
-  request<SupportedMetrics>("/health/supported-metrics");
-
 // ------------------------------------------------- criteria you write yourself
 /** One thing a test can be built from, with the defaults that suit its metric. */
 export interface Authorable {
@@ -453,6 +438,10 @@ export interface Authorable {
   default_target: number;
   /** Fixed by the metric, not chosen — "pain of at least 8/10" is not a goal. */
   comparator: string;
+  /** How several readings become one. Needed to rebuild a spec offline. */
+  default_aggregate: string;
+  /** Which limb counts. Needed for the same reason. */
+  scope: string;
   lower_is_better: boolean;
   default_window_days: number | null;
   target_types: string[];

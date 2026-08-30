@@ -71,12 +71,6 @@ a source, or an honest "placeholder, we chose it".
 
 | Metric | Default | Source | Notes |
 |---|---|---|---|
-| `health.distance_high_speed` | 1200 |  |  |
-| `health.distance_total` | 14000 |  |  |
-| `health.running_speed` | 7.8 |  |  |
-| `health.step_count` | 45000 |  |  |
-| `health.vo2max` | 48 |  |  |
-| `health.walking_asymmetry` | 1 |  |  |
 | `test.cmj_height` | 0.34 |  |  |
 | `test.heel_raise_reps` | 25 |  |  |
 | `test.hop_single` | 1.45 |  |  |

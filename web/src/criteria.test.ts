@@ -3,7 +3,7 @@
  *
  * The sentence shown live while a number is typed is the only thing standing
  * between a player and a target they did not mean to set, so it is worth
- * pinning: "Run at least 7.5 m/s" is checkable, `{comparator:"gte"}` is not.
+ * pinning: "Cover at least 1200 metres" is checkable, `{comparator:"gte"}` is not.
  */
 import { describe, expect, it } from "vitest";
 
@@ -25,19 +25,23 @@ import {
 } from "./criteria";
 
 const metric = (over: Partial<Authorable> = {}): Authorable => ({
-  key: "health.running_speed",
-  source: "health",
-  group: "Running",
-  label_en: "Top running speed",
-  unit: "m/s",
-  help_en: "Fastest speed your watch recorded.",
-  phrase_en: "Run at least … m/s",
-  default_target: 7.5,
+  key: "test.yo_yo_ir1",
+  source: "test",
+  group: "Strength tests",
+  label_en: "Yo-Yo intermittent recovery",
+  unit: "m",
+  help_en: "How far you got in the shuttle test.",
+  phrase_en: "Cover at least … metres",
+  default_target: 1200,
+  default_aggregate: "max",
+  scope: "any",
   comparator: "gte",
   lower_is_better: false,
   default_window_days: 14,
+  // Both comparisons, so the builder's wording is exercised for each. The
+  // engine supports a baseline target even where no catalogue entry offers one.
   target_types: [ABSOLUTE, PERCENT_OF_BASELINE],
-  step: 0.1,
+  step: 50,
   needs_exercise: false,
   ...over,
 });
@@ -81,7 +85,7 @@ const pain = metric({
 });
 
 const catalogue: AuthorableCatalogue = {
-  groups: ["Exercises", "Running", "Strength tests", "How you feel", "Empty group"],
+  groups: ["Exercises", "Strength tests", "How you feel", "Empty group"],
   metrics: [reps, metric(), hop, pain],
   exercises: [
     {
@@ -111,7 +115,7 @@ const catalogue: AuthorableCatalogue = {
 
 describe("the live sentence", () => {
   it("reads as English, not as a spec", () => {
-    expect(preview(metric(), ABSOLUTE, 7.5, null)).toBe("Run at least 7.5 m/s");
+    expect(preview(metric(), ABSOLUTE, 1200, null)).toBe("Cover at least 1200 metres");
     expect(preview(pain, ABSOLUTE, 2, null)).toBe("Pain at rest no more than 2/10");
   });
 
@@ -127,7 +131,7 @@ describe("the live sentence", () => {
       "Triple hop distance at least 95% of the other side",
     );
     expect(preview(metric(), PERCENT_OF_BASELINE, 90, null)).toBe(
-      "Top running speed at least 90% of your own best",
+      "Yo-Yo intermittent recovery at least 90% of your own best",
     );
   });
 
@@ -138,13 +142,13 @@ describe("the live sentence", () => {
   });
 
   it("does not print floating-point noise at the player", () => {
-    expect(preview(metric(), ABSOLUTE, 7.1 + 0.1, null)).toBe("Run at least 7.2 m/s");
+    expect(preview(metric(), ABSOLUTE, 7.1 + 0.1, null)).toBe("Cover at least 7.2 metres");
   });
 });
 
 describe("units and windows", () => {
   it("switches the unit with the comparison", () => {
-    expect(unitFor(metric(), ABSOLUTE)).toBe("m/s");
+    expect(unitFor(metric(), ABSOLUTE)).toBe("m");
     expect(unitFor(metric(), PERCENT_OF_BASELINE)).toBe("%");
     expect(unitFor(hop, LSI)).toBe("%");
   });
@@ -166,8 +170,8 @@ describe("units and windows", () => {
 
 describe("splitting a stored metric back apart", () => {
   it("finds a plain metric", () => {
-    const { base, exerciseKey } = splitMetric("health.running_speed", catalogue);
-    expect(base?.key).toBe("health.running_speed");
+    const { base, exerciseKey } = splitMetric("test.yo_yo_ir1", catalogue);
+    expect(base?.key).toBe("test.yo_yo_ir1");
     expect(exerciseKey).toBeNull();
   });
 
@@ -267,7 +271,6 @@ describe("the pickers", () => {
   it("keeps the catalogue's grouping and drops empty groups", () => {
     expect(grouped(catalogue).map(([g]) => g)).toEqual([
       "Exercises",
-      "Running",
       "Strength tests",
       "How you feel",
     ]);

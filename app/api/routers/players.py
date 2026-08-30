@@ -30,9 +30,9 @@ def update_profile(
         setattr(player, field, value)
 
     if moved_position:
-        # The position is what sets a player's sprint gates, so a change to it
-        # has to reach the rehab they are actually doing. Their phase and their
-        # history survive -- only the targets move. See realign_protocol.
+        # The position is what sets a player's drills and their role-specific
+        # testing, so a change to it has to reach the rehab they are actually
+        # doing. Their phase and their history survive. See realign_protocol.
         db.flush()
         realign_active_episodes(db, player.id)
 

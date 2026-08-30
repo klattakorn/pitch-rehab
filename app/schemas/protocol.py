@@ -103,9 +103,6 @@ class PositionOut(BaseModel):
     label_th: str
     blurb_en: str
     #: Sprint speed gate, as a percentage of the player's own pre-injury best.
-    speed_p3: float
-    speed_p4: float
     #: High-speed running volume gate for the final phase, same basis.
-    hsr_p4: float
     extra_exercises: list[PositionExtraOut]
     extra_criteria: list[PositionExtraOut]

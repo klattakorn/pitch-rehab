@@ -33,7 +33,7 @@ class TargetSpec(BaseModel):
 class CriterionSpec(BaseModel):
     """A declarative exit criterion. Stored as JSON on ``ExitCriterion.spec``."""
 
-    metric: str = Field(description="Namespaced metric key, e.g. 'health.running_speed_max'")
+    metric: str = Field(description="Namespaced metric key, e.g. 'test.hop_triple'")
     source: CriterionSource
     aggregate: Aggregate = Aggregate.LATEST
     #: Look-back window. ``None`` means "any time during this injury episode".

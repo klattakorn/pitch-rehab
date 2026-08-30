@@ -182,55 +182,6 @@ def adherence(pct: float) -> CriterionDef:
     )
 
 
-def walking_symmetry(limit: float = 3.0) -> CriterionDef:
-    return crit(
-        "walking_symmetry",
-        f"Walking asymmetry ≤ {limit:g}%",
-        f"ความไม่สมมาตรของการเดิน ≤ {limit:g}%",
-        metric="health.walking_asymmetry",
-        source=CriterionSource.HEALTH,
-        aggregate=Aggregate.MEAN,
-        window_days=7,
-        comparator=Comparator.LTE,
-        target=absolute(limit, "%"),
-        required=False,
-        help_en="Read automatically from Apple Health / Health Connect. Optional if you "
-        "do not carry a phone or watch while walking.",
-        help_th="อ่านอัตโนมัติจาก Apple Health / Health Connect ข้ามได้ถ้าไม่ได้พกอุปกรณ์",
-    )
-
-
-def speed_vs_baseline(pct: float, required: bool = True) -> CriterionDef:
-    return crit(
-        "speed_vs_baseline",
-        f"Max running speed ≥ {pct:g}% of your baseline",
-        f"ความเร็วสูงสุด ≥ {pct:g}% ของค่าพื้นฐาน",
-        metric="health.running_speed",
-        source=CriterionSource.HEALTH,
-        aggregate=Aggregate.MAX,
-        window_days=14,
-        target=pct_of_baseline(pct),
-        required=required,
-        help_en="Comes from your watch or phone GPS. A hand-timed sprint entered in the "
-        "app counts too.",
-        help_th="มาจากนาฬิกาหรือ GPS ในมือถือ หรือจับเวลาวิ่งเองแล้วกรอกในแอปก็ได้",
-    )
-
-
-def hsr_vs_baseline(pct: float, required: bool = True) -> CriterionDef:
-    return crit(
-        "hsr_vs_baseline",
-        f"High-speed running volume ≥ {pct:g}% of baseline",
-        f"ระยะวิ่งความเร็วสูงสะสม ≥ {pct:g}% ของค่าพื้นฐาน",
-        metric="health.distance_high_speed",
-        source=CriterionSource.HEALTH,
-        aggregate=Aggregate.SUM,
-        window_days=7,
-        target=pct_of_baseline(pct),
-        required=required,
-    )
-
-
 def change_of_direction(pct: float, required: bool = True) -> CriterionDef:
     """The 505 agility test, scored as a percentage of the player's own best.
 
@@ -373,7 +324,6 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 target=absolute(120, "deg"),
             ),
             adherence(70),
-            walking_symmetry(4.0),
         ),
     ),
     _phase(
@@ -432,8 +382,6 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
         ),
         criteria=(
             pain_on_activity(1.0),
-            speed_vs_baseline(85),
-            hsr_vs_baseline(60, required=False),
             crit(
                 "hop_lsi",
                 "Triple hop symmetry ≥ 90%",
@@ -458,8 +406,6 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
         + (Rx("nordic_hamstring_curl", sets=3, reps=8, tempo="5-0-1-0"),),
         criteria=(
             pain_free_days(7),
-            speed_vs_baseline(95),
-            hsr_vs_baseline(90),
             confidence(80),
             clinician_clearance(),
         ),
@@ -506,7 +452,6 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 target=absolute(120, "deg"),
             ),
             adherence(70),
-            walking_symmetry(4.0),
         ),
     ),
     _phase(
@@ -603,7 +548,6 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 scope=MetricScope.BOTH,
                 target=lsi(90),
             ),
-            speed_vs_baseline(85),
             form_quality(82),
         ),
     ),
@@ -628,7 +572,6 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 scope=MetricScope.BOTH,
                 target=lsi(95),
             ),
-            speed_vs_baseline(95),
             confidence(85),
             clinician_clearance(),
         ),
@@ -663,7 +606,6 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             pain_free_days(3),
             adherence(70),
-            walking_symmetry(4.0),
         ),
     ),
     _phase(
@@ -733,7 +675,6 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 scope=MetricScope.BOTH,
                 target=lsi(90),
             ),
-            speed_vs_baseline(85),
             form_quality(82),
         ),
     ),
@@ -746,7 +687,6 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
         prescriptions=_RETURN_RX + (Rx("lateral_bound", sets=3, reps=8, side_mode=Side.BILATERAL),),
         criteria=(
             pain_free_days(7),
-            speed_vs_baseline(95),
             confidence(80),
             clinician_clearance(),
         ),
@@ -770,7 +710,6 @@ GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_at_rest(2.0),
             pain_free_days(3),
             adherence(70),
-            walking_symmetry(4.0),
         ),
     ),
     _phase(
@@ -838,7 +777,6 @@ GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 scope=MetricScope.INJURED,
                 target=absolute(30, "s"),
             ),
-            speed_vs_baseline(85),
             form_quality(82),
         ),
     ),
@@ -852,7 +790,6 @@ GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
         + (Rx("copenhagen_plank", sets=3, reps=None, hold_seconds=30, side_mode=Side.BILATERAL),),
         criteria=(
             pain_free_days(7),
-            speed_vs_baseline(95),
             confidence(80),
             clinician_clearance(),
         ),
@@ -887,7 +824,6 @@ CALF_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 target=absolute(25, "deg"),
             ),
             adherence(70),
-            walking_symmetry(4.0),
         ),
     ),
     _phase(
@@ -944,7 +880,6 @@ CALF_TEMPLATE: tuple[PhaseTemplate, ...] = (
         ),
         criteria=(
             pain_on_activity(1.0),
-            speed_vs_baseline(85),
             crit(
                 "hop_lsi",
                 "Single hop symmetry ≥ 90%",
@@ -969,8 +904,6 @@ CALF_TEMPLATE: tuple[PhaseTemplate, ...] = (
         + (Rx("single_leg_calf_raise", sets=3, reps=20, side_mode=Side.BILATERAL),),
         criteria=(
             pain_free_days(7),
-            speed_vs_baseline(95),
-            hsr_vs_baseline(90),
             confidence(80),
             clinician_clearance(),
         ),
@@ -1120,7 +1053,6 @@ PATELLAR_TENDINOPATHY_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 target=absolute(45, "deg"),
                 min_samples=3,
             ),
-            speed_vs_baseline(85),
             crit(
                 "cmj_lsi_tendon",
                 "Jump height symmetry at least 90%",
@@ -1159,7 +1091,6 @@ PATELLAR_TENDINOPATHY_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 target=absolute(1, "NPRS"),
                 min_samples=4,
             ),
-            speed_vs_baseline(95),
             confidence(80),
             clinician_clearance(),
         ),
@@ -1197,7 +1128,6 @@ GROIN_PAIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             pain_free_days(3),
             adherence(75),
-            walking_symmetry(4.0),
         ),
     ),
     _phase(
@@ -1265,7 +1195,6 @@ GROIN_PAIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
                 scope=MetricScope.INJURED,
                 target=absolute(30, "s"),
             ),
-            speed_vs_baseline(85),
             change_of_direction(90),
             form_quality(82),
         ),
@@ -1280,7 +1209,6 @@ GROIN_PAIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
         + (Rx("copenhagen_plank", sets=3, reps=None, hold_seconds=30, side_mode=Side.BILATERAL),),
         criteria=(
             pain_free_days(7),
-            speed_vs_baseline(95),
             change_of_direction(95),
             confidence(80),
             clinician_clearance(),
@@ -1308,10 +1236,6 @@ class PositionProfile:
     position: Position
     label_en: str
     label_th: str
-    #: Overrides for the shared running gates, as % of the player's own baseline.
-    speed_p3: float
-    speed_p4: float
-    hsr_p4: float
     extra_rx: dict[PhaseKey, tuple[Rx, ...]] = field(default_factory=dict)
     extra_criteria: dict[PhaseKey, tuple[CriterionDef, ...]] = field(default_factory=dict)
 
@@ -1330,28 +1254,11 @@ def _cmj_lsi(value: float = 90.0) -> CriterionDef:
     )
 
 
-def _total_distance(pct: float) -> CriterionDef:
-    return crit(
-        "distance_vs_baseline",
-        f"Weekly running distance ≥ {pct:g}% of baseline",
-        f"ระยะวิ่งรวมต่อสัปดาห์ ≥ {pct:g}% ของค่าพื้นฐาน",
-        metric="health.distance_total",
-        source=CriterionSource.HEALTH,
-        aggregate=Aggregate.SUM,
-        window_days=7,
-        target=pct_of_baseline(pct),
-        required=False,
-    )
-
-
 POSITION_PROFILES: dict[Position, PositionProfile] = {
     Position.GOALKEEPER: PositionProfile(
         Position.GOALKEEPER,
         "Goalkeeper",
         "ผู้รักษาประตู",
-        speed_p3=75,
-        speed_p4=85,
-        hsr_p4=70,
         extra_rx={
             _P3: (Rx("goalkeeper_dive_landing", sets=3, reps=6, side_mode=Side.BILATERAL),),
             _P4: (Rx("goalkeeper_dive_landing", sets=4, reps=8, side_mode=Side.BILATERAL),),
@@ -1379,9 +1286,6 @@ POSITION_PROFILES: dict[Position, PositionProfile] = {
         Position.CENTRE_BACK,
         "Centre back",
         "กองหลังตัวกลาง",
-        speed_p3=85,
-        speed_p4=92,
-        hsr_p4=85,
         extra_rx={
             _P3: (Rx("heading_jump", sets=3, reps=8),),
             _P4: (Rx("heading_jump", sets=4, reps=8),),
@@ -1392,28 +1296,17 @@ POSITION_PROFILES: dict[Position, PositionProfile] = {
         Position.FULL_BACK,
         "Full back / wing back",
         "แบ็ก / วิงแบ็ก",
-        speed_p3=88,
-        speed_p4=96,
-        hsr_p4=92,
         extra_rx={_P4: (Rx("repeated_sprint", sets=2, reps=6, rest_seconds=25),)},
-        extra_criteria={_P4: (_total_distance(90),)},
     ),
     Position.CENTRE_MIDFIELD: PositionProfile(
         Position.CENTRE_MIDFIELD,
         "Central midfielder",
         "กองกลาง",
-        speed_p3=85,
-        speed_p4=93,
-        hsr_p4=88,
-        extra_criteria={_P4: (_total_distance(92),)},
     ),
     Position.WINGER: PositionProfile(
         Position.WINGER,
         "Winger",
         "ปีก",
-        speed_p3=90,
-        speed_p4=97,
-        hsr_p4=95,
         extra_rx={
             _P3: (Rx("lateral_bound", sets=4, reps=8, side_mode=Side.BILATERAL),),
             _P4: (Rx("repeated_sprint", sets=2, reps=6, rest_seconds=25),),
@@ -1441,9 +1334,6 @@ POSITION_PROFILES: dict[Position, PositionProfile] = {
         Position.STRIKER,
         "Striker",
         "กองหน้า",
-        speed_p3=88,
-        speed_p4=95,
-        hsr_p4=90,
         extra_rx={
             _P3: (Rx("heading_jump", sets=3, reps=6),),
             _P4: (Rx("repeated_sprint", sets=2, reps=5, rest_seconds=30),),
@@ -1480,16 +1370,8 @@ _INJURY_LABELS: dict[InjurySite, tuple[str, str]] = {
 
 
 def _apply_position(phase: PhaseTemplate, profile: PositionProfile) -> PhaseTemplate:
-    """Retarget the shared running gates and bolt on position-specific work."""
-    criteria: list[CriterionDef] = []
-    for c in phase.criteria:
-        if c.key == "speed_vs_baseline":
-            pct = profile.speed_p3 if phase.phase_key is _P3 else profile.speed_p4
-            criteria.append(speed_vs_baseline(pct, required=c.required))
-        elif c.key == "hsr_vs_baseline" and phase.phase_key is _P4:
-            criteria.append(hsr_vs_baseline(profile.hsr_p4, required=c.required))
-        else:
-            criteria.append(copy.deepcopy(c))
+    """Bolt the position-specific work onto a shared phase."""
+    criteria: list[CriterionDef] = [copy.deepcopy(c) for c in phase.criteria]
 
     existing = {c.key for c in criteria}
     for extra in profile.extra_criteria.get(phase.phase_key, ()):
@@ -1524,14 +1406,12 @@ def build_protocols() -> list[BuiltProtocol]:
                     title_th=f"ฟื้นฟู{injury_th} — {profile.label_th}",
                     summary_en=(
                         f"Four-phase return-to-pitch programme for a {profile.label_en.lower()} "
-                        f"with a {injury_en.lower()} injury. Running targets are set at "
-                        f"{profile.speed_p3:g}% of baseline speed to leave phase 3 and "
-                        f"{profile.speed_p4:g}% to be cleared."
+                        f"with a {injury_en.lower()} injury. Each phase opens when its own "
+                        f"testing is passed."
                     ),
                     summary_th=(
                         f"โปรแกรมคืนสู่สนาม 4 เฟส สำหรับ{profile.label_th}ที่บาดเจ็บ{injury_th} "
-                        f"เกณฑ์ความเร็ว {profile.speed_p3:g}% เพื่อผ่านเฟส 3 และ "
-                        f"{profile.speed_p4:g}% เพื่อกลับลงสนาม"
+                        f"แต่ละเฟสจะเปิดเมื่อผ่านการทดสอบของเฟสนั้น"
                     ),
                     phases=phases,
                 )

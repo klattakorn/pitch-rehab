@@ -50,6 +50,10 @@ const protocolsFile = new URL("../public/demo-protocols.json", import.meta.url);
 };
 
 const standalone = await import("./standalone");
+const { splitMetric } = await import("./criteria");
+// The same object standalone.ts holds -- a JSON import is one instance per
+// module graph, which is what lets a test change what the gate said.
+const snapshot = (await import("./demo/snapshot.json")).default;
 
 /** Call an endpoint and insist it worked. */
 function body(path: string, init?: RequestInit): any {
@@ -66,6 +70,16 @@ function refusal(path: string, init?: RequestInit) {
 }
 
 const episodeId = (): number => body("/injuries?status_filter=active")[0].id;
+
+/** The phase the app believes the player is in, which is what the gate is for. */
+const currentPhase = (): string =>
+  body("/injuries?status_filter=active")[0].current_phase;
+
+/** Phase keys in programme order. */
+const phaseKeysFor = (id: number): string[] =>
+  body(`/injuries/${id}/protocol`)
+    .phases.sort((a: any, b: any) => a.order_index - b.order_index)
+    .map((p: any) => p.phase_key);
 
 beforeEach(() => {
   standalone.reset();
@@ -255,6 +269,26 @@ describe("saying which phase you are in", () => {
     expect(reply.ok).toBe(false);
   });
 
+  it("gets the recorded results back when it returns to the recorded phase", () => {
+    /* Forward and back again is a normal thing to do on the Plan screen, and
+       the results for the phase the snapshot was taken in did not stop being
+       real because somebody looked at the next one. */
+    const id = episodeId();
+    const before = body(`/injuries/${id}/exit-criteria`);
+    expect(before.criteria.some((c: any) => c.status === "pass")).toBe(true);
+
+    const keys = phaseKeys();
+    const next = keys[keys.indexOf(before.phase_key) + 1];
+    expect(next).toBeDefined();
+    setPhase(next!);
+    expect(body(`/injuries/${id}/exit-criteria`).required_passed).toBe(0);
+
+    setPhase(before.phase_key);
+    const after = body(`/injuries/${id}/exit-criteria`);
+    expect(after.required_passed).toBe(before.required_passed);
+    expect(after.criteria.some((c: any) => c.status === "pass")).toBe(true);
+  });
+
   it("goes back to the snapshot when the local state is cleared", () => {
     const id = episodeId();
     const original = body(`/injuries/${id}/exit-criteria`).phase_key;
@@ -262,6 +296,28 @@ describe("saying which phase you are in", () => {
     expect(body(`/injuries/${id}/exit-criteria`).phase_key).not.toBe(original);
     standalone.reset();
     expect(body(`/injuries/${id}/exit-criteria`).phase_key).toBe(original);
+  });
+});
+
+describe("the recorded snapshot, once the protocol library has loaded", () => {
+  /* The library is fetched before the first request, not on demand, so this is
+     what every visitor gets rather than an edge case. It used to be treated as
+     a programme change the moment it arrived -- same programme, second copy,
+     different object -- and the app served a phase with nothing measured in it
+     instead of the results it was recording. */
+  it("is still what the app serves", async () => {
+    const id = episodeId();
+    const recorded = (snapshot as any).responses[`/injuries/${id}/exit-criteria`];
+
+    standalone.setActive(true);
+    await standalone.ready();
+
+    const gate = body(`/injuries/${id}/exit-criteria`);
+    expect(gate.phase_key).toBe(recorded.phase_key);
+    expect(gate.required_passed).toBe(recorded.required_passed);
+    // The real engine's verdicts, which is the whole reason for the snapshot.
+    expect(gate.criteria.some((c: any) => c.status === "pass")).toBe(true);
+    expect(body(`/injuries/${id}/today`).phase_key).toBe(recorded.phase_key);
   });
 });
 
@@ -327,15 +383,68 @@ describe("changing the programme with no laptop", () => {
   });
 });
 
-describe("what needs the laptop", () => {
-  it("will not advance a phase", () => {
-    const reply = refusal(`/injuries/${episodeId()}/advance`, {
-      method: "POST",
-      body: "{}",
-    });
-    expect(reply.status).toBe(503);
-    expect(reply.detail).toMatch(/exit criteria|laptop/i);
+describe("moving to the next phase", () => {
+  const advance = (id: number) =>
+    standalone.handle(`/injuries/${id}/advance`, { method: "POST", body: "{}" });
+
+  /** Make the recorded gate say it passed, and put it back afterwards. */
+  const withPassingGate = (id: number, run: () => void) => {
+    const gate = (snapshot as any).responses[`/injuries/${id}/exit-criteria`];
+    const was = gate.passed;
+    gate.passed = true;
+    try {
+      run();
+    } finally {
+      gate.passed = was;
+    }
+  };
+
+  it("is refused while the gate has not been cleared", () => {
+    const reply = advance(episodeId());
+    expect(reply.ok).toBe(false);
+    expect(reply.ok === false && reply.status).toBe(503);
+    expect(reply.ok === false && reply.detail).toMatch(/exit criteria|laptop/i);
   });
+
+  it("goes through when the recorded gate says every test was passed", () => {
+    const id = episodeId();
+    withPassingGate(id, () => {
+      const order = body(`/injuries/${id}/protocol`)
+        .phases.sort((a: any, b: any) => a.order_index - b.order_index)
+        .map((p: any) => p.phase_key);
+      const before = body("/injuries?status_filter=active")[0].current_phase;
+
+      const reply = advance(id);
+
+      expect(reply.ok).toBe(true);
+      const after = body("/injuries?status_filter=active")[0].current_phase;
+      expect(after).toBe(order[order.indexOf(before) + 1]);
+      // The new phase has had nothing measured in it, and must say so rather
+      // than carrying the passing gate forward.
+      expect(body(`/injuries/${id}/exit-criteria`).passed).toBe(false);
+    });
+  });
+
+  it("stops at the end of the programme instead of walking off it", () => {
+    const id = episodeId();
+    const order = body(`/injuries/${id}/protocol`)
+      .phases.sort((a: any, b: any) => a.order_index - b.order_index)
+      .map((p: any) => p.phase_key);
+    body(`/injuries/${id}/starting-phase`, {
+      method: "PUT",
+      body: JSON.stringify({ phase_key: order[order.length - 1] }),
+    });
+    withPassingGate(id, () => {
+      const reply = advance(id);
+      expect(reply.ok).toBe(false);
+      expect(body("/injuries?status_filter=active")[0].current_phase).toBe(
+        order[order.length - 1],
+      );
+    });
+  });
+});
+
+describe("what needs the laptop", () => {
 
   it("will not start a new injury episode", () => {
     expect(refusal("/injuries", { method: "POST", body: "{}" }).status).toBe(503);
@@ -343,25 +452,117 @@ describe("what needs the laptop", () => {
 });
 
 describe("a criterion written on the phone", () => {
+  /** What the builder sends: two fields for the metric, the number as `value`. */
+  const squatDraft = (value = 20) => ({
+    metric: "session.reps",
+    exercise_key: "single_leg_squat",
+    target_type: "absolute",
+    value,
+    required: true,
+    phase_key: currentPhase(),
+  });
+
   it("joins the gate as never measured, not as a pass", () => {
     const id = episodeId();
-    const draft = {
-      key: "custom_test_reps",
-      label_en: "10 single-leg squats",
-      phase_key: "strength",
-    };
     const saved = body(`/injuries/${id}/criteria`, {
       method: "PUT",
-      body: JSON.stringify(draft),
+      body: JSON.stringify(squatDraft()),
     });
-    expect(saved.status).toBe("no_data");
-    expect(saved.observed).toBeNull();
+    // The endpoint returns the stored rule, which is a spec -- not a result.
+    // Inventing a `status` here would have been describing a reading that does
+    // not exist.
+    expect(saved.spec.metric).toBe("session.reps.single_leg_squat");
+    expect(saved.spec.target.value).toBe(20);
 
     const gate = body(`/injuries/${id}/exit-criteria`);
-    const mine = gate.criteria.find((c: any) => c.key === "custom_test_reps");
+    const mine = gate.criteria.find((c: any) => c.key === saved.key);
     expect(mine).toBeDefined();
     expect(mine.status).toBe("no_data");
-    expect(body(`/injuries/${id}/criteria`)).toHaveLength(1);
+    expect(mine.observed).toBeNull();
+    // The number to beat, and its unit, both have to reach the row -- without
+    // them the gate shows a dash and nothing to aim at.
+    expect(mine.target).toBe(20);
+    expect(mine.unit).toBe("reps");
+  });
+
+  it("can be started with the camera, which is the point of writing one", () => {
+    /* The Test screen offers a session only for a target whose metric names an
+       exercise. The builder sends the metric and the exercise separately and
+       the server joins them; nothing did that here, so a target written on the
+       phone sat on the gate with no way to start it -- the screen had an Add
+       button and nothing else. */
+    const id = episodeId();
+    const saved = body(`/injuries/${id}/criteria`, {
+      method: "PUT",
+      body: JSON.stringify(squatDraft()),
+    });
+    const catalogue = body("/injuries/criteria/authorable");
+    const row = body(`/injuries/${id}/exit-criteria`).criteria.find(
+      (c: any) => c.key === saved.key,
+    );
+
+    const { base, exerciseKey } = splitMetric(row.metric, catalogue);
+    expect(exerciseKey).toBe("single_leg_squat");
+    expect(base?.key).toBe("session.reps");
+    // And the exercise it names has to be one the camera has a rule for.
+    const exercise = body("/catalog/exercises").find((e: any) => e.key === exerciseKey);
+    expect(exercise?.pose_rule).toBeTruthy();
+  });
+
+  it("replaces the same test rather than leaving two of them", () => {
+    const id = episodeId();
+    const first = body(`/injuries/${id}/criteria`, {
+      method: "PUT",
+      body: JSON.stringify(squatDraft(20)),
+    });
+    const second = body(`/injuries/${id}/criteria`, {
+      method: "PUT",
+      body: JSON.stringify(squatDraft(25)),
+    });
+    // The key is derived from what is measured, exactly as authoring.build_key
+    // does it, so the second save is an edit.
+    expect(second.key).toBe(first.key);
+    expect(second.key).toBe("custom_session_reps_single_leg_squat");
+
+    const rows = body(`/injuries/${id}/exit-criteria`).criteria.filter(
+      (c: any) => c.key === first.key,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].target).toBe(25);
+  });
+
+  it("shows the targets the snapshot recorded, not only the new ones", () => {
+    /* The demo player has targets of their own already. Serving only what was
+       written on the phone left a fresh demo saying "Nothing yet" on a screen
+       that had two real ones behind it. */
+    const id = episodeId();
+    const recorded = (snapshot as any).responses[`/injuries/${id}/criteria`];
+    expect(recorded.length).toBeGreaterThan(0);
+
+    const listed = body(`/injuries/${id}/criteria`);
+    for (const one of recorded) {
+      expect(listed.some((c: any) => c.key === one.key)).toBe(true);
+    }
+  });
+
+  it("stays in the phase it was written for", () => {
+    const id = episodeId();
+    const written = body(`/injuries/${id}/criteria`, {
+      method: "PUT",
+      body: JSON.stringify(squatDraft()),
+    });
+    const keys = phaseKeysFor(id);
+    const elsewhere = keys.find((k) => k !== currentPhase())!;
+    body(`/injuries/${id}/starting-phase`, {
+      method: "PUT",
+      body: JSON.stringify({ phase_key: elsewhere }),
+    });
+    const gate = body(`/injuries/${id}/exit-criteria`);
+    expect(gate.criteria.some((c: any) => c.key === written.key)).toBe(false);
+    // Not lost, though -- it is still the player's, filed where they wrote it.
+    expect(body(`/injuries/${id}/criteria`).some((c: any) => c.key === written.key)).toBe(
+      true,
+    );
   });
 
   it("reads as the sentence the builder showed, not as undefined", () => {
@@ -377,7 +578,7 @@ describe("a criterion written on the phone", () => {
         target_type: "absolute",
         value: 45,
         required: true,
-        phase_key: "p2_strength",
+        phase_key: currentPhase(),
       }),
     });
     expect(saved.label_en).toBeTruthy();
@@ -395,12 +596,18 @@ describe("a criterion written on the phone", () => {
 
   it("can be taken away again", () => {
     const id = episodeId();
+    const phase = currentPhase();
     body(`/injuries/${id}/criteria`, {
       method: "PUT",
-      body: JSON.stringify({ key: "custom_gone", label_en: "x", phase_key: "strength" }),
+      body: JSON.stringify({ key: "custom_gone", label_en: "x", phase_key: phase }),
     });
-    body(`/injuries/${id}/criteria/custom_gone?phase_key=strength`, { method: "DELETE" });
-    expect(body(`/injuries/${id}/criteria`)).toHaveLength(0);
+    expect(body(`/injuries/${id}/criteria`).some((c: any) => c.key === "custom_gone")).toBe(
+      true,
+    );
+    body(`/injuries/${id}/criteria/custom_gone?phase_key=${phase}`, { method: "DELETE" });
+    expect(body(`/injuries/${id}/criteria`).some((c: any) => c.key === "custom_gone")).toBe(
+      false,
+    );
   });
 });
 

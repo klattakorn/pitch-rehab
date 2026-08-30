@@ -363,36 +363,37 @@ three-second window instead.
 ## How the pieces fit
 
 ```
-  phone (MediaPipe Pose, 33 landmarks)        Apple Health / Health Connect
-                │  landmark frames                       │  records
-                ▼                                        ▼
-        POST /sessions/{id}/sets                 POST /health/sync
-                │                                        │
-       ┌────────▼─────────┐                     ┌────────▼─────────┐
-       │  pose engine     │                     │  health ingest   │
-       │  angles, reps,   │                     │  map + convert   │
-       │  form score      │                     │  + dedupe        │
-       └────────┬─────────┘                     └────────┬─────────┘
-                │                                        │
-                └──────────────► metric_sample ◄─────────┘
-                                      ▲   ▲
-                pain logs / PROs ─────┘   └───── field tests (hop, sprint, dyno)
-                                      │
-                          ┌───────────▼────────────┐
-                          │  exit-criteria engine  │  ← per-position targets
-                          └───────────┬────────────┘
-                                      ▼
-                              phase gate: pass / fail
+              phone (MediaPipe Pose, 33 landmarks)
+                            │  landmark frames
+                            ▼
+                    POST /sessions/{id}/sets
+                            │
+                   ┌────────▼─────────┐
+                   │  pose engine     │
+                   │  angles, reps,   │
+                   │  form score      │
+                   └────────┬─────────┘
+                            │
+                            ▼
+                       metric_sample
+                          ▲   ▲
+          pain logs / PROs┘   └field tests (hop, sprint, dyno)
+                            │
+                ┌───────────▼────────────┐
+                │  exit-criteria engine  │  ← per-position targets
+                └───────────┬────────────┘
+                            ▼
+                    phase gate: pass / fail
 ```
 
 Everything measurable lands in one table (`metric_sample`) under a namespaced key,
 and the criteria engine only ever reads from there. That is why a criterion can be
-written once and satisfied by a watch, a phone camera, a stopwatch, or a
-dynamometer without the engine caring which.
+written once and satisfied by a phone camera, a stopwatch, or a dynamometer
+without the engine caring which.
 
 ---
 
-## The three engines
+## The two engines
 
 ### 1. Pose — `app/services/pose/`
 
@@ -490,7 +491,7 @@ A criterion is declarative JSON. This is the whole vocabulary:
 
 ```jsonc
 {
-  "metric": "health.running_speed",
+  "metric": "test.yo_yo_ir1",
   "source": "health",
   "aggregate": "max",          // latest | max | min | mean | median | p95 | sum | count
   "window_days": 14,           // null = "any time during this injury episode"
@@ -550,12 +551,12 @@ they type is the finished sentence:
 which is checkable in a way `{"comparator": "gte", "value": 20}` is not.
 
 **Why a catalogue and not a text field.** The engine can gate on any metric key at all.
-Left open, someone types `health.runningspeed`, nothing ever writes that key, and they
+Left open, someone types `pose.kneeflexion`, nothing ever writes that key, and they
 have built a test that can never pass and no error to explain why. The API refuses
 anything outside the catalogue for the same reason it refuses reps on a hand-logged
 drill: nothing counts reps for an exercise the camera never sees.
 
-**Same key means replace, not argue.** *"The standard sprint gate, but 95%"* is a change
+**Same key means replace, not argue.** *"The standard hop test, but 95%"* is a change
 to an existing rule, not a second rule sitting beside it disagreeing. A custom criterion
 whose key matches a library one takes its place; deleting it brings the standard target
 back. A new key is simply an extra test, and it lands after the standard battery so the
@@ -575,28 +576,6 @@ set**, never the sum — "do 20" means twenty in a row, and summing would let so
 clear the gate with two sets of ten a fortnight apart, having never once done the thing
 the gate is about.
 
-### 3. Health data — `app/services/health/`
-
-Neither HealthKit nor Health Connect has a server API — only the device can read the
-store. So the flow is:
-
-1. App requests read permission for the metrics its protocol actually uses.
-2. App queries with its saved anchor (`HKQueryAnchor` / Health Connect changes token).
-3. App `POST`s the delta to `/health/sync` with the platform's own record UUIDs.
-4. Backend maps type → canonical metric, converts units, **deduplicates on the UUID**,
-   and echoes the anchor back to store.
-
-Re-sending a window you already sent is a no-op, so a phone cannot double-count a run.
-
-`GET /health/supported-metrics` lists every type the backend understands, so the app
-can send a whole batch unfiltered and let the server ignore what it does not use.
-
-The two metrics most worth wiring up for rehab are Apple's
-`WalkingAsymmetryPercentage` and `WalkingDoubleSupportPercentage` — they expose a limp
-days before the player reports one. **High-speed running distance is derived** by the
-backend (neither platform exposes it): `sum(speed × duration)` for every sample above
-5.5 m/s, rolled up per day.
-
 ---
 
 ## Metric namespaces
@@ -604,7 +583,6 @@ backend (neither platform exposes it): `sum(speed × duration)` for every sample
 | Prefix | Written by | Examples |
 |---|---|---|
 | `pose.*` | The pose engine, on set upload | `pose.slsq_knee_flexion`, `pose.knee_flexion_rom`, `pose.landing_knee_valgus`, `pose.copenhagen_hold` |
-| `health.*` | `/health/sync`, or a manual entry | `health.running_speed`, `health.walking_asymmetry`, `health.distance_high_speed` |
 | `test.*` | `POST /injuries/{id}/tests` | `test.hop_triple`, `test.sprint_30m`, `test.iso_hamstring`, `test.heel_raise_reps` |
 | `pro.*` | Pain logs and session completion | `pro.pain_rest`, `pro.pain_activity`, `pro.confidence`, `pro.rpe` |
 | `session.*` | Computed on the fly, never stored | `session.days_in_phase`, `session.adherence_pct`, `session.pain_free_days`, `session.mean_form_score` |
@@ -707,8 +685,6 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 
 | Method | Path | |
 |---|---|---|
-| `POST` | `/health/sync` | Idempotent batch ingest |
-| `GET` | `/health/supported-metrics` | |
 
 ### Uploading a set
 
@@ -749,7 +725,6 @@ line count:
   ignores a great number on the healthy side; the same injury gets a different speed
   target per position; `min_samples`; sign-off gating; `min_days` blocks even with
   perfect numbers; clearing the last phase closes the episode.
-- `test_health.py` — type mapping, unit conversion, re-sync is a no-op, unmapped types
   are reported not swallowed, HSR derivation, pre-injury baseline derivation.
 - `test_api_flow.py` — the whole journey the app will make, plus authorisation edges
   (players cannot sign themselves off, cannot read another player's episode), and the

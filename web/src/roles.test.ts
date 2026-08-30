@@ -6,7 +6,7 @@ import {
   roleCardHtml,
   roleChanges,
   roleDetailHtml,
-  sprintGateFraction,
+  roleSummary,
 } from "./roles";
 import { bar, progressRing } from "./ui";
 
@@ -16,9 +16,6 @@ const position = (over: Partial<PositionInfo> = {}): PositionInfo => ({
   label_en: "Winger",
   label_th: "ปีก",
   blurb_en: "Repeated top-speed sprints and sharp cuts.",
-  speed_p3: 90,
-  speed_p4: 97,
-  hsr_p4: 95,
   extra_exercises: [
     { key: "lateral_bound", label_en: "Lateral bound and stick", phase_key: "p3_running", phase_order: 3 },
     { key: "repeated_sprint", label_en: "Repeated sprint ability", phase_key: "p4_return", phase_order: 4 },
@@ -35,24 +32,12 @@ const position = (over: Partial<PositionInfo> = {}): PositionInfo => ({
 });
 
 describe("what a role changes", () => {
-  it("leads with the sprint gate, because that is what keeps a player off the pitch", () => {
-    const [first] = roleChanges(position());
-    expect(first!.label).toBe("Sprint gate");
-    expect(first!.detail).toContain("90%");
-    expect(first!.detail).toContain("97%");
-  });
-
-  it("names both running numbers so neither is a surprise later", () => {
-    const details = roleChanges(position()).map((c) => c.detail);
-    expect(details.some((d) => d.includes("95%"))).toBe(true);
-  });
-
   it("lists the drills and tests the position adds", () => {
     const changes = roleChanges(position());
     const drills = changes.find((c) => c.label === "Extra drills");
     const tests = changes.find((c) => c.label === "Extra test");
-    expect(drills?.detail).toBe("Lateral bound and stick · Repeated sprint ability");
-    expect(tests?.detail).toBe("Repeated-sprint drop-off ≤ 5%");
+    expect(drills?.detail).toBe("Lateral bound and stick \u00b7 Repeated sprint ability");
+    expect(tests?.detail).toBe("Repeated-sprint drop-off \u2264 5%");
   });
 
   it("says drill, not drills, when there is only one", () => {
@@ -64,49 +49,42 @@ describe("what a role changes", () => {
     expect(roleChanges(one).map((c) => c.label)).toContain("Extra drill");
   });
 
-  it("shows only the two running lines for a position that adds nothing", () => {
+  it("has nothing to list for a position that adds nothing", () => {
     const plain = position({ extra_exercises: [], extra_criteria: [] });
-    expect(roleChanges(plain)).toHaveLength(2);
+    expect(roleChanges(plain)).toHaveLength(0);
   });
 });
 
-describe("the sprint gate bar", () => {
-  it("stays inside the bar no matter what the server sends", () => {
-    for (const value of [0, 50, 70, 85, 97, 100, 140]) {
-      const fraction = sprintGateFraction(value);
-      expect(fraction).toBeGreaterThanOrEqual(0);
-      expect(fraction).toBeLessThanOrEqual(1);
-    }
+describe("the line on the card", () => {
+  it("counts what the role adds", () => {
+    expect(roleSummary(position())).toBe("Adds 2 drills \u00b7 1 test");
   });
 
-  it("ranks the roles apart — the whole reason it is zoomed", () => {
-    // On a plain 0-100 scale a keeper (75) and a winger (97) differ by a fifth
-    // of the bar and read as identical. The zoom has to separate them clearly.
-    const keeper = sprintGateFraction(75);
-    const winger = sprintGateFraction(97);
-    expect(winger - keeper).toBeGreaterThan(0.5);
-  });
-
-  it("never claims a harder gate is easier", () => {
-    expect(sprintGateFraction(85)).toBeLessThan(sprintGateFraction(90));
-    expect(sprintGateFraction(90)).toBeLessThan(sprintGateFraction(96));
+  it("says so plainly when a role adds nothing, rather than going blank", () => {
+    /* Centre midfield is this case. An empty card in a grid of six reads as a
+       loading bug, and the picker is a decision -- "this one changes nothing"
+       is a real answer to it. */
+    const plain = position({ extra_exercises: [], extra_criteria: [] });
+    expect(roleSummary(plain)).toBe("The core programme, unchanged");
+    expect(roleCardHtml(plain, false)).toContain("The core programme, unchanged");
+    expect(roleDetailHtml(plain)).toMatch(/same for everyone/i);
   });
 });
 
 describe("ordering", () => {
-  it("puts the least demanding role first so the bars climb", () => {
-    const keeper = position({ key: "goalkeeper", speed_p4: 85 });
-    const winger = position({ key: "winger", speed_p4: 97 });
-    const back = position({ key: "centre_back", speed_p4: 92 });
-    expect(byDemand([winger, keeper, back]).map((p) => p.key)).toEqual([
+  it("keeps the order the server sent, which is keeper first down the pitch", () => {
+    const keeper = position({ key: "goalkeeper" });
+    const winger = position({ key: "winger" });
+    const back = position({ key: "centre_back" });
+    expect(byDemand([keeper, back, winger]).map((p) => p.key)).toEqual([
       "goalkeeper",
       "centre_back",
       "winger",
     ]);
   });
 
-  it("does not reorder the caller's array", () => {
-    const input = [position({ key: "winger", speed_p4: 97 }), position({ key: "gk", speed_p4: 85 })];
+  it("does not reorder the caller\u0027s array", () => {
+    const input = [position({ key: "winger" }), position({ key: "gk" })];
     byDemand(input);
     expect(input.map((p) => p.key)).toEqual(["winger", "gk"]);
   });
@@ -117,12 +95,6 @@ describe("markup", () => {
     expect(roleCardHtml(position(), true)).toContain('aria-pressed="true"');
     expect(roleCardHtml(position(), true)).toContain("role-card on");
     expect(roleCardHtml(position(), false)).toContain('aria-pressed="false"');
-  });
-
-  it("prints the real percentage next to the comparative bar", () => {
-    // The bar is zoomed to make roles distinguishable; the number is the truth,
-    // so it has to be on screen beside it.
-    expect(roleCardHtml(position(), false)).toContain("97%");
   });
 
   it("carries the position key, which is what the click handler reads", () => {
@@ -142,12 +114,6 @@ describe("markup", () => {
    emitting these hooks the motion silently dies, and nothing else fails --
    so the contract is pinned here rather than left to a visual check. */
 describe("animation hooks", () => {
-  it("gives the role card a bar for animateBars to fill", () => {
-    const html = roleCardHtml(position(), false);
-    expect(html).toContain('style="width:0"');
-    expect(html).toMatch(/data-width="\d+"/);
-  });
-
   it("gives the progress bar a target width and starts it empty", () => {
     expect(bar(64)).toBe('<div class="bar"><i style="width:0" data-width="64"></i></div>');
   });

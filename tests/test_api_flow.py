@@ -275,38 +275,6 @@ def test_pain_logs_flow_into_the_pro_criteria(
     assert streak["observed"] >= 3
 
 
-def test_health_sync_is_accepted_and_deduplicated(
-    client: TestClient, headers: dict[str, str], episode_id: int
-) -> None:
-    payload = {
-        "platform": "apple_health",
-        "device_id": "iphone-15",
-        "anchor": "anchor-token-1",
-        "records": [
-            {
-                "type": "HKQuantityTypeIdentifierRunningSpeed",
-                "value": 30.6,
-                "unit": "km/h",
-                "start_at": (datetime.now(UTC) - timedelta(hours=2)).isoformat(),
-                "external_id": "hk-uuid-aaa",
-            }
-        ],
-    }
-    first = client.post(f"{API}/health/sync", headers=headers, json=payload).json()
-    second = client.post(f"{API}/health/sync", headers=headers, json=payload).json()
-    assert first["stored"] == 1
-    assert second["stored"] == 0 and second["duplicates"] == 1
-    assert first["anchor"] == "anchor-token-1"
-
-    samples = client.get(
-        f"{API}/injuries/{episode_id}/metrics",
-        headers=headers,
-        params={"metric_key": "health.running_speed"},
-    ).json()
-    assert len(samples) == 1
-    assert samples[0]["value"] == pytest.approx(8.5, abs=0.01)  # converted from km/h
-
-
 def test_players_cannot_sign_themselves_off(
     client: TestClient, headers: dict[str, str], episode_id: int
 ) -> None:
@@ -345,14 +313,23 @@ def test_catalog_exposes_every_position_and_injury_combination(
     winger = client.get(f"{API}/catalog/protocols/winger/hamstring").json()
     keeper = client.get(f"{API}/catalog/protocols/goalkeeper/hamstring").json()
 
-    def speed_target(protocol: dict) -> float:
-        phase = next(p for p in protocol["phases"] if p["phase_key"] == "p3_running")
-        criterion = next(c for c in phase["exit_criteria"] if c["key"] == "speed_vs_baseline")
-        return criterion["spec"]["target"]["value"]
+    def drills(protocol: dict, phase_key: str) -> set[str]:
+        phase = next(p for p in protocol["phases"] if p["phase_key"] == phase_key)
+        return {rx["exercise"]["key"] for rx in phase["prescriptions"]}
 
-    # Same injury, different job: the winger has to run faster to be let back.
-    assert speed_target(winger) == 90
-    assert speed_target(keeper) == 75
+    # Same injury, different job: a keeper trains dive landings in phase 3 and a
+    # winger trains bounds, and neither is handed the other's work.
+    assert "goalkeeper_dive_landing" in drills(keeper, "p3_running")
+    assert "goalkeeper_dive_landing" not in drills(winger, "p3_running")
+    assert "lateral_bound" in drills(winger, "p3_running")
+
+    def criteria(protocol: dict, phase_key: str) -> set[str]:
+        phase = next(p for p in protocol["phases"] if p["phase_key"] == phase_key)
+        return {c["key"] for c in phase["exit_criteria"]}
+
+    # And the keeper is tested on the landing they were made to practise.
+    assert "lateral_landing_valgus" in criteria(keeper, "p3_running")
+    assert "lateral_landing_valgus" not in criteria(winger, "p3_running")
 
 
 def test_role_picker_shows_what_a_position_actually_changes(client: TestClient) -> None:
@@ -373,18 +350,25 @@ def test_role_picker_shows_what_a_position_actually_changes(client: TestClient) 
 
     for position in positions:
         assert position["blurb_en"].strip(), f"{position['key']} has nothing to say"
-        # The gate must tighten as a player gets closer to playing, never loosen.
-        assert position["speed_p3"] < position["speed_p4"]
+        for extra in position["extra_exercises"] + position["extra_criteria"]:
+            assert extra["phase_order"] in (1, 2, 3, 4)
 
-    # The numbers on the picker are the ones the protocol really enforces.
     winger, keeper = by_key["winger"], by_key["goalkeeper"]
-    assert winger["speed_p3"] == 90
-    assert keeper["speed_p3"] == 75
 
+    # What the picker promises is what the protocol composes.
     protocol = client.get(f"{API}/catalog/protocols/winger/hamstring").json()
-    phase = next(p for p in protocol["phases"] if p["phase_key"] == "p3_running")
-    criterion = next(c for c in phase["exit_criteria"] if c["key"] == "speed_vs_baseline")
-    assert criterion["spec"]["target"]["value"] == winger["speed_p3"]
+    listed = {c["key"] for c in winger["extra_criteria"]}
+    composed = {
+        c["key"] for phase in protocol["phases"] for c in phase["exit_criteria"]
+    }
+    assert listed <= composed, "the picker names a test the programme does not carry"
+
+    # Centre midfield adds nothing of its own. Its only extra criterion was the
+    # weekly-distance gate, which the health app fed; with that gone the role
+    # runs the core programme unchanged. Pinned rather than papered over -- if
+    # something position-specific is added for them, update this.
+    assert by_key["centre_midfield"]["extra_exercises"] == []
+    assert by_key["centre_midfield"]["extra_criteria"] == []
 
     # A keeper trains dive landings; a winger does not. That difference is the
     # whole argument for asking the question.
@@ -410,17 +394,15 @@ def test_changing_position_moves_the_targets_without_losing_progress(
     before = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
     assert before["current_phase"] == "p1_protect"
 
-    def speed_gate() -> float:
+    def running_drills() -> set[str]:
         protocol = client.get(
             f"{API}/injuries/{episode_id}/protocol", headers=headers
         ).json()
         phase = next(p for p in protocol["phases"] if p["phase_key"] == "p3_running")
-        criterion = next(
-            c for c in phase["exit_criteria"] if c["key"] == "speed_vs_baseline"
-        )
-        return criterion["spec"]["target"]["value"]
+        return {rx["exercise"]["key"] for rx in phase["prescriptions"]}
 
-    assert speed_gate() == 90  # winger
+    assert "lateral_bound" in running_drills()  # winger
+    assert "goalkeeper_dive_landing" not in running_drills()
 
     # Advance out of phase 1 so there is real progress to preserve.
     client.post(
@@ -436,7 +418,7 @@ def test_changing_position_moves_the_targets_without_losing_progress(
     assert updated.json()["position"] == "goalkeeper"
 
     # The programme followed the player...
-    assert speed_gate() == 75  # goalkeeper
+    assert "goalkeeper_dive_landing" in running_drills()
     keeper_plan = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
     assert keeper_plan["position"] == "goalkeeper"
     assert keeper_plan["injury_site"] == before["injury_site"]
@@ -590,10 +572,3 @@ def test_every_running_phase_is_gated_on_change_of_direction(client: TestClient)
             phase = next(p for p in protocol["phases"] if p["phase_key"] == key)
             keys = {c["key"] for c in phase["exit_criteria"]}
             assert "change_of_direction" in keys, f"{site} {key}"
-
-
-def test_supported_health_metrics_are_discoverable(client: TestClient) -> None:
-    body = client.get(f"{API}/health/supported-metrics").json()
-    assert "HKQuantityTypeIdentifierRunningSpeed" in body["apple_health"]
-    assert "SpeedRecord" in body["health_connect"]
-    assert body["canonical_units"]["health.running_speed"] == "m/s"

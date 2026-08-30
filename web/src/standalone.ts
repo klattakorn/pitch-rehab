@@ -157,7 +157,7 @@ function episodeId(): number {
  * recorded, kept out of the bundle at 1.6 MB, and fetched the first time
  * somebody actually changes something. Most visitors never ask for it.
  */
-let library: Record<string, { phases: Body[] }> | null = null;
+let library: Record<string, Body & { phases: Body[] }> | null = null;
 let loading: Promise<void> | null = null;
 
 export function ready(): Promise<void> {
@@ -197,10 +197,21 @@ function protocol(id: number): { phases: Body[] } | undefined {
   return chosen ?? (RESPONSES[`/injuries/${id}/protocol`] as { phases: Body[] } | undefined);
 }
 
-/** Has the player moved off the programme the snapshot was recorded against? */
+/**
+ * Has the player moved off the programme the snapshot was recorded against?
+ *
+ * By protocol id, because the library is a second copy of the same data: the
+ * entry for the player's own position and injury holds everything the recorded
+ * one holds and is still a different object. Comparing the objects said "moved"
+ * the moment the library loaded -- which happens before the first request -- and
+ * the app answered every screen from a phase nothing had been measured in,
+ * throwing away the recorded results it exists to show.
+ */
 function movedOff(id: number): boolean {
   const key = playerKey();
-  return Boolean(key && library?.[key] && library[key] !== RESPONSES[`/injuries/${id}/protocol`]);
+  const chosen = key ? library?.[key] : undefined;
+  const recorded = RESPONSES[`/injuries/${id}/protocol`] as Body | undefined;
+  return Boolean(chosen && recorded && chosen["id"] !== recorded["id"]);
 }
 
 function phaseOf(id: number, key: string): Body | undefined {
@@ -370,7 +381,16 @@ function get(path: string, id: number): Reply {
   // A phase chosen on the phone, or a programme swapped underneath: either way
   // the recorded answers are for a different thing and the protocol is the
   // source instead.
-  const shifted = local.phase ?? (movedOff(id) ? phaseOrder(id)[0] : null);
+  //
+  // Unless the phase chosen is the one the snapshot was recorded against, which
+  // happens whenever somebody moves forward and then comes back. The recorded
+  // answers are that phase's answers, and discarding them would blank a screen
+  // that has real results sitting behind it.
+  const snapshotPhase = (RESPONSES["/injuries?status_filter=active"] as Body[] | undefined)?.[0]?.[
+    "current_phase"
+  ];
+  const away = local.phase === snapshotPhase && !movedOff(id) ? null : local.phase;
+  const shifted = away ?? (movedOff(id) ? phaseOrder(id)[0] : null);
 
   if (shifted && path === `/injuries/${id}/today`) {
     const phase = phaseOf(id, shifted);
@@ -382,7 +402,7 @@ function get(path: string, id: number): Reply {
     if (gate) {
       return ok({
         ...gate,
-        criteria: [...(gate["criteria"] as Body[]), ...local.criteria],
+        criteria: withMyCriteria(gate),
       });
     }
   }
@@ -428,10 +448,10 @@ function get(path: string, id: number): Reply {
     if (local.criteria.length === 0) return ok(gate);
     // A criterion written on the phone joins the list as never measured, which
     // is exactly what it is -- not a pass, not a failure, no data behind it.
-    return ok({ ...gate, criteria: [...(gate["criteria"] as Body[]), ...local.criteria] });
+    return ok({ ...gate, criteria: withMyCriteria(gate) });
   }
 
-  if (path === `/injuries/${id}/criteria`) return ok(local.criteria);
+  if (path === `/injuries/${id}/criteria`) return ok(myCustom(id));
 
   const recorded = RESPONSES[path];
   if (recorded !== undefined) return ok(recorded);
@@ -452,42 +472,182 @@ function withoutSets(session: LocalSession): Body {
  * puts under "Your test will read", from the same function, so what a player
  * confirms is exactly what they get.
  */
-function labelFor(draft: Body): string {
+/* ------------------------------------------------------------ own targets --
+ *
+ * A test the player writes goes to the server as a *draft*: the metric and the
+ * exercise as two separate fields, the number as `value`. The server turns that
+ * into two different things -- a stored spec, and a row on the gate -- and the
+ * app reads both. Neither of them looks like the draft.
+ *
+ * So the draft is what is kept here, and both shapes are derived from it on the
+ * way out, mirroring `app/services/criteria/authoring.py`. Keeping the draft and
+ * serving it unchanged, which is what this did before, produced a target that
+ * could not be started with the camera (its metric named no exercise), showed
+ * no number to beat (`value` is not `target`), and could not be reopened to
+ * edit (no `spec` at all).
+ */
+
+const ABSOLUTE = "absolute";
+/** `authoring.MAX_KEY`. */
+const MAX_KEY = 64;
+
+/** The catalogue entry a draft was built from, and the exercise it names. */
+function authored(draft: Body): {
+  item: Authorable | undefined;
+  exercise: { name_en: string } | undefined;
+} {
   const catalogue = RESPONSES["/injuries/criteria/authorable"] as
     | AuthorableCatalogue
     | undefined;
-  const item = catalogue?.metrics.find((m) => m.key === draft["metric"]) as
-    | Authorable
-    | undefined;
+  return {
+    item: catalogue?.metrics.find((m) => m.key === draft["metric"]),
+    exercise: catalogue?.exercises.find((e) => e.key === draft["exercise_key"]),
+  };
+}
+
+function labelFor(draft: Body): string {
+  const { item, exercise } = authored(draft);
   if (!item) return String(draft["metric"] ?? "Your target");
-  const exercise = catalogue?.exercises.find((e) => e.key === draft["exercise_key"]);
   return preview(
     item,
-    String(draft["target_type"] ?? "absolute"),
+    String(draft["target_type"] ?? ABSOLUTE),
     Number(draft["value"] ?? 0),
     exercise?.name_en ?? null,
   );
 }
 
-function putCriterion(draft: Body): Reply {
-  const key = String(draft["key"] ?? `custom_${Date.now()}`);
+/**
+ * `session.reps` and `single_leg_squat`, joined as `build_spec` joins them.
+ *
+ * This is the field that says what the camera is being asked to score. A target
+ * stored with the base metric alone still appears on the gate, and the Test
+ * screen offers no way to start it -- there is no exercise in it to start.
+ */
+function metricFor(draft: Body, item: Authorable | undefined): string {
+  const base = String(draft["metric"] ?? "");
+  const exercise = draft["exercise_key"];
+  return item?.needs_exercise && exercise ? base + "." + String(exercise) : base;
+}
+
+/** `authoring.build_key`: deterministic, so editing a test replaces it. */
+function keyFor(draft: Body, item: Authorable | undefined): string {
+  const slug = (value: string) =>
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9_]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  const targetType = String(draft["target_type"] ?? ABSOLUTE);
+  const parts = ["custom", slug(item?.key ?? String(draft["metric"] ?? ""))];
+  if (draft["exercise_key"]) parts.push(slug(String(draft["exercise_key"])));
+  if (targetType !== ABSOLUTE) parts.push(targetType);
+  return parts.join("_").slice(0, MAX_KEY);
+}
+
+/** A comparison against a percentage is in percent, whatever the metric counts. */
+const unitFor = (item: Authorable | undefined, targetType: string): string | null =>
+  targetType === ABSOLUTE ? (item?.unit ?? null) : "%";
+
+/** One target in the shape `GET /injuries/{id}/criteria` returns. */
+function asCustom(draft: Body, index: number): Body {
+  const { item } = authored(draft);
+  const targetType = String(draft["target_type"] ?? ABSOLUTE);
+  return {
+    // Only ever used to tell rows apart. The real one is a database id, and
+    // there is no database here.
+    id: index + 1,
+    phase_key: draft["phase_key"] ?? null,
+    key: draft["key"],
+    label_en: labelFor(draft),
+    help_en: item?.help_en ?? null,
+    required: draft["required"] ?? true,
+    spec: {
+      metric: metricFor(draft, item),
+      source: item?.source ?? "session",
+      aggregate: item?.default_aggregate ?? "latest",
+      window_days: draft["window_days"] ?? item?.default_window_days ?? null,
+      comparator: item?.comparator ?? "gte",
+      // An LSI target reads both limbs, exactly as build_spec widens it.
+      scope: targetType === "lsi" ? "both" : (item?.scope ?? "any"),
+      target: {
+        type: targetType,
+        value: Number(draft["value"] ?? 0),
+        unit: unitFor(item, targetType),
+      },
+    },
+  };
+}
+
+/** The same target as a row on the gate: a real rule, no reading behind it. */
+function asResult(draft: Body): Body {
+  const { item } = authored(draft);
+  const targetType = String(draft["target_type"] ?? ABSOLUTE);
   const label = labelFor(draft);
-  const criterion: Body = {
-    ...draft,
-    key,
+  const detail = "Written on this phone. Nothing measured against it yet.";
+  return {
+    key: draft["key"],
     label_en: label,
     label_th: label,
+    metric: metricFor(draft, item),
+    source: item?.source ?? "session",
+    required: draft["required"] ?? true,
     status: "no_data",
+    comparator: item?.comparator ?? "gte",
+    target_type: targetType,
     observed: null,
+    target: Number(draft["value"] ?? 0),
+    unit: unitFor(item, targetType),
     progress: 0,
     samples: 0,
-    source: "custom",
-    detail_en: "Written on this phone. Nothing measured against it yet.",
-    detail_th: "Written on this phone. Nothing measured against it yet.",
+    baseline: null,
+    baseline_origin: null,
+    detail_en: detail,
+    detail_th: detail,
   };
-  local.criteria = [...local.criteria.filter((c) => c["key"] !== key), criterion];
+}
+
+/**
+ * The player's own targets: the ones the snapshot recorded, plus the ones
+ * written since, with a written one replacing a recorded one of the same key.
+ *
+ * Replacing rather than appending is what the endpoint is: a PUT, keyed on what
+ * is being measured, so setting the same test twice edits it instead of leaving
+ * the gate with two rules arguing about the same exercise.
+ */
+function myCustom(id: number): Body[] {
+  const written = new Set(local.criteria.map((c) => c["key"]));
+  const kept = ((RESPONSES[`/injuries/${id}/criteria`] as Body[] | undefined) ?? []).filter(
+    (c) => !written.has(c["key"]),
+  );
+  return [...kept, ...local.criteria.map(asCustom)];
+}
+
+/**
+ * One phase's gate, with the player's own targets folded into it.
+ *
+ * Two things happen here, and both are what the server does. A written target
+ * *replaces* the criterion it shares a key with, rather than joining it -- that
+ * covers tightening a standard test as well as editing your own, which is why
+ * the filter runs over the whole list. And a target belongs to the phase it was
+ * written in, so it does not follow the player into the next one.
+ */
+function withMyCriteria(gate: Body): Body[] {
+  const phase = gate["phase_key"];
+  const mine = local.criteria.filter((c) => (c["phase_key"] ?? phase) === phase);
+  const written = new Set(mine.map((c) => c["key"]));
+  const recorded = (gate["criteria"] as Body[] | undefined) ?? [];
+  return [...recorded.filter((c) => !written.has(c["key"])), ...mine.map(asResult)];
+}
+
+function putCriterion(draft: Body): Reply {
+  const { item } = authored(draft);
+  // The builder sends a key only when it is editing something that exists.
+  // Otherwise it is derived, so adding the same test twice edits it rather than
+  // leaving two rules on the gate disagreeing about the same exercise.
+  const key = String(draft["key"] ?? keyFor(draft, item));
+  const stored: Body = { ...draft, key };
+  local.criteria = [...local.criteria.filter((c) => c["key"] !== key), stored];
   save(local);
-  return ok(criterion);
+  return ok(asCustom(stored, local.criteria.length - 1));
 }
 
 function post(path: string, body: Body, id: number): Reply {
@@ -574,12 +734,25 @@ function post(path: string, body: Body, id: number): Reply {
   }
 
   if (path === `/injuries/${id}/advance`) {
-    return no(
-      503,
-      "Moving to the next phase means re-running the exit criteria, and that " +
-        "happens on the laptop. The gate you can see is the one from when this " +
-        "snapshot was taken.",
-    );
+    // The gate the player is looking at, asked for by the same route the app
+    // uses. Nothing is judged here: it is either the recorded verdict of the
+    // real engine, or a phase with nothing measured in it yet.
+    const gate = get(`/injuries/${id}/exit-criteria`, id);
+    if (!gate.ok || !(gate.body as Body)["passed"]) {
+      return no(
+        503,
+        "Moving to the next phase means re-running the exit criteria, and that " +
+          "happens on the laptop. The gate you can see is the one from when this " +
+          "snapshot was taken.",
+      );
+    }
+
+    const order = phaseOrder(id);
+    const next = order[order.indexOf(String(episodes()[0]?.["current_phase"] ?? "")) + 1];
+    if (!next) return no(422, "This is the last phase of the programme.");
+    local.phase = next;
+    save(local);
+    return ok({ ...(episodes()[0] ?? {}), current_phase: next });
   }
 
   return no(503, NEEDS_LAPTOP);

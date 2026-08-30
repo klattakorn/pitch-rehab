@@ -56,7 +56,7 @@ from app.models.injury import EpisodeCriterion, InjuryEpisode, PhaseAttempt  # n
 from app.models.metrics import MetricSample  # noqa: E402
 from app.models.protocol import Exercise  # noqa: E402
 from app.models.session import ExerciseSet, PainLog, RehabSession  # noqa: E402
-from app.models.user import PlayerBaseline, PlayerProfile, User  # noqa: E402
+from app.models.user import PlayerProfile, User  # noqa: E402
 from app.services.criteria import authoring  # noqa: E402
 from app.services.criteria.engine import evaluate_phase  # noqa: E402
 from app.services.progression import select_protocol  # noqa: E402
@@ -137,21 +137,6 @@ def make_player(db) -> PlayerProfile:  # noqa: ANN001
         training_days_per_week=5,
     )
     db.add(profile)
-    db.flush()
-
-    # A pre-injury top speed, so the phase 3 and 4 running gates compare against
-    # this player rather than against the position average.
-    db.add(
-        PlayerBaseline(
-            player_id=profile.id,
-            metric_key="health.running_speed",
-            side=Side.BILATERAL,
-            value=8.6,
-            unit="m/s",
-            origin="manual",
-            note="GPS vest, pre-season",
-        )
-    )
     db.flush()
     return profile
 
@@ -379,17 +364,6 @@ def add_metrics(db, episode: InjuryEpisode, *, valgus_passes: bool) -> None:  # 
                source=CriterionSource.TEST, side=injured)
         sample("test.hop_single", ramp(day_ago, 1.46, 1.49), "m", day_ago,
                source=CriterionSource.TEST, side=healthy)
-
-    # Watch and phone data, every day.
-    for day_ago in range(DAYS):
-        asymmetry = max(0.4, ramp(day_ago, 6.5, 1.6)) + rng.uniform(-0.3, 0.3)
-        sample("health.walking_asymmetry", asymmetry, "%", day_ago,
-               source=CriterionSource.HEALTH)
-        sample("health.step_count", ramp(day_ago, 5200, 9100) + rng.uniform(-700, 700),
-               "count", day_ago, source=CriterionSource.HEALTH)
-        if day_ago in session_days():
-            sample("health.distance_total", ramp(day_ago, 1800, 4200) + rng.uniform(-250, 250),
-                   "m", day_ago, source=CriterionSource.HEALTH)
     db.flush()
 
 

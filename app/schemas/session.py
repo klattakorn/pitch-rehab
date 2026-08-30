@@ -177,7 +177,7 @@ class PainLogOut(ORMModel):
 class TestResultIn(BaseModel):
     """A field test typed in by the player or clinician (hop test, sprint, dynamometer)."""
 
-    metric_key: str = Field(pattern=r"^(test|health)\.[a-z0-9_]+$")
+    metric_key: str = Field(pattern=r"^test\.[a-z0-9_]+$")
     value: float
     unit: str | None = None
     side: Side | None = None

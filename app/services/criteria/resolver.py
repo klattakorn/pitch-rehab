@@ -66,7 +66,7 @@ class MetricResolver:
     """Turns a metric key + window + limb scope into numbers.
 
     Everything the exit-criteria engine knows about a player flows through here:
-    stored ``metric_sample`` rows for pose/test/pro/health data, and computed
+    stored ``metric_sample`` rows for pose/test/pro data, and computed
     values for the ``session.*`` namespace (adherence, time in phase, streaks).
     """
 

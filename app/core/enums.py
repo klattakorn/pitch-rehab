@@ -95,7 +95,6 @@ class CriterionSource(StrEnum):
     POSE = "pose"  # measured by MediaPipe during a rehab session
     TEST = "test"  # a field test (30m sprint, CMJ, hop test, isometric)
     PRO = "pro"  # patient-reported outcome (pain, confidence, questionnaire)
-    HEALTH = "health"  # synced from Apple Health / Google Health Connect
     SESSION = "session"  # adherence / volume derived from the app itself
     MANUAL = "manual"  # clinician sign-off
 
@@ -139,10 +138,3 @@ class CriterionStatus(StrEnum):
     FAIL = "fail"
     NO_DATA = "no_data"  # never measured -> cannot pass, but is not a failure
     PENDING_SIGNOFF = "pending_signoff"
-
-
-class HealthPlatform(StrEnum):
-    APPLE_HEALTH = "apple_health"
-    HEALTH_CONNECT = "health_connect"  # Google / Android
-    MANUAL = "manual"
-    OTHER = "other"

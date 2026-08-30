@@ -4,7 +4,7 @@
     python scripts/walkthrough.py      # in another
 
 Creates one winger with a left hamstring tear, does a camera-scored session,
-logs pain, syncs health data, and prints the exit-criteria gate at each step.
+logs pain, and prints the exit-criteria gate at each step.
 Everything it does is a plain HTTP call you can repeat by hand in /docs.
 """
 
@@ -264,43 +264,11 @@ def main() -> None:
     print("    6 days of pain-free logs")
 
     # ---------------------------------------------------------------- 9
-    step("9.", "Sync data from the phone's health app")
-    show("POST", "/api/v1/health/sync")
-    payload = {
-        "platform": "apple_health",
-        "device_id": "iphone-walkthrough",
-        "anchor": "hk-anchor-001",
-        "records": [
-            {
-                "type": "HKQuantityTypeIdentifierRunningSpeed",
-                "value": 28.8, "unit": "km/h",
-                "start_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
-                "end_at": (datetime.now(UTC) - timedelta(days=1) +
-                           timedelta(seconds=45)).isoformat(),
-                "external_id": "hk-run-1",
-            },
-            {
-                "type": "HKQuantityTypeIdentifierWalkingAsymmetryPercentage",
-                "value": 2.4, "unit": "%",
-                "start_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
-                "external_id": "hk-asym-1",
-            },
-        ],
-    }
-    first = check(client.post(f"{API}/health/sync", headers=headers, json=payload))
-    second = check(client.post(f"{API}/health/sync", headers=headers, json=payload))
-    print(f"    first sync : stored {first['stored']}, derived {first['derived']} "
-          f"(high-speed running distance)")
-    print(f"    same batch again: stored {second['stored']}, "
-          f"duplicates {second['duplicates']}  {DIM}← re-syncing is safe{OFF}")
-    print(f"{DIM}    28.8 km/h was converted to 8 m/s on the way in.{OFF}")
-
-    # ---------------------------------------------------------------- 10
-    step("10.", "The gate again, now that there is data")
+    step("9.", "The gate again, now that there is data")
     print_gate(check(client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers)))
 
-    # ---------------------------------------------------------------- 11
-    step("11.", "Try to move to the next phase")
+    # ---------------------------------------------------------------- 10
+    step("10.", "Try to move to the next phase")
     show("POST", f"/api/v1/injuries/{episode_id}/advance")
     advance = check(client.post(f"{API}/injuries/{episode_id}/advance", headers=headers))
     if advance["advanced"]:
@@ -321,14 +289,14 @@ def main() -> None:
           f"cleared?'{OFF}")
 
     if advance["advanced"]:
-        step("12.", "The new phase's gate")
+        step("11.", "The new phase's gate")
         print_gate(check(client.get(f"{API}/injuries/{episode_id}/exit-criteria",
                                     headers=headers)))
         print(f"\n{DIM}    Harder gates, and new exercises to match. "
               f"GET /injuries/{episode_id}/today to see them.{OFF}")
 
-    # ---------------------------------------------------------------- 13
-    step("13.", "Same injury, different position")
+    # ---------------------------------------------------------------- 12
+    step("12.", "Same injury, different position")
     show("GET", "/api/v1/catalog/protocols/{position}/hamstring")
     print(f"\n    {'position':<18}{'phase 3 speed':>14}{'phase 4 speed':>15}")
     for position in ("winger", "full_back", "striker", "centre_midfield",

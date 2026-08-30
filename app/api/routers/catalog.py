@@ -84,8 +84,7 @@ _ROLE_BLURBS: dict[Position, str] = {
         "Covers the most ground overall, at a steadier pace than the wide players."
     ),
     Position.WINGER: (
-        "Repeated top-speed sprints and sharp cuts. The hardest speed target "
-        "in the app."
+        "Repeated top-speed sprints and sharp cuts, off both feet."
     ),
     Position.STRIKER: (
         "Explosive short sprints, jumping for the ball, and turning under pressure."
@@ -99,8 +98,8 @@ _PHASE_ORDER: dict[PhaseKey, int] = {key: i + 1 for i, key in enumerate(PhaseKey
 def list_positions() -> list[PositionOut]:
     """The six roles, and what each one changes about the programme.
 
-    Picking a position is not cosmetic -- it moves the sprint gates a player has
-    to clear and adds drills specific to the role. This endpoint returns those
+    Picking a position is not cosmetic -- it adds drills specific to the role
+    and tests other roles do not have to pass. This endpoint returns those
     differences so the picker can show them instead of asking the player to take
     it on trust.
     """
@@ -146,9 +145,6 @@ def list_positions() -> list[PositionOut]:
                 label_en=profile.label_en,
                 label_th=profile.label_th,
                 blurb_en=_ROLE_BLURBS[position],
-                speed_p3=profile.speed_p3,
-                speed_p4=profile.speed_p4,
-                hsr_p4=profile.hsr_p4,
                 extra_exercises=unique_exercises,
                 extra_criteria=sorted(criteria, key=lambda i: i.phase_order),
             )

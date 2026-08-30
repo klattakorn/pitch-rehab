@@ -94,5 +94,5 @@ class PlayerBaseline(Base, TimestampMixin):
     side: Mapped[Side] = mapped_column(Enum(Side, native_enum=False), default=Side.BILATERAL)
     value: Mapped[float] = mapped_column(Float())
     unit: Mapped[str | None] = mapped_column(String(24))
-    origin: Mapped[str] = mapped_column(String(32), default="manual")  # manual|health|test|derived
+    origin: Mapped[str] = mapped_column(String(32), default="manual")  # manual|test|derived
     note: Mapped[str | None] = mapped_column(String(255))
