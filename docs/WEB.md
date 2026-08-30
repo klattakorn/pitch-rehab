@@ -7,50 +7,61 @@ does, replaying a recording of the real API from
 [`web/src/demo/snapshot.json`](../web/src/demo/snapshot.json). So the built `dist/`
 folder is a complete, self-contained app. Put it on any static host and it works.
 
+## Publishing is a push
+
+The repository is connected to **Cloudflare Pages**. Push to `main` and it clones
+the repo, builds, and swaps the new version in — usually inside a minute, at the
+same address as before.
+
+```bash
+git push
+```
+
+That is the whole deploy. Nothing is installed, nothing is logged into, and it
+does not matter whose laptop you are on — which was the entire problem with
+deploying from a school machine that blocks admin access.
+
+Before pushing, this is worth running:
+
 ```bash
 cd web && npm run deploy
 ```
 
-You get a `https://pitch-rehab.netlify.app` address; send that to anyone.
+Despite the name it uploads nothing. It refuses if the snapshot is missing, runs
+the real build so a mistake surfaces here rather than in a build log you are not
+watching, and then tells you whether anything is uncommitted or unpushed.
 
-**The first run** asks you to sign in to Netlify and whether to create the site.
-It remembers both, so after that it is just the one command.
+### The settings, if the project is ever rebuilt
 
-Netlify because the signup is instant and free, it needs no card, and it reads
-the same `web/public/_headers` this repo already carries — the caching rules that
-stop a phone re-fetching 8 MB of pose runtime on every visit travel with the
-build.
+In the Pages project, under Settings → Build:
 
-### No CLI, no account
+| Setting | Value |
+|---|---|
+| Framework preset | None |
+| **Root directory** | **`web`** |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+
+**Root directory is the one that catches people.** Leave it blank and Cloudflare
+runs `npm run build` at the repository root, where there is no `package.json`, and
+the build fails with `ENOENT ... /opt/buildhome/repo/package.json`. It also makes
+Cloudflare find `requirements.txt` at the root and spend a minute installing
+mediapipe, opencv and matplotlib, none of which a static site uses.
+
+`web/.node-version` pins Node for the build. It has to live in `web/`, not the
+repository root, because Cloudflare reads it from the root directory setting.
+
+### When the automatic build is broken and the demo is in an hour
 
 ```bash
 cd web && npm run deploy -- --folder
 ```
 
-Builds and opens `web/dist`. Drag that folder onto
-<https://app.netlify.com/drop> and it gives you an address immediately —
-nothing installed, and no account needed for a first upload. Making one keeps
-the address and lets you replace the files later.
+Builds and opens `web/dist`. In the Pages project: **Create deployment → Upload
+assets**, and drag the folder on. Same address, no git involved.
 
-This is the fastest route if something is wrong with the CLI, or if you are
-setting up in a hurry on a machine that is not yours.
-
-### Cloudflare Pages instead
-
-```bash
-cd web && npm run deploy -- --cloudflare
-```
-
-Supported, and it needs one extra thing: an account id, on its own line in
-`web/.cloudflare-account`. Wrangler normally discovers that by asking which
-accounts you belong to, and reports a 500 from that call as *"Internal
-authentication error"* — misleading twice over, because the login is fine and
-the usual cause is having **no account at all**. A Cloudflare login and a
-Cloudflare account are separate things, and signing up does not always create
-the second. `npx wrangler whoami` will confirm the login was never the problem.
-
-Cloudflare also holds some new accounts for several days before they can be
-created, which is why it is not the default.
+Use it only as an escape hatch: it publishes files the repository does not match,
+so push afterwards or the next automatic build will quietly undo it.
 
 ---
 
@@ -94,50 +105,72 @@ Measured, not estimated:
 
 | | Gzipped |
 |---|---|
-| Opening the app — every screen except the camera | **105 KB** |
+| Opening the app — every screen except the camera | **107 KB** |
 | The first time the camera is opened, on a phone | 8 MB (3.3 MB runtime + 4.7 MB lite model) |
 | The first time the camera is opened, on a laptop | 11 MB (the full model is larger) |
 
-The `dist/` folder is about 50 MB, but nobody downloads 50 MB: a static host
+The `dist/` folder is about 53 MB, but nobody downloads 53 MB: a static host
 serves files on request, and the app fetches exactly one pose runtime and one
 model, chosen for the device. `public/_headers` marks both immutable, so it
 happens once and never again.
 
+Cloudflare Pages does not meter bandwidth on the free plan, so at demo scale this
+costs nothing. It would take somewhere around twelve thousand first-time camera
+users a month to trouble a metered host.
+
 ## Updating it
 
-Same command. It rebuilds and uploads, and the URL stays the same — so the link
-you have already sent people keeps working and starts serving the new version.
+Push. The URL stays the same, so the link you have already sent people keeps
+working and starts serving the new version. The JavaScript and CSS are named by
+content hash, so a new build cannot be served from an old cache; only the pose
+runtime and the models are pinned for a year, and those are a vendored release
+that does not change.
 
-```bash
-cd web && npm run deploy
-```
+**Re-run `python scripts/make_snapshot.py` first if anything the site *shows* has
+changed** — protocols, exit criteria, exercises, the demo player. The hosted site
+has no backend, so the snapshot is not a fallback there, it is the entire content:
+a stale one is a site quietly showing last week's data to everyone you sent the
+link to.
 
-Visitors get it on their next load. The JavaScript and CSS are named by content
-hash, so a new build cannot be served from an old cache; only the pose runtime
-and the models are pinned for a year, and those are a vendored release that does
-not change.
-
-**Re-run `python scripts/make_snapshot.py` first if anything the site shows has
-changed** — protocols, exit criteria, the demo player. The hosted site has no
-backend, so the snapshot is not a fallback there, it is the entire content: a
-stale one is a site quietly showing last week's data to everyone you sent the
-link to. `npm run deploy` refuses outright if the snapshot is missing and prints
-its age if it is not, but it cannot know whether the recording still matches the
-code. That call is yours.
+The build refuses outright if the snapshot is missing, and prints its age if it is
+not. It cannot know whether the recording still matches the code. That call is
+yours. The rule of thumb is: **if you touched anything under `app/`, re-record.**
 
 Changing the app usually means updating both things you have handed out:
 
-| | Command |
+| | How |
 |---|---|
-| The hosted link | `npm run deploy` |
+| The hosted link | `git push` |
 | The Android package | `npm run apk`, then `send-to-phone.bat` |
+
+A push does **not** update a phone that already has the APK installed. They are
+two artefacts built from the same code.
+
+## Things the build depends on that are not in git
+
+`web/public/mediapipe/` and `web/public/models/` are copies — of MediaPipe's wasm
+from `node_modules`, and of the two `.task` files in `models/` at the repository
+root. They are generated, so they are not committed.
+
+This matters more than it sounds: a hosted build starts from a clean clone, so
+without regenerating them it would produce a site that looks completely fine and
+whose camera never starts. `npm run build` runs
+[`scripts/vendor-assets.mjs`](../web/scripts/vendor-assets.mjs) first for exactly
+that reason. If a deployment log does not show these three lines, the camera is
+broken on the version you just shipped:
+
+```
+wasm    -> .../public/mediapipe/wasm
+full    -> .../public/models/pose_landmarker_full.task
+lite    -> .../public/models/pose_landmarker_lite.task
+```
 
 ## If you would rather use a different host
 
-Nothing here is Cloudflare-specific except `_headers` and that one command. The
+Nothing here is Cloudflare-specific except `_headers` and the build settings. The
 build is plain static files with no server-side anything, and the app never
-changes the URL path — no rewrite rules, no SPA fallback needed. Netlify reads
-the same `_headers` format; GitHub Pages ignores it and simply re-downloads the
+changes the URL path — no rewrite rules, no SPA fallback needed. Netlify reads the
+same `_headers` format; GitHub Pages ignores it and simply re-downloads the
 runtime more often.
 
 One thing to check on any host: `/healthz` must **not** return a page. The app

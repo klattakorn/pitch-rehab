@@ -6,7 +6,7 @@
   "description": "Pitch Rehab demo front end. Runs MediaPipe live in the browser.",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node scripts/vendor-assets.mjs",
+    "prebuild": "node scripts/check-snapshot.mjs && node scripts/vendor-assets.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",

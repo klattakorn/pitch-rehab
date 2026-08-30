@@ -63,10 +63,8 @@ web/android/capacitor-cordova-android-plugins/
 # Generated from scripts/make_app_icon.py, then fanned out by capacitor-assets.
 web/assets/
 
-# Which Cloudflare account `npm run deploy` publishes to. Not a secret -- it is
-# in every dashboard URL and is useless without a token -- but it belongs to
-# whoever is deploying, so each person sets their own.
+# Whatever a host's CLI leaves behind if anyone ever runs one. Publishing is a
+# push now -- Cloudflare Pages builds the repository -- so nothing here is part
+# of deploying; these are machine-local leftovers either way.
 web/.cloudflare-account
-
-# Netlify CLI's record of which site this folder deploys to. Machine-local.
 web/.netlify/

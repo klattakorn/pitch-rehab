@@ -68,15 +68,17 @@ address is not — so the dev server signs its own certificate, which no phone h
 reason to trust. See [Running it on a phone](#running-it-on-a-phone).
 
 **Sending it to someone with an iPhone, or anyone not on your wifi?** The built
-front end runs with no backend at all, so it can simply be hosted:
+front end runs with no backend at all, so it is hosted. Publishing is a push:
 
 ```bash
-cd web && npm run deploy
+git push
 ```
 
-One address, any device, real https so the camera works without a warning. See
-[docs/WEB.md](docs/WEB.md) — and [docs/ANDROID.md](docs/ANDROID.md) for the
-Android package.
+Cloudflare Pages builds the repository and serves it at one address, on any
+device, over real https so the camera works without a warning. Run
+`cd web && npm run deploy` first to check the build and the snapshot — it uploads
+nothing. See [docs/WEB.md](docs/WEB.md) — and [docs/ANDROID.md](docs/ANDROID.md)
+for the Android package.
 
 **Want something to look at?** A fresh account is honest and useless to show anyone —
 every chart says "nothing measured yet". This builds a player three weeks into an ACL
