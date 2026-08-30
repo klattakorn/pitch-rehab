@@ -13,23 +13,28 @@ The repository is connected to **Cloudflare Pages**. Push to `main` and it clone
 the repo, builds, and swaps the new version in — usually inside a minute, at the
 same address as before.
 
+**Double-click `update-site.bat`.** It does the four things in order and stops at
+the first one that fails:
+
+1. Re-records the demo data, so the site cannot ship last week's protocols.
+2. Runs the real build, so a mistake surfaces here rather than in a log you are
+   not watching.
+3. Shows what changed and asks for a commit message.
+4. Commits and pushes.
+
+By hand it is:
+
 ```bash
-git push
+python scripts/make_snapshot.py
+git add -A && git commit -m "what changed" && git push
 ```
 
-That is the whole deploy. Nothing is installed, nothing is logged into, and it
-does not matter whose laptop you are on — which was the entire problem with
-deploying from a school machine that blocks admin access.
+Nothing is installed and nothing is logged into, and it does not matter whose
+laptop you are on — which was the entire problem with deploying from a school
+machine that blocks admin access.
 
-Before pushing, this is worth running:
-
-```bash
-cd web && npm run deploy
-```
-
-Despite the name it uploads nothing. It refuses if the snapshot is missing, runs
-the real build so a mistake surfaces here rather than in a build log you are not
-watching, and then tells you whether anything is uncommitted or unpushed.
+`cd web && npm run deploy` is the check on its own: it uploads nothing, refuses if
+the snapshot is missing, builds, and reports what is uncommitted or unpushed.
 
 ### The settings, if the project is ever rebuilt
 
@@ -140,7 +145,7 @@ Changing the app usually means updating both things you have handed out:
 
 | | How |
 |---|---|
-| The hosted link | `git push` |
+| The hosted link | `update-site.bat` |
 | The Android package | `npm run apk`, then `send-to-phone.bat` |
 
 A push does **not** update a phone that already has the APK installed. They are
