@@ -46,7 +46,22 @@ export interface ReadinessProblem {
     | "not_fully_in_frame"
     | "wrong_camera_view"
     | "low_confidence"
+    | "tracking_unstable"
     | "warming_up";
+  message_en: string;
+  message_th: string;
+}
+
+/**
+ * A movement that was detected and then thrown away.
+ *
+ * Not a rep and not a failed rep -- something the detector started following
+ * and decided was not a repetition at all. It has to be said out loud: from
+ * where the player is standing this is indistinguishable from the camera
+ * ignoring them, which is exactly how it was reported.
+ */
+export interface DiscardedRep {
+  code: "too_shallow" | "too_quick";
   message_en: string;
   message_th: string;
 }
@@ -74,6 +89,8 @@ export interface FrameResult {
   /** Things wrong *right now*, for a live on-screen cue. */
   activeCues: Violation[];
   justCompleted: RepResult | null;
+  /** Set on the frame where a movement was followed and then thrown away. */
+  discarded: DiscardedRep | null;
 }
 
 export interface SetResult {
@@ -104,6 +121,8 @@ export class LiveSession {
   private rep: RepBuffer | null = null;
   private lastBelowExitT = 0;
   private peak = -Infinity;
+  private lastDiscard: DiscardedRep | null = null;
+  private discardCounts: Record<string, number> = {};
   private readonly reps: RepResult[] = [];
   private readonly captured: Frame[] = [];
   private droppedFrames = 0;
@@ -164,7 +183,15 @@ export class LiveSession {
       trusted = false;
     }
     if (this.isCollapsed(scale, torso)) {
-      // MediaPipe reports these at full confidence, so nothing but this catches it.
+      // MediaPipe reports these at full confidence, so nothing but this catches
+      // it. It has to announce itself: this drops the frame, and a dropped
+      // frame is never scored, so staying quiet leaves the screen saying "Good
+      // form" while nothing at all is being counted.
+      problems.push({
+        code: "tracking_unstable",
+        message_en: "Lost track of you — hold the phone still and stay in shot.",
+        message_th: "\u0e15\u0e34\u0e14\u0e15\u0e32\u0e21\u0e15\u0e31\u0e27\u0e44\u0e21\u0e48\u0e44\u0e14\u0e49 \u0e16\u0e37\u0e2d\u0e21\u0e37\u0e2d\u0e16\u0e37\u0e2d\u0e43\u0e2b\u0e49\u0e19\u0e34\u0e48\u0e07\u0e41\u0e25\u0e30\u0e2d\u0e22\u0e39\u0e48\u0e43\u0e19\u0e01\u0e23\u0e2d\u0e1a",
+      });
       trusted = false;
     }
     if (
@@ -205,6 +232,7 @@ export class LiveSession {
         validRepCount: this.validRepCount,
         activeCues: [],
         justCompleted: null,
+        discarded: null,
       };
     }
 
@@ -213,6 +241,7 @@ export class LiveSession {
     const smoothed = this.smooth(perSide);
     const display = perSide[0] ?? {};
 
+    this.lastDiscard = null;
     const justCompleted = this.advanceReps(frame.t, smoothed);
     const activeCues = this.rep ? this.liveCues(smoothed) : [];
 
@@ -226,6 +255,7 @@ export class LiveSession {
       validRepCount: this.validRepCount,
       activeCues,
       justCompleted,
+      discarded: this.lastDiscard,
     };
   }
 
@@ -239,6 +269,11 @@ export class LiveSession {
       warnings.push("frequent_tracking_loss");
     }
     if (this.reps.length === 0) warnings.push("no_reps_detected");
+    // "Nothing counted" and "nothing counted, and here is why" are different
+    // reports. The second one is the one worth uploading.
+    for (const [code, n] of Object.entries(this.discardCounts)) {
+      warnings.push(`discarded_${code}_x${n}`);
+    }
     return {
       reps: this.reps,
       completedReps: this.reps.length,
@@ -345,6 +380,11 @@ export class LiveSession {
     return null;
   }
 
+  private discard(code: DiscardedRep["code"], en: string, th: string): void {
+    this.lastDiscard = { code, message_en: en, message_th: th };
+    this.discardCounts[code] = (this.discardCounts[code] ?? 0) + 1;
+  }
+
   private record(t: number, perSide: Metrics[]): void {
     if (!this.rep) return;
     this.rep.times.push(t);
@@ -365,8 +405,18 @@ export class LiveSession {
     const det = this.rule.detection;
     const duration = endT - rep.startT;
     if (det) {
+      // Below either of these it was not a repetition -- a shift of weight, or
+      // the tracker flickering. Dropping it is right; dropping it in silence is
+      // not, because the player sees a movement they made produce nothing.
       const amplitude = this.peak - det.exit;
-      if (duration < det.min_duration_s || amplitude < det.min_amplitude) return null;
+      if (amplitude < det.min_amplitude) {
+        this.discard("too_shallow", "Not deep enough to count — go further.", "\u0e22\u0e31\u0e07\u0e25\u0e07\u0e44\u0e21\u0e48\u0e25\u0e36\u0e01\u0e1e\u0e2d \u0e04\u0e23\u0e31\u0e49\u0e07\u0e19\u0e35\u0e49\u0e08\u0e36\u0e07\u0e44\u0e21\u0e48\u0e16\u0e39\u0e01\u0e19\u0e31\u0e1a");
+        return null;
+      }
+      if (duration < det.min_duration_s) {
+        this.discard("too_quick", "Too quick to count — slow it down.", "\u0e40\u0e23\u0e47\u0e27\u0e40\u0e01\u0e34\u0e19\u0e44\u0e1b \u0e04\u0e23\u0e31\u0e49\u0e07\u0e19\u0e35\u0e49\u0e08\u0e36\u0e07\u0e44\u0e21\u0e48\u0e16\u0e39\u0e01\u0e19\u0e31\u0e1a");
+        return null;
+      }
     }
 
     const metrics: Metrics = {};

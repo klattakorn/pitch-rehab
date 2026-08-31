@@ -1353,6 +1353,16 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
           pulse(countEl, "tick-up");
         }
 
+        // A movement that was followed and then thrown away has to say so, and
+        // has to outrank the steady-state "Good form" -- being told your form
+        // is good while the counter does not move is the most confusing thing
+        // this screen can do.
+        if (result.discarded) {
+          cueUntil = performance.now() + 1400;
+          setState("fix", "Not counted");
+          centre.innerHTML = `<div class="cue">${result.discarded.message_en}</div>`;
+        }
+
         const blocker = result.problems.find((p) => p.code !== "warming_up");
         if (blocker) {
           setState("bad", "Move the phone");

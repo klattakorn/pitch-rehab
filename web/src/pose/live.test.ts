@@ -147,3 +147,78 @@ describe("live coaching", () => {
     expect(results.every((r) => r.activeCues.length === 0)).toBe(true);
   });
 });
+
+/* Both of these were reported the same way from a real phone: "it detects and
+   says good form but it never actually counts the reps". Neither is a scoring
+   mistake. In both, work was correctly thrown away and then not mentioned, so
+   the only thing the player could see was a counter that would not move.
+
+   They did not show up here before because the fixtures are drawn rather than
+   filmed: a drawn skeleton does not change size when it squats, and a drawn rep
+   is always deep enough. */
+
+type Raw = { x: number; y: number; z: number; visibility: number };
+
+/** Shrink the skeleton part-way through, the way a real body's bounding box
+ *  shrinks on the way down into a squat. */
+function shrunk(factor: number): Frame[] {
+  return crosscheck.frames.map((f, i) => {
+    const phase = Math.max(0, Math.sin((i / crosscheck.frames.length) * Math.PI * 6));
+    const k = 1 - (1 - factor) * phase;
+    const lms = f.landmarks as Raw[];
+    const cx = lms.reduce((a, l) => a + l.x, 0) / lms.length;
+    const cy = lms.reduce((a, l) => a + l.y, 0) / lms.length;
+    return Frame.from(
+      f.t,
+      lms.map((l) => ({ ...l, x: cx + (l.x - cx) * k, y: cy + (l.y - cy) * k })),
+      crosscheck.aspect,
+    );
+  });
+}
+
+describe("a frame the tracker could not trust", () => {
+  it("is never dropped without saying so", () => {
+    /* The size check catches MediaPipe collapsing the skeleton, which it
+       reports at full confidence -- so nothing else catches it. It used to drop
+       the frame in silence, and a dropped frame is never scored: the screen
+       went on saying "Good form" over a camera that had stopped counting. */
+    const { results } = replay(shrunk(0.5));
+    const rejected = results.slice(30).filter((r) => !r.accepted);
+
+    expect(rejected.length).toBeGreaterThan(0);
+    for (const frame of rejected) expect(frame.problems.length).toBeGreaterThan(0);
+    expect(
+      rejected.some((r) => r.problems.some((p) => p.code === "tracking_unstable")),
+    ).toBe(true);
+  });
+
+  it("still counts the reps it can see", () => {
+    // The guard is about refusing to score bad frames, not about giving up.
+    expect(replay(shrunk(0.5)).outcome.completedReps).toBeGreaterThan(0);
+  });
+});
+
+describe("a movement too small to be a rep", () => {
+  it("is thrown away with a reason, not in silence", () => {
+    /* Raising the floor above what the fixture does is the same thing as the
+       player not going deep enough: the detector follows the movement, then
+       decides it was not a repetition. That decision is right. Making it
+       without telling anyone is what left the counter looking broken. */
+    const strict = {
+      ...rule,
+      detection: { ...rule.detection!, min_amplitude: 500 },
+    } as ExerciseRule;
+    const session = new LiveSession(strict, side);
+    const results = goodFrames().map((f) => session.push(f));
+    const outcome = session.finish();
+
+    expect(outcome.completedReps).toBe(0);
+    const discards = results.filter((r) => r.discarded);
+    expect(discards.length).toBeGreaterThan(0);
+    expect(discards[0]!.discarded!.code).toBe("too_shallow");
+    expect(discards[0]!.discarded!.message_en).toMatch(/deep/i);
+    expect(discards[0]!.discarded!.message_th.length).toBeGreaterThan(0);
+    // And it survives into the set summary, not just a flash on the screen.
+    expect(outcome.warnings.some((w) => w.startsWith("discarded_too_shallow"))).toBe(true);
+  });
+});
