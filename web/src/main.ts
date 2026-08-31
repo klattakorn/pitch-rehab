@@ -1363,6 +1363,20 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
           centre.innerHTML = `<div class="cue">${result.discarded.message_en}</div>`;
         }
 
+        // A rep that was measured and then refused. The counter shows valid
+        // reps, so from the player's side this is indistinguishable from the
+        // camera not seeing them at all -- which is exactly how it was
+        // reported. Tempo is the common one: it can only be judged once the
+        // rep is over, so it never appears as a live cue.
+        const refused = result.justCompleted;
+        if (refused && !refused.isValid) {
+          cueUntil = performance.now() + 1400;
+          setState("fix", "Not counted");
+          centre.innerHTML = `<div class="cue">${
+            refused.violations[0]?.message_en ?? "That one did not count."
+          }</div>`;
+        }
+
         const blocker = result.problems.find((p) => p.code !== "warming_up");
         if (blocker) {
           setState("bad", "Move the phone");

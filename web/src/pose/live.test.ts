@@ -222,3 +222,48 @@ describe("a movement too small to be a rep", () => {
     expect(outcome.warnings.some((w) => w.startsWith("discarded_too_shallow"))).toBe(true);
   });
 });
+
+describe("a rep the camera measured and then refused", () => {
+  /* Reported from a phone: a split squat detected the bend, said good form,
+     and counted nothing. Every rep was faster than the exercise's 1.5s minimum
+     tempo, so every rep was marked invalid -- and the counter shows valid reps.
+     Tempo can only be judged once the rep is over, so it never reaches the live
+     cues, which means the player was told nothing at all. */
+  const tempoRule = { ...rule, tempo_min_s: 1.5 } as ExerciseRule;
+
+  /** The same movement, replayed faster by rescaling the clock. */
+  const atSpeed = (multiplier: number): Frame[] =>
+    crosscheck.frames.map((f) =>
+      Frame.from(f.t / multiplier, f.landmarks, crosscheck.aspect),
+    );
+
+  function run(frames: Frame[]) {
+    const session = new LiveSession(tempoRule, side);
+    const results = frames.map((f) => session.push(f));
+    return { results, outcome: session.finish() };
+  }
+
+  it("is detected but does not reach the counter", () => {
+    const { outcome } = run(atSpeed(2));
+    expect(outcome.completedReps).toBeGreaterThan(0);
+    expect(outcome.validReps).toBe(0);
+    expect(outcome.reps.every((r) => r.violations.some((v) => v.code === "tempo_too_fast"))).toBe(
+      true,
+    );
+  });
+
+  it("says why, on the frame it happened", () => {
+    const { results } = run(atSpeed(2));
+    const refused = results.filter((r) => r.justCompleted && !r.justCompleted.isValid);
+    expect(refused.length).toBeGreaterThan(0);
+    // The reason has to be a sentence a player can act on, in both languages.
+    const first = refused[0]!.justCompleted!.violations[0]!;
+    expect(first.message_en).toMatch(/slow/i);
+    expect(first.message_th.length).toBeGreaterThan(0);
+  });
+
+  it("counts the same movement when it is done at the asked-for tempo", () => {
+    const { outcome } = run(atSpeed(1));
+    expect(outcome.validReps).toBeGreaterThan(0);
+  });
+});
