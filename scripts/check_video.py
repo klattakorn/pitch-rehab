@@ -37,6 +37,7 @@ import mediapipe as mp  # noqa: E402
 import numpy as np  # noqa: E402
 from mediapipe.tasks import python as mp_python  # noqa: E402
 from mediapipe.tasks.python import vision  # noqa: E402
+from PIL import Image  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -214,22 +215,9 @@ def read_video(video_path: Path, model_path: Path, stride: int) -> tuple[list, d
     return frames, info
 
 
-def draw_overlay(
-    video_path: Path,
-    out_path: Path,
-    info: dict,
-    analysis,
-    side: Side,
-    use_z: bool,
-) -> None:
-    """Write a copy of the video with the skeleton and live angles burned in."""
+def _annotated_frames(video_path: Path, info: dict, analysis, side: Side, use_z: bool):
+    """Yield each frame of the source video with the skeleton and live angles burned in."""
     capture = cv2.VideoCapture(str(video_path))
-    writer = cv2.VideoWriter(
-        str(out_path),
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        info["fps"],
-        (info["width"], info["height"]),
-    )
     raw = info["raw"]
     analysed_sides = [Side.LEFT, Side.RIGHT] if side is Side.BILATERAL else [side]
 
@@ -265,10 +253,98 @@ def draw_overlay(
                         cv2.putText(image, rep.violations[0].code, (10, info["height"] - 15),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2, cv2.LINE_AA)
                     break
-        writer.write(image)
+        yield image
         index += 1
 
     capture.release()
+
+
+#: Target frame rate for the .gif path. A GIF has no inter-frame prediction --
+#: every frame is close to its own PNG -- so 12s at 30fps would run to tens of
+#: megabytes for nothing this needs. 8fps is still smooth enough to see whether
+#: a rep was tracked, at a fraction of the size.
+GIF_FPS = 8
+#: Width the .gif is scaled to. A full 1080p frame costs the same in a GIF
+#: whether it is legible or not; text and the skeleton read fine much smaller.
+GIF_WIDTH = 480
+
+
+def draw_overlay(
+    video_path: Path,
+    out_path: Path,
+    info: dict,
+    analysis,
+    side: Side,
+    use_z: bool,
+) -> None:
+    """Write a copy of the video with the skeleton and live angles burned in.
+
+    .gif has no codec to fail: it plays in a browser, a chat app, an image
+    viewer, anything. .mp4 is written with mp4v, which is the only fourcc this
+    machine can actually encode with -- and browsers and most phones cannot
+    decode it, so the file looks broken to whoever you send it to even though
+    it opens fine in something like VLC. Prefer .gif unless you know the mp4
+    is going somewhere that plays it.
+    """
+    frames = _annotated_frames(video_path, info, analysis, side, use_z)
+
+    if out_path.suffix.lower() == ".gif":
+        stride = max(1, round(info["fps"] / GIF_FPS))
+        scale = GIF_WIDTH / info["width"] if info["width"] > GIF_WIDTH else 1.0
+        size = (GIF_WIDTH, round(info["height"] * scale)) if scale < 1.0 else None
+
+        images = []
+        for index, image in enumerate(frames):
+            if index % stride:
+                continue
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            pil = Image.fromarray(rgb)
+            if size:
+                pil = pil.resize(size, Image.LANCZOS)
+            images.append(pil)
+
+        if not images:
+            print(f"{RED}Nothing to write -- no frames.{OFF}")
+            return
+
+        # One palette for every frame, built from the busiest one (the most
+        # distinct colours) rather than the first. Reusing a palette is what
+        # lets GIF's LZW step compress a static background efficiently instead
+        # of re-deriving 256 colours per frame; dithering is off because the
+        # speckle it adds defeats that compression for no visible gain here.
+        # Real camera footage is not a good match for GIF -- expect low tens
+        # of megabytes for a clip this length, not the kilobytes a screen
+        # recording would produce.
+        richest = max(images, key=lambda im: len(im.quantize(colors=256).getcolors(256) or []))
+        palette = richest.quantize(colors=192, dither=Image.Dither.NONE)
+        frames_p = [im.quantize(palette=palette, dither=Image.Dither.NONE) for im in images]
+
+        frames_p[0].save(
+            out_path,
+            save_all=True,
+            append_images=frames_p[1:],
+            duration=round(1000 / GIF_FPS),
+            loop=0,
+            optimize=True,
+        )
+        return
+
+    if out_path.suffix.lower() == ".mp4":
+        print(
+            f"{RED}Heads up:{OFF} this machine has no H.264 encoder, so the .mp4 is "
+            f"written with the mp4v codec. VLC and most desktop players open it fine; "
+            f"browsers, phones and chat apps usually cannot decode it and will show "
+            f"nothing, even though the file is not corrupt. Use --out something.gif "
+            f"for something guaranteed to play wherever you send it."
+        )
+    writer = cv2.VideoWriter(
+        str(out_path),
+        cv2.VideoWriter_fourcc(*"mp4v"),
+        info["fps"],
+        (info["width"], info["height"]),
+    )
+    for image in frames:
+        writer.write(image)
     writer.release()
 
 
@@ -406,7 +482,12 @@ def main() -> None:
     parser.add_argument("video", type=Path)
     parser.add_argument("exercise", help="e.g. single_leg_squat, prone_hamstring_curl")
     parser.add_argument("--side", default="bilateral", choices=[s.value for s in Side])
-    parser.add_argument("--out", type=Path, help="write an annotated copy of the video here")
+    parser.add_argument(
+        "--out",
+        type=Path,
+        help="write an annotated copy here -- prefer a .gif, which plays anywhere; "
+        ".mp4 only opens in a player with the right codec (see the warning if you use it)",
+    )
     parser.add_argument("--model", type=Path, default=MODEL_PATH)
     parser.add_argument("--every", type=int, default=1,
                         help="analyse every Nth frame (use 2 to halve the work)")
