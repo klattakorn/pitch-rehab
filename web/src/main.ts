@@ -1112,12 +1112,27 @@ async function startTargetSession(criterion: api.CriterionResult): Promise<void>
 }
 
 // ------------------------------------------------------------------ how to
+/** The slowest this exercise insists on, or null when it does not care. */
+function tempoOf(exercise: Prescription["exercise"]): number | null {
+  return api.ruleFor(exercise)?.tempo_min_s ?? null;
+}
+
 function howToScreen(rx: Prescription): void {
   const exercise = rx.exercise;
   shell(
     `<p class="sub">${rx.sets} set${rx.sets === 1 ? "" : "s"} ${
       rx.reps ? `× ${rx.reps} reps` : `× ${rx.hold_seconds}s hold`
     }</p>
+     ${
+       // The pace is a rule, not a suggestion: below it a rep is measured and
+       // then refused. Being told that here costs a line; finding it out is a
+       // counter that will not move and no idea why.
+       tempoOf(exercise)
+         ? `<div class="notice">Take <b>at least ${tempoOf(exercise)} seconds
+              per rep</b>. Faster than that and it will not count — the camera
+              is scoring control, not speed.</div>`
+         : ""
+     }
      ${demoPanelHtml(exercise)}
      <div class="controls">
        <button class="primary block" id="go">I'm ready — start camera</button>

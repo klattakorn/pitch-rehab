@@ -441,16 +441,21 @@ export class LiveSession {
     let tempoOk = true;
     if (this.rule.tempo_min_s !== null && duration < this.rule.tempo_min_s) {
       tempoOk = false;
+      /* Both numbers, because "slow down" on its own is not an instruction --
+         it does not say how slow, and the rep that was just refused is the only
+         thing the player has to calibrate against. */
+      const asked = this.rule.tempo_min_s;
+      const took = duration.toFixed(1);
       violations.push({
         code: "tempo_too_fast",
         metric: "duration",
         observed: Math.round(duration * 1000) / 1000,
-        limit: this.rule.tempo_min_s,
+        limit: asked,
         bound: "min",
-        severity: Math.min(1, (this.rule.tempo_min_s - duration) / this.rule.tempo_min_s),
+        severity: Math.min(1, (asked - duration) / asked),
         critical: false,
-        message_en: "Slow the movement down — control it.",
-        message_th: "ทำให้ช้าลง ควบคุมจังหวะให้ดี",
+        message_en: `Slower — take ${asked}s a rep. That one took ${took}s.`,
+        message_th: `ช้าลง ใช้เวลา ${asked} วินาทีต่อครั้ง ครั้งนี้ใช้ ${took} วินาที`,
       });
     }
     if (this.rule.tempo_max_s !== null && duration > this.rule.tempo_max_s) tempoOk = false;
