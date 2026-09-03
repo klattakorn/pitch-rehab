@@ -80,8 +80,14 @@ export function renderReadout(el: HTMLElement, result: FrameResult, keys: string
       // labelling its readings in Thai.
       const name = FRIENDLY[k]?.en ?? k;
       const value = result.metrics![k]!;
-      const unit = k.endsWith("_ratio") ? "" : "°";
-      return `${name} <b>${value.toFixed(0)}${unit}</b>`;
+      // A ratio is a fraction of the player's own foot length (typically
+      // 0.1-0.4), not a whole number of anything. Printed with .toFixed(0) it
+      // rounded every real calf raise to "0" -- proven on real footage, where
+      // a genuine 0.29 read as the camera not seeing any movement at all.
+      const isRatio = k.endsWith("_ratio");
+      const shown = Math.round(isRatio ? value * 100 : value);
+      const unit = isRatio ? "%" : "°";
+      return `${name} <b>${shown}${unit}</b>`;
     });
   el.innerHTML = rows.join("<br>");
 }

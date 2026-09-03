@@ -118,10 +118,24 @@ describe("the live readout", () => {
     expect(el.innerHTML).toContain("88°");
   });
 
-  it("leaves ratios unitless", () => {
+  it("shows a ratio as a percentage, not as degrees", () => {
     const el = { innerHTML: "" } as HTMLElement;
     renderReadout(el, result({ heel_raise_ratio: 0.7 }), ["heel_raise_ratio"]);
     expect(el.innerHTML).not.toContain("°");
+    expect(el.innerHTML).toContain("70%");
+  });
+
+  it("does not round a real calf raise down to zero", () => {
+    /* Found on real footage, not a synthetic one: heel_raise_ratio during an
+       actual double-leg calf raise peaked at 0.23-0.36. Printed with
+       toFixed(0) -- the degrees formatting, reused without checking the
+       range -- every one of those became "0", so the readout said "heel 0"
+       for the whole set regardless of how high the player actually rose. The
+       old test used 0.7, which happens to round to 1 and hid this. */
+    const el = { innerHTML: "" } as HTMLElement;
+    renderReadout(el, result({ heel_raise_ratio: 0.29 }), ["heel_raise_ratio"]);
+    expect(el.innerHTML).toContain("29%");
+    expect(el.innerHTML).not.toContain(">0<");
   });
 
   it("says so when there is no reading rather than showing a stale one", () => {
