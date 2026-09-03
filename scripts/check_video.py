@@ -416,6 +416,10 @@ def report(
     for rep in analysis.reps:
         mark = f"{GREEN}ok{OFF}" if rep.is_valid else f"{RED}NOT COUNTED{OFF}"
         readable = "   ".join(
+            # A ratio lives between 0 and 1, so .0f prints every real reading
+            # as "0" -- the same mistake the app's own readout used to make.
+            f"{FRIENDLY.get(k.rsplit('_', 1)[0], k)} "
+            f"{v:.2f}" if "ratio" in k else
             f"{FRIENDLY.get(k.rsplit('_', 1)[0], k)} {v:.0f}"
             for k, v in list(rep.metrics.items())[:4]
         )

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import UTC, date, timedelta
+from datetime import date, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -162,7 +162,11 @@ def build_report(db: Session, episode: InjuryEpisode) -> ProgressReport:
     by_day: dict[date, list[ExerciseSet]] = defaultdict(list)
     sessions_by_day: dict[date, set[int]] = defaultdict(set)
     for exercise_set, session in rows:
-        day = session.started_at.astimezone(UTC).date()
+        # Local, to match the `date.today()` axis built below. Bucketing in
+        # UTC while labelling the axis locally means that in UTC+7 -- which is
+        # where this is used -- a session done between midnight and 7am lands
+        # in yesterday's bucket and today reads as empty.
+        day = session.started_at.astimezone().date()
         by_day[day].append(exercise_set)
         sessions_by_day[day].add(session.id)
 

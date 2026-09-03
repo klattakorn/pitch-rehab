@@ -283,8 +283,16 @@ EXERCISES: list[ExerciseDef] = [
         rule=ExerciseRule(
             mode="rep",
             view="side",
+            # Tuned against real footage with a known rep count, not guessed.
+            # exit was 0.06 -- about 3 degrees of foot tilt, i.e. dead flat.
+            # Nobody lowers all the way to flat between reps, so the signal
+            # never crossed back down and consecutive reps merged into one.
+            # 0.12 is roughly 7 degrees: clearly down, without demanding the
+            # foot be pressed flat. min_amplitude falls with it, because
+            # amplitude is measured from exit and leaving it high would start
+            # silently discarding honest reps.
             detection=RepDetection(
-                signal="heel_raise_ratio", enter=0.18, exit=0.06, min_amplitude=0.10
+                signal="heel_raise_ratio", enter=0.17, exit=0.12, min_amplitude=0.05
             ),
             tempo_min_s=1.2,
             targets=[
@@ -378,8 +386,16 @@ EXERCISES: list[ExerciseDef] = [
         rule=ExerciseRule(
             mode="rep",
             view="front",
+            # Tuned against real footage with a known rep count, not guessed.
+            # A split stance does not straighten between reps the way a squat
+            # does -- it rests around 20-25 degrees, exactly where exit sat, so
+            # the signal hovered on the threshold and every rep ran into the
+            # next. Coming back up through 40 is a real, reliable boundary.
+            # enter rises with it to keep the hysteresis gap: a rep peaking
+            # under 55 is a quarter-range movement, and the depth target still
+            # flags anything under 80.
             detection=RepDetection(
-                signal="knee_flexion", enter=40.0, exit=20.0, min_amplitude=30.0
+                signal="knee_flexion", enter=55.0, exit=40.0, min_amplitude=10.0
             ),
             tempo_min_s=1.5,
             targets=[
@@ -495,8 +511,13 @@ EXERCISES: list[ExerciseDef] = [
         rule=ExerciseRule(
             mode="rep",
             view="side",
+            # Same numbers as the double-leg version, for the same reason --
+            # it is the same movement on one foot, and the old exit of 0.06
+            # asked for a flat foot nobody returns to between reps. Only the
+            # double-leg version was checked against real footage; this one
+            # follows it on the reasoning rather than on evidence of its own.
             detection=RepDetection(
-                signal="heel_raise_ratio", enter=0.18, exit=0.06, min_amplitude=0.10
+                signal="heel_raise_ratio", enter=0.17, exit=0.12, min_amplitude=0.05
             ),
             tempo_min_s=1.2,
             targets=[
