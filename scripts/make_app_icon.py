@@ -12,13 +12,11 @@ for the app and the wrong form for an icon -- the launcher wants PNGs at a dozen
 sizes and there is no rasteriser here. So the same figure is redrawn below from
 the same coordinates. It keeps the 32px favicon, where the crest is a smudge.
 
-``@capacitor/assets`` fans ``web/assets/icon.png`` out into every density and
-shape Android asks for.
-
     python scripts/make_app_icon.py
 
-Writes ``web/assets/icon.png`` (1024) and ``web/assets/splash.png`` (2732), plus
-a dark-mode splash. Re-run it if the mark changes.
+Writes the icons ``web/public/`` serves: the one iOS uses for Add to Home
+Screen, the two the manifest asks for, and the favicon. Re-run it if the mark
+changes.
 
 Everything is drawn four times oversized and shrunk at the end: Pillow's lines
 have no antialiasing, and a launcher icon with stepped edges is the first thing
@@ -32,7 +30,6 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "web" / "assets"
 #: The web build serves these directly, so they live where Vite copies from.
 PUBLIC = ROOT / "web" / "public"
 
@@ -140,20 +137,9 @@ def _crest(size: int, scale: float) -> Image.Image | None:
 
 
 def main() -> None:
-    OUT.mkdir(parents=True, exist_ok=True)
     using_crest = CREST.exists()
 
-    # The Android launcher icon. Its adaptive shape crops to roughly two thirds,
-    # whatever the launcher, so nothing important may sit outside that.
-    (_crest(1024, 0.66) or draw_mark(1024, 0.52, PAGE)).save(OUT / "icon.png")
-
-    # The splash stays the drawn mark: it shows at full screen, and a crest with
-    # readable lettering blown up to a tablet is a different picture from a
-    # crest at 180px.
-    for name in ("splash.png", "splash-dark.png"):
-        draw_mark(2732, 0.18, PAGE).save(OUT / name)
-
-    # The web build, at the sizes each platform looks for.
+    # The sizes each platform looks for.
     #
     # iOS reads `apple-touch-icon` and nothing else when you Add to Home Screen;
     # without one it screenshots the page and uses that. 180 is what current
@@ -181,7 +167,7 @@ def main() -> None:
 
     print(f"Source: {'design/crest-source.png' if using_crest else 'the drawn mark'}\n")
 
-    for path in sorted(OUT.glob("*.png")) + [
+    for path in [
         PUBLIC / n
         for n in (
             "apple-touch-icon.png",

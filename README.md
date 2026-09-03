@@ -75,8 +75,7 @@ commits, and pushes; Cloudflare Pages rebuilds the repository and serves it at o
 address, on any device, over real https so the camera works without a warning.
 
 By hand, it is `python scripts/make_snapshot.py`, then a commit, then `git push`.
-See [docs/WEB.md](docs/WEB.md) — and [docs/ANDROID.md](docs/ANDROID.md) for the
-Android package.
+See [docs/WEB.md](docs/WEB.md).
 
 **Want something to look at?** A fresh account is honest and useless to show anyone —
 every chart says "nothing measured yet". This builds a player three weeks into an ACL
@@ -236,8 +235,7 @@ installed app can replay it with nothing running anywhere.
 The camera keeps working untouched, because it never needed the server — rep counting
 and form scoring run on the phone in `pose/live.ts`. What the app will not do is
 recompute: a set logged that way is stored and reported as not yet counted, and a
-band on every screen says the app is running from a snapshot. See
-[docs/ANDROID.md](docs/ANDROID.md).
+band on every screen says the app is running from a snapshot.
 
 **6. Nobody can type an IP address.** `https://192.168.0.48:5173` is twenty-five
 characters of digits and punctuation on a phone keyboard, and one wrong digit gives you

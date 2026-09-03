@@ -1,6 +1,6 @@
 # Putting it on the web
 
-For anyone the Android package cannot reach: iPhones, and anyone not on your wifi.
+The way the app is handed to anyone who is not sitting next to the laptop.
 
 The app already runs with no backend — that is what **Carry on without a laptop**
 does, replaying a recording of the real API from
@@ -72,9 +72,8 @@ so push afterwards or the next automatic build will quietly undo it.
 
 ## Why this and not the other routes
 
-| | Works on iPhone | Needs your laptop | Camera |
+| | Works on any phone | Needs your laptop | Camera |
 |---|---|---|---|
-| `pitch-rehab.apk` | **no** — Android only | no | yes |
 | Same wifi + QR code | yes | yes | yes, after a warning |
 | **This** | **yes** | **no** | **yes, no warning** |
 
@@ -141,15 +140,9 @@ The build refuses outright if the snapshot is missing, and prints its age if it 
 not. It cannot know whether the recording still matches the code. That call is
 yours. The rule of thumb is: **if you touched anything under `app/`, re-record.**
 
-Changing the app usually means updating both things you have handed out:
-
-| | How |
-|---|---|
-| The hosted link | `update-site.bat` |
-| The Android package | `npm run apk`, then `send-to-phone.bat` |
-
-A push does **not** update a phone that already has the APK installed. They are
-two artefacts built from the same code.
+The hosted link is the only thing handed out, and `update-site.bat` updates it.
+Everyone who has the link gets the new version on their next load — there is no
+second artefact to keep in step, and nothing for anyone to reinstall.
 
 ## Things the build depends on that are not in git
 

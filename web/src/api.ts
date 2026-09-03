@@ -4,48 +4,7 @@ import type { Exercise, ExerciseRule } from "./pose/rules";
 
 const BASE = "/api/v1";
 const TOKEN_KEY = "rf_token";
-const SERVER_KEY = "rf_server";
 const SEEN_KEY = "rf_seen_server";
-
-/**
- * Is this the installed Android app rather than a browser tab?
- *
- * It changes where the API lives. In a browser the front end is served by Vite,
- * which proxies `/api` to the backend, so a relative path is right and nothing
- * needs configuring. Inside the app the front end is served from the package
- * itself, so a relative path points at the phone -- which has no backend on it.
- * There, requests have to be addressed to the laptop by name.
- */
-export const isNative = (): boolean =>
-  typeof window !== "undefined" &&
-  Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor
-    ?.isNativePlatform?.());
-
-/**
- * Where the backend is, as an origin to put in front of every path.
- *
- * Empty string in a browser, which leaves every URL relative. In the app it is
- * the laptop: baked in when the package was built, and overridable afterwards
- * because the laptop's address is a DHCP lease and moves on its own. Rebuilding
- * an APK to chase an address change would be absurd.
- */
-export function serverOrigin(): string {
-  if (!isNative()) return "";
-  const saved = localStorage.getItem(SERVER_KEY);
-  if (saved) return saved;
-  return (import.meta.env["VITE_API_ORIGIN"] as string | undefined) ?? "";
-}
-
-/** Point the app at a different laptop. Empty clears it back to the built-in one. */
-export function setServerOrigin(origin: string): void {
-  const trimmed = origin.trim().replace(/\/+$/, "");
-  if (trimmed) localStorage.setItem(SERVER_KEY, trimmed);
-  else localStorage.removeItem(SERVER_KEY);
-}
-
-/** The address built into this package, whether or not it is the one in use. */
-export const builtInOrigin = (): string =>
-  (import.meta.env["VITE_API_ORIGIN"] as string | undefined) ?? "";
 
 // --------------------------------------------------- running with no server
 /**
@@ -106,7 +65,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${serverOrigin()}${BASE}${path}`, { ...init, headers });
+  const response = await fetch(`${BASE}${path}`, { ...init, headers });
   const text = await response.text();
   const body = text ? JSON.parse(text) : null;
   if (!response.ok) throw new ApiError(response.status, body?.detail ?? body);
@@ -217,15 +176,10 @@ export async function backendUp(): Promise<boolean> {
   // Nothing to reach, and nothing missing either.
   if (standalone.active()) return true;
   try {
-    // Through serverOrigin(), not a bare path. In a browser they are the same
-    // thing; in the installed app a bare path asks the phone about itself, and
-    // the phone answers with the app's own index.html -- a 200, which reads as
-    // "the backend is fine" right up until the first real request fails.
-    //
-    // The deadline matters as much. An unreachable address on wifi does not
+    // The deadline is the point. An address that is not answering does not
     // refuse the connection, it hangs, so without one the app sits on "Loading"
     // for the best part of a minute before admitting anything is wrong.
-    const response = await fetch(`${serverOrigin()}/healthz`, {
+    const response = await fetch("/healthz", {
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) return false;

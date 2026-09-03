@@ -209,7 +209,7 @@ function standaloneBand(): string {
   const waiting = api.standalonePending();
   return `<div class="offline-band">
       <span class="tagline">Demo mode</span>
-      Running from a snapshot on this phone — no laptop connected.
+      Running from a recording of the real system — nothing is being computed.
       ${waiting ? `<b>${waiting} logged here, not yet counted.</b>` : ""}
     </div>`;
 }
@@ -336,7 +336,6 @@ function firstRunScreen(): void {
          with your camera checking every rep.</p>
        <div class="stack">
          <button class="primary block" id="demo">Try the demo</button>
-         <button class="linkbtn" id="server">I have a laptop running it</button>
        </div>
        <p class="sub tiny">The demo is a real player's programme, recorded from
          the real system. <b>The camera is not a recording</b> — it counts your
@@ -348,7 +347,6 @@ function firstRunScreen(): void {
     api.useStandalone(true);
     void boot();
   });
-  on("#server", () => serverScreen());
 }
 
 function welcomeScreen(): void {
@@ -364,91 +362,17 @@ function welcomeScreen(): void {
        <div class="stack">
          <button class="primary block" id="start">Get Started</button>
          <button class="linkbtn" id="signin">I already have an account</button>
-         ${api.isNative() ? `<button class="linkbtn" id="server">Change server address</button>` : ""}
        </div>
      </div>`,
     { brand: true },
   );
   on("#start", () => signInScreen("", true));
   on("#signin", () => signInScreen());
-  if (api.isNative()) on("#server", () => serverScreen());
 }
 
 /** Escape a value going into an attribute. Only the server address needs it. */
 function attr(value: string): string {
   return value.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-}
-
-/**
- * Where the laptop is -- the installed app only.
- *
- * The app is the front end. The 42 protocols, the criteria engine and every
- * session ever logged live on the laptop, so the phone has to be told where
- * that is. The address is baked in when the package is built, but a DHCP lease
- * moves on its own and rebuilding an APK to chase it would be absurd, so it can
- * be typed in here and is remembered.
- *
- * Saving tests the connection first. "Saved" followed by a dead app teaches
- * nothing; "this phone cannot see that address" is the whole diagnosis.
- */
-function serverScreen(notice = ""): void {
-  const current = api.serverOrigin();
-  const builtIn = api.builtInOrigin();
-  shell(
-    `<div class="stack narrow">
-       <h2>Where is the laptop?</h2>
-       <p class="sub">This app shows the rehab; the laptop works it out. They have
-         to be on the <b>same wifi</b>, and the laptop has to be running.</p>
-       ${notice ? `<div class="notice">${notice}</div>` : ""}
-       <div class="panel">
-         <label class="label" for="origin">Server address</label>
-         <input id="origin" type="url" inputmode="url" value="${attr(current)}"
-           placeholder="http://192.168.0.48:8000" autocapitalize="off"
-           autocorrect="off" spellcheck="false" />
-       </div>
-       <p class="sub">Built into this app: <b>${attr(builtIn || "nothing")}</b>.
-         The laptop prints its address when it starts.</p>
-       <button class="primary block" id="save">Test and save</button>
-       ${
-         api.standaloneActive()
-           ? `<button class="linkbtn" id="live">Stop using the snapshot</button>`
-           : ""
-       }
-       <button class="linkbtn" id="back">Back</button>
-     </div>`,
-    { title: "Server", back: () => welcomeScreen() },
-  );
-
-  on("#back", () => welcomeScreen());
-  on("#live", () => {
-    api.useStandalone(false);
-    void boot();
-  });
-  on("#save", () => {
-    const input = app.querySelector<HTMLInputElement>("#origin")!;
-    const origin = input.value.trim().replace(/\/+$/, "");
-    void (async () => {
-      try {
-        // Ask the backend directly rather than trusting that it is there. Four
-        // seconds, because an unreachable address on wifi hangs rather than
-        // failing, and a spinner that never resolves reads as a broken app.
-        const response = await fetch(`${origin}/healthz`, {
-          signal: AbortSignal.timeout(4000),
-        });
-        if (!response.ok) throw new Error(`answered ${response.status}`);
-        api.setServerOrigin(origin);
-        // Straight on rather than back to the welcome screen: the address was
-        // just proved to work, so there is nothing left to decide.
-        void boot();
-      } catch {
-        serverScreen(
-          `Could not reach <code>${attr(origin)}</code>. Check the laptop is running,
-           that both are on the same wifi, and that the address matches the one it
-           printed when it started.`,
-        );
-      }
-    })();
-  });
 }
 
 function signInScreen(notice = "", isNew = false): void {
@@ -1827,10 +1751,10 @@ function aboutScreen(): void {
        <section class="panel">
          <span class="label">This build</span>
          <p class="sub"><code>${attr(buildVersion())}</code></p>
-         <p class="sub">Talking to ${
+         <p class="sub">${
            api.standaloneActive()
-             ? "nothing — running from the snapshot inside this app."
-             : `<code>${attr(api.serverOrigin() || "this machine")}</code>`
+             ? "Running from the snapshot in this build — no server."
+             : "Talking to the API on this machine."
          }</p>
        </section>
      </div>`,
@@ -2318,33 +2242,6 @@ async function boot(): Promise<void> {
       return firstRunScreen();
     }
 
-    if (api.isNative()) {
-      shell(
-        `<div class="stack narrow">
-           <h2>Cannot reach the laptop</h2>
-           <p class="sub">This app shows the rehab; the laptop works it out.
-             It is looking for it at <b>${attr(api.serverOrigin() || "no address set")}</b>.</p>
-           <div class="notice">Check, in this order: the laptop is running
-             <code>start.bat</code>; both are on the same wifi; and the laptop's
-             firewall lets the API through.</div>
-           <button class="primary block" id="retry">Try again</button>
-           <button class="linkbtn" id="server">Change server address</button>
-           ${
-             api.standaloneAvailable()
-               ? `<button class="linkbtn" id="demo">Carry on without a laptop</button>`
-               : ""
-           }
-         </div>`,
-        { title: "No connection" },
-      );
-      on("#retry", () => void boot());
-      on("#server", () => serverScreen());
-      on("#demo", () => {
-        api.useStandalone(true);
-        void boot();
-      });
-      return;
-    }
     shell(
       `<div class="stack">
          <div class="notice">The API is not running. Start it with
