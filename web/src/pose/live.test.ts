@@ -267,3 +267,64 @@ describe("a rep the camera measured and then refused", () => {
     expect(outcome.validReps).toBeGreaterThan(0);
   });
 });
+
+describe("a hold, which has no reps to count", () => {
+  /* A wall sit is scored on the longest unbroken stretch where every target
+     was satisfied. The browser had no hold handling at all: it counted reps,
+     found none, and left a zero on the screen for forty-five seconds. */
+  const holdRule = (min: number | null, max: number | null) =>
+    ({
+      ...rule,
+      mode: "hold",
+      hold_target_s: 45,
+      detection: null,
+      targets: [
+        {
+          metric: "knee_flexion",
+          aggregate: "peak",
+          min,
+          max,
+          tolerance: 0,
+          weight: 1,
+          critical: false,
+          code: "depth",
+          message_en: "Sit lower.",
+          message_th: "ย่อลงอีก",
+        },
+      ],
+    }) as unknown as ExerciseRule;
+
+  const run = (r: ExerciseRule) => {
+    const session = new LiveSession(r, side);
+    const results = goodFrames().map((f) => session.push(f));
+    return { last: results.at(-1)!, outcome: session.finish() };
+  };
+
+  it("counts the time in position, not the length of the clip", () => {
+    /* The fixture is a squat cycling 5-83 degrees over 13.3s, so a target of
+       "at least 40" is satisfied in bursts. The timer must report the longest
+       unbroken burst -- not zero, and not the whole clip. */
+    const { last, outcome } = run(holdRule(40, null));
+    expect(last.holdSeconds).not.toBeNull();
+    expect(outcome.holdSeconds!).toBeGreaterThan(0);
+    expect(outcome.holdSeconds!).toBeLessThan(13.3);
+  });
+
+  it("credits nothing when the position is never reached", () => {
+    // Nothing in the fixture bends past 83, so a 170 degree target is never met.
+    expect(run(holdRule(170, null)).outcome.holdSeconds).toBe(0);
+  });
+
+  it("runs the whole time when the position is always held", () => {
+    // Everything in the fixture is under 200 degrees, so this never breaks.
+    const { outcome } = run(holdRule(null, 200));
+    expect(outcome.holdSeconds!).toBeGreaterThan(13);
+  });
+
+  it("reports nothing for a rep exercise, so the counter stays the rep count", () => {
+    const session = new LiveSession(rule, side);
+    const last = goodFrames().map((f) => session.push(f)).at(-1)!;
+    expect(last.holdSeconds).toBeNull();
+    expect(session.finish().holdSeconds).toBeNull();
+  });
+});

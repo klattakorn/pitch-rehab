@@ -1177,7 +1177,11 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
          <div class="hud-bottom">
            <div class="repcount">
              <span class="now" id="count">0</span>
-             <span class="of">/ ${rx.reps ?? "—"}</span>
+             <span class="of">${
+               rule.mode === "hold"
+                 ? `s / ${rule.hold_target_s ?? rx.hold_seconds ?? 30}s`
+                 : `/ ${rx.reps ?? "—"}`
+             }</span>
            </div>
          </div>
        </div>
@@ -1224,7 +1228,11 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   const session = new LiveSession(rule, side);
   const show = metricsToShow(rule.targets.map((t) => t.metric));
   const aspect = camera.width / camera.height;
-  const target = rx.reps ?? 10;
+  // Reps for a rep exercise, seconds for a hold -- both fill the same bar.
+  const isHold = rule.mode === "hold";
+  const holdTarget = rule.hold_target_s ?? rx.hold_seconds ?? 30;
+  const target = isHold ? holdTarget : (rx.reps ?? 10);
+  let shownHold = -1;
 
   /** State lives in three places at once: the word, the frame, the colour. */
   const setState = (kind: "good" | "fix" | "bad" | "", word: string): void => {
@@ -1284,7 +1292,17 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
         drawSkeleton(ctx, frame, result.accepted, camera.mirrored);
         renderReadout(readout, result, show);
 
-        if (result.validRepCount !== shownReps) {
+        if (isHold) {
+          // Whole seconds only: a timer flickering through hundredths is
+          // unreadable from across a room, and the score is not that precise.
+          const held = Math.floor(result.holdSeconds ?? 0);
+          if (held !== shownHold) {
+            shownHold = held;
+            countEl.textContent = String(held);
+            reptrack.style.width = `${Math.min(100, (100 * held) / Math.max(1, target))}%`;
+            if (held > 0) pulse(countEl, "tick-up");
+          }
+        } else if (result.validRepCount !== shownReps) {
           shownReps = result.validRepCount;
           countEl.textContent = String(shownReps);
           reptrack.style.width = `${Math.min(100, (100 * shownReps) / Math.max(1, target))}%`;

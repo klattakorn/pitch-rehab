@@ -91,6 +91,12 @@ export interface FrameResult {
   justCompleted: RepResult | null;
   /** Set on the frame where a movement was followed and then thrown away. */
   discarded: DiscardedRep | null;
+  /**
+   * Seconds held so far, for a `hold` exercise -- the longest unbroken stretch
+   * where every target was satisfied, which is what the server scores it on.
+   * Null for a rep exercise, where the rep count is the thing to watch.
+   */
+  holdSeconds: number | null;
 }
 
 export interface SetResult {
@@ -100,6 +106,8 @@ export interface SetResult {
   formScore: number;
   warnings: string[];
   frames: Frame[];
+  /** Longest clean hold in seconds, for a `hold` exercise. Null otherwise. */
+  holdSeconds: number | null;
 }
 
 interface RepBuffer {
@@ -123,6 +131,8 @@ export class LiveSession {
   private peak = -Infinity;
   private lastDiscard: DiscardedRep | null = null;
   private discardCounts: Record<string, number> = {};
+  private holdRunStart: number | null = null;
+  private bestHold = 0;
   private readonly reps: RepResult[] = [];
   private readonly captured: Frame[] = [];
   private droppedFrames = 0;
@@ -233,6 +243,7 @@ export class LiveSession {
         activeCues: [],
         justCompleted: null,
         discarded: null,
+        holdSeconds: this.rule.mode === "hold" ? this.bestHold : null,
       };
     }
 
@@ -243,7 +254,9 @@ export class LiveSession {
 
     this.lastDiscard = null;
     const justCompleted = this.advanceReps(frame.t, smoothed);
-    const activeCues = this.rep ? this.liveCues(smoothed) : [];
+    if (this.rule.mode === "hold") this.advanceHold(frame.t, smoothed);
+    const activeCues =
+      this.rule.mode === "hold" ? this.liveCues(smoothed) : this.rep ? this.liveCues(smoothed) : [];
 
     return {
       accepted: true,
@@ -256,7 +269,33 @@ export class LiveSession {
       activeCues,
       justCompleted,
       discarded: this.lastDiscard,
+      holdSeconds: this.rule.mode === "hold" ? this.bestHold : null,
     };
+  }
+
+  /**
+   * Time in position, counted the way the server counts it.
+   *
+   * Every target has to be satisfied, not just the ones with an upper bound --
+   * a wall sit sat too high fails on `min`, and crediting that as time held
+   * would be the screen disagreeing with the score the set finally gets.
+   */
+  private advanceHold(t: number, perSide: Metrics[]): void {
+    let clean = true;
+    for (const target of this.rule.targets) {
+      const observed = this.worst(perSide, target.metric, target.min !== null);
+      if (observed === null) continue;
+      if (evaluateTarget(target, observed)) {
+        clean = false;
+        break;
+      }
+    }
+    if (!clean) {
+      this.holdRunStart = null;
+      return;
+    }
+    if (this.holdRunStart === null) this.holdRunStart = t;
+    this.bestHold = Math.max(this.bestHold, t - this.holdRunStart);
   }
 
   /** Close the set and hand back everything for upload. */
@@ -275,6 +314,7 @@ export class LiveSession {
       warnings.push(`discarded_${code}_x${n}`);
     }
     return {
+      holdSeconds: this.rule.mode === "hold" ? this.bestHold : null,
       reps: this.reps,
       completedReps: this.reps.length,
       validReps: valid.length,
