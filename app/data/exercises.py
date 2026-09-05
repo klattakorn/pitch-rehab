@@ -20,6 +20,13 @@ class ExerciseDef:
     cue_en: str
     cue_th: str
     equipment: str | None = None
+    #: A short clip of the movement done properly, served from web/public.
+    #: Where there is one, the "how to" screen plays it instead of drawing the
+    #: stick figure -- a person watching another person is a better instruction
+    #: than an animation, and it is footage of the team doing their own exercise.
+    #: The figure stays for the "common mistake" side, which cannot be filmed
+    #: safely, and for every exercise that has no clip.
+    demo_url: str | None = None
     rule: ExerciseRule | None = None
 
 
@@ -286,6 +293,7 @@ EXERCISES: list[ExerciseDef] = [
         category="strength",
         cue_en="Rise as high as you can, lower under control.",
         cue_th="เขย่งขึ้นให้สูงที่สุด แล้วลงช้าๆ",
+        demo_url="/demos/double_leg_calf_raise.mp4",
         rule=ExerciseRule(
             mode="rep",
             view="side",

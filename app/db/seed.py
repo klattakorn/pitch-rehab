@@ -31,6 +31,7 @@ def seed_exercises(db: Session) -> dict[str, Exercise]:
             cue_en=definition.cue_en,
             cue_th=definition.cue_th,
             equipment=definition.equipment,
+            demo_url=definition.demo_url,
             pose_rule=definition.rule.model_dump(mode="json") if definition.rule else None,
         )
         if row is None:

@@ -32,7 +32,7 @@ def main() -> None:
             "cue_en": e.cue_en,
             "cue_th": e.cue_th,
             "equipment": e.equipment,
-            "demo_url": None,
+            "demo_url": e.demo_url,
             "pose_rule": e.rule.model_dump(mode="json") if e.rule else None,
         }
         for index, e in enumerate(EXERCISES, start=1)

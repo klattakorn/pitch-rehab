@@ -46,7 +46,20 @@ export function demoPanelHtml(exercise: Exercise): string {
   return `
     <div class="demo">
       <div class="demo-figure">
-        <canvas id="demo-canvas" width="420" height="420"></canvas>
+        ${
+          // Where the movement has been filmed, that is what "correct" shows:
+          // watching a person is a better instruction than watching a drawing.
+          // The figure stays underneath for the mistake, which is the half that
+          // cannot be filmed -- nobody should be recorded doing a rep wrong on
+          // a knee that is already hurt.
+          exercise.demo_url
+            ? `<video id="demo-video" src="${exercise.demo_url}" muted loop playsinline
+                      autoplay preload="metadata" disablepictureinpicture></video>`
+            : ""
+        }
+        <canvas id="demo-canvas" width="420" height="420"${
+          exercise.demo_url ? " hidden" : ""
+        }></canvas>
         <div class="demo-toggle">
           <button class="chip on" id="show-right">Correct</button>
           ${spec.hasMistake ? `<button class="chip" id="show-wrong">Common mistake</button>` : ""}
@@ -80,16 +93,38 @@ export function runDemoAnimation(exercise: Exercise): DemoHandle {
 
   const rightBtn = document.querySelector<HTMLButtonElement>("#show-right");
   const wrongBtn = document.querySelector<HTMLButtonElement>("#show-wrong");
+  const video = document.querySelector<HTMLVideoElement>("#demo-video");
+
+  /** Swap between the filmed version and the drawn one, where both exist. */
+  const show = (showWrong: boolean): void => {
+    wrong = showWrong;
+    if (!video) return;
+    video.hidden = showWrong;
+    canvas.hidden = !showWrong;
+    // Paused rather than left running behind the figure: a phone that is
+    // decoding video nobody can see is spending battery for nothing.
+    if (showWrong) video.pause();
+    else void video.play().catch(() => {});
+  };
+
   if (rightBtn && wrongBtn) {
     rightBtn.onclick = () => {
-      wrong = false;
+      show(false);
       rightBtn.classList.add("on");
       wrongBtn.classList.remove("on");
     };
     wrongBtn.onclick = () => {
-      wrong = true;
+      show(true);
       wrongBtn.classList.add("on");
       rightBtn.classList.remove("on");
+    };
+  }
+
+  // A clip that will not load leaves the drawing rather than a black rectangle.
+  if (video) {
+    video.onerror = () => {
+      video.hidden = true;
+      canvas.hidden = false;
     };
   }
 

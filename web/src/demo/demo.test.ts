@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest";
 import { FALLBACK_EXERCISES } from "../fallback";
 import { bones, joints, project } from "./figure";
 import { buildDemoSpec, targetLines } from "./spec";
-import { cameraDiagram } from "./panel";
+import { cameraDiagram, demoPanelHtml } from "./panel";
 import type { Exercise } from "../pose/rules";
 
 const withRules = FALLBACK_EXERCISES.filter((e) => e.pose_rule !== null);
@@ -184,5 +184,46 @@ describe("the demonstration matches the marking", () => {
     expect(cameraDiagram("front")).toContain("svg");
     expect(cameraDiagram("side")).toContain("svg");
     expect(cameraDiagram("any")).toBe("");
+  });
+});
+
+describe("a filmed demonstration, where the team recorded one", () => {
+  /* The drawn figure is a fallback, not the goal: watching a person do the
+     movement is a better instruction than watching a stick figure do it. But a
+     clip only ever shows the correct version -- nobody films a deliberately bad
+     rep on an injured knee -- so the figure has to survive underneath for the
+     "common mistake" half. */
+  const filmed = FALLBACK_EXERCISES.filter((e) => e.demo_url !== null);
+
+  it("has at least one exercise with a clip", () => {
+    expect(filmed.length).toBeGreaterThan(0);
+  });
+
+  it("points every clip at a file the site actually serves", () => {
+    for (const exercise of filmed) {
+      // Same-origin and under /demos, so it is something in web/public and not
+      // a link to a video host that will not load on a locked-down network.
+      expect(exercise.demo_url).toBe(`/demos/${exercise.key}.mp4`);
+    }
+  });
+
+  it("plays the clip and keeps the drawing for the mistake", () => {
+    const exercise = filmed[0]!;
+    const html = demoPanelHtml(exercise);
+    expect(html).toContain(`src="${exercise.demo_url}"`);
+    // Muted and inline, or a phone refuses to autoplay it at all.
+    expect(html).toMatch(/<video[^>]*\bmuted\b/);
+    expect(html).toMatch(/<video[^>]*\bplaysinline\b/);
+    expect(html).toMatch(/<video[^>]*\bloop\b/);
+    // The canvas is still there, just not the thing on show.
+    expect(html).toMatch(/<canvas[^>]*\bhidden\b/);
+    expect(html).toContain("Common mistake");
+  });
+
+  it("draws the figure as before when there is no clip", () => {
+    const plain = withRules.find((e) => e.demo_url === null)!;
+    const html = demoPanelHtml(plain);
+    expect(html).not.toContain("<video");
+    expect(html).not.toMatch(/<canvas[^>]*\bhidden\b/);
   });
 });

@@ -2087,6 +2087,24 @@ ul.facts b {
   height: auto;
   display: block;
 }
+/* `display: block` above beats the browser's own [hidden] rule, so switching to
+   the mistake left the drawing stacked under the clip instead of replacing it. */
+.demo-figure canvas[hidden],
+.demo-figure video[hidden] {
+  display: none;
+}
+/* The filmed version, where there is one. `contain`, never `cover`: the clips
+   are shot portrait and cropping one to a square takes the head off the top and
+   the feet off the bottom -- and on a calf raise the feet are the entire point.
+   Letterboxing shows the whole movement, which is what the panel is for. */
+.demo-figure video {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: contain;
+  display: block;
+  border-radius: var(--r-md);
+  background: #000;
+}
 
 .demo-toggle {
   display: flex;

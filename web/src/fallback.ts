@@ -411,7 +411,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
     "cue_en": "Rise as high as you can, lower under control.",
     "cue_th": "เขย่งขึ้นให้สูงที่สุด แล้วลงช้าๆ",
     "equipment": null,
-    "demo_url": null,
+    "demo_url": "/demos/double_leg_calf_raise.mp4",
     "pose_rule": {
       "mode": "rep",
       "view": "side",
