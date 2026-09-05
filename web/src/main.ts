@@ -1346,8 +1346,16 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
         if (refused && !refused.isValid) {
           cueUntil = performance.now() + 1400;
           setState("fix", "Not counted");
+          // The reason has to be the one that actually refused the rep, not
+          // whichever target happens to sit first in the rule. Only a critical
+          // violation or the tempo can refuse; everything else in the list is
+          // scored and shown on the summary, and printing one of those as the
+          // reason tells the player to fix something that was not the problem.
+          const cause =
+            refused.violations.find((v) => v.critical) ??
+            refused.violations.find((v) => v.code === "tempo_too_fast");
           centre.innerHTML = `<div class="cue">${
-            refused.violations[0]?.message_en ?? "That one did not count."
+            cause?.message_en ?? "That one did not count."
           }</div>`;
         }
 

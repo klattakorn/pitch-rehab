@@ -162,7 +162,6 @@ export function computeMetrics(f: Frame, side: Side, useZ = false): Metrics {
   const wrist = sided("wrist", side);
 
   const midHip = midpoint(f, LM.LEFT_HIP, LM.RIGHT_HIP, useZ);
-  const midShoulder = midpoint(f, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, useZ);
 
   const kneeFlexion = 180 - jointAngle(f, hip, knee, ankle, useZ);
   const hipFlexion = 180 - jointAngle(f, shoulder, hip, knee, useZ);
@@ -173,7 +172,16 @@ export function computeMetrics(f: Frame, side: Side, useZ = false): Metrics {
   put("hip_extension", -hipFlexion);
   put("ankle_dorsiflexion", 90 - jointAngle(f, knee, ankle, toe, useZ));
 
-  const trunk = sub(midShoulder, midHip);
+  // Flat, never with depth, whatever the rule asked for -- mirrors
+  // compute_metrics in app/services/pose/geometry.py. Leaning forward is a
+  // sagittal movement that a camera in front of you cannot see; asking
+  // MediaPipe's depth estimate for it invents an angle rather than recovering
+  // one. Measured flat this is sideways lean from the front and forward lean
+  // from the side: in both cases, what the camera can actually see.
+  const trunk = sub(
+    midpoint(f, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER),
+    midpoint(f, LM.LEFT_HIP, LM.RIGHT_HIP),
+  );
   put("trunk_lean", angleBetween(trunk, UP));
   if (Math.abs(trunk[1]) > EPS) {
     put("trunk_lean_signed", (Math.atan2(trunk[0], -trunk[1]) * 180) / Math.PI);

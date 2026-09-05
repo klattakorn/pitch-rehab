@@ -72,6 +72,15 @@ export function demoPanelHtml(exercise: Exercise): string {
           ${cameraDiagram(rule.view)}
           <div><strong>${where}</strong><span class="en">${dose}</span></div>
         </div>
+        <!-- Where the camera goes was the one thing the app never said, and a
+             phone flat on the floor with the player standing over it is what
+             the first person to try it did. It is not a detail: the angles are
+             measured off the picture, so a bad view is bad numbers, and the
+             screen has no way to tell the player that after the fact. -->
+        <p class="framing">Prop the phone up at about <strong>hip height</strong>,
+           two to three steps away, and stand back until your <strong>head and
+           feet are both in the picture</strong>. Filming from the floor, or
+           standing too close, bends the angles it measures.</p>
         <h4>What gets measured</h4>
         <ul class="targets">${targets}</ul>
       </div>

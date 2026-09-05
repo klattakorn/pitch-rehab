@@ -156,7 +156,6 @@ def compute_metrics(frame: Frame, side: Side, use_z: bool = False) -> dict[str, 
     wrist = sided("wrist", side)
 
     mid_hip = midpoint(frame, LM.LEFT_HIP, LM.RIGHT_HIP, use_z)
-    mid_shoulder = midpoint(frame, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER, use_z)
 
     def put(name: str, value: float | None) -> None:
         v = _safe(value)
@@ -175,7 +174,18 @@ def compute_metrics(frame: Frame, side: Side, use_z: bool = False) -> dict[str, 
     put("ankle_dorsiflexion", 90.0 - joint_angle(frame, knee, ankle, toe, use_z))
 
     # --- trunk -----------------------------------------------------------
-    trunk = mid_shoulder - mid_hip
+    # Measured in the image plane, never with depth, whatever the rule asked
+    # for. Leaning forward is a sagittal movement: a camera in front of you
+    # cannot see it, and asking MediaPipe's depth estimate for it does not
+    # recover the information, it invents it. On a clip of someone standing
+    # essentially straight -- true lean under 5 degrees at its worst -- the
+    # depth version read a median of 15 and peaked at 37, so a 20-degree limit
+    # was breached on nearly every rep, for every player, on footage where
+    # nobody had leaned. Flat, this reads whatever the camera can genuinely
+    # see: sideways lean from the front, forward lean from the side.
+    trunk = midpoint(frame, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER) - midpoint(
+        frame, LM.LEFT_HIP, LM.RIGHT_HIP
+    )
     put("trunk_lean", angle_from_vertical(trunk))
     if abs(trunk[1]) > _EPS:
         put("trunk_lean_signed", math.degrees(math.atan2(trunk[0], -trunk[1])))

@@ -11,7 +11,7 @@ import sideOn from "./__fixtures__/side-on.json";
 import { Frame } from "./geometry";
 import type { Side } from "./landmarks";
 import { LiveSession } from "./live";
-import type { ExerciseRule } from "./rules";
+import type { ExerciseRule, Violation } from "./rules";
 
 const rule = crosscheck.rule as unknown as ExerciseRule;
 const side = crosscheck.side as Side;
@@ -252,14 +252,55 @@ describe("a rep the camera measured and then refused", () => {
     );
   });
 
+  /** How the camera screen picks the sentence it shows. Kept in step with
+      main.ts: only a critical violation or the tempo can refuse a rep. */
+  const causeOf = (rep: { violations: Violation[] }) =>
+    rep.violations.find((v) => v.critical) ??
+    rep.violations.find((v) => v.code === "tempo_too_fast");
+
   it("says why, on the frame it happened", () => {
     const { results } = run(atSpeed(2));
     const refused = results.filter((r) => r.justCompleted && !r.justCompleted.isValid);
     expect(refused.length).toBeGreaterThan(0);
     // The reason has to be a sentence a player can act on, in both languages.
-    const first = refused[0]!.justCompleted!.violations[0]!;
-    expect(first.message_en).toMatch(/slow/i);
-    expect(first.message_th.length).toBeGreaterThan(0);
+    const cause = causeOf(refused[0]!.justCompleted!)!;
+    expect(cause.message_en).toMatch(/slow/i);
+    expect(cause.message_th.length).toBeGreaterThan(0);
+  });
+
+  /* The bug this guards: the screen used to print violations[0], which is the
+     first target the rule happens to list, not the one that refused the rep.
+     A split squat refused for being fast said "Too much lean - keep the chest
+     up." -- advice about something that had not stopped anything. */
+  it("names the refusal, not whichever target is listed first", () => {
+    const noisy = {
+      ...tempoRule,
+      targets: [
+        {
+          metric: "trunk_lean",
+          aggregate: "peak",
+          min: null,
+          max: -1, // impossible, so it is always breached and always first
+          tolerance: 0,
+          weight: 1,
+          critical: false,
+          judge: "worst",
+          code: "trunk_lean",
+          message_en: "Too much lean - keep the chest up.",
+          message_th: "x",
+        },
+        ...tempoRule.targets,
+      ],
+    } as ExerciseRule;
+    const session = new LiveSession(noisy, side);
+    const results = atSpeed(2).map((f) => session.push(f));
+    const refused = results.filter((r) => r.justCompleted && !r.justCompleted.isValid);
+    expect(refused.length).toBeGreaterThan(0);
+    const rep = refused[0]!.justCompleted!;
+    // The lean violation is recorded, and it is first...
+    expect(rep.violations[0]!.code).toBe("trunk_lean");
+    // ...but it is not what the screen says, because it refused nothing.
+    expect(causeOf(rep)!.code).toBe("tempo_too_fast");
   });
 
   it("counts the same movement when it is done at the asked-for tempo", () => {

@@ -2106,6 +2106,20 @@ ul.facts b {
   background: #000;
 }
 
+/* Sits under the camera line on the "how to" screen. Quiet, but it has to be
+   readable before the camera opens -- afterwards it is too late to say it. */
+.framing {
+  margin: var(--s2) 0 0;
+  padding: var(--s2);
+  border-left: 2px solid var(--edge);
+  color: var(--ink-2);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.framing strong {
+  color: var(--ink);
+}
+
 .demo-toggle {
   display: flex;
   gap: var(--s2);
