@@ -2099,7 +2099,11 @@ ul.facts b {
    Letterboxing shows the whole movement, which is what the panel is for. */
 .demo-figure video {
   width: 100%;
+  /* A holding shape until the clip reports its own, which panel.ts then sets.
+     `contain` and a cap on the height, so a tall portrait clip cannot push the
+     Correct/Common mistake buttons off the bottom of a phone screen. */
   aspect-ratio: 3 / 4;
+  max-height: 60vh;
   object-fit: contain;
   display: block;
   border-radius: var(--r-md);

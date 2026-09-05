@@ -67,7 +67,10 @@ def encode(ffmpeg: Path, src: Path, dest: Path, encoder: str, cq: int) -> bool:
             str(ffmpeg), "-y", "-hide_banner", "-loglevel", "error",
             "-i", str(src),
             "-an",                              # a silent demonstration
-            "-vf", f"scale=-2:{HEIGHT}",        # -2 keeps the aspect, even width
+            # -2 keeps the aspect with an even width; min() stops a clip that
+            # is already smaller being blown up, which costs bytes and adds
+            # no detail. A 480-tall phone clip stays 480 tall.
+            "-vf", f"scale=-2:'min({HEIGHT},ih)'",
             "-c:v", encoder, *quality,
             "-maxrate", "1400k", "-bufsize", "2800k",
             "-pix_fmt", "yuv420p",              # what every browser can decode

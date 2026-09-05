@@ -104,6 +104,11 @@ EXERCISES: list[ExerciseDef] = [
         category="activation",
         cue_en="Drive through the heels, squeeze the glutes at the top.",
         cue_th="ดันส้นเท้าลง บีบก้นตอนอยู่จุดสูงสุด",
+        # A demonstration only. The clip is filmed close and MediaPipe holds
+        # the body in 77% of its frames against 100% on the others, so it is
+        # not evidence about the thresholds below and nothing here was tuned
+        # against it. This one movement is still unchecked on real footage.
+        demo_url="/demos/glute_bridge.mp4",
         rule=ExerciseRule(
             mode="rep",
             view="side",

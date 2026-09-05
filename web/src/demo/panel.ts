@@ -135,6 +135,15 @@ export function runDemoAnimation(exercise: Exercise): DemoHandle {
       video.hidden = true;
       canvas.hidden = false;
     };
+    // Take the panel's shape from the clip itself. These are filmed on whatever
+    // phone was to hand: the calf raise came in portrait, the glute bridge
+    // landscape. A fixed frame either crops one or letterboxes the other, and
+    // both throw away part of the demonstration.
+    video.onloadedmetadata = () => {
+      if (video.videoWidth > 0 && video.videoHeight > 0) {
+        video.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+      }
+    };
   }
 
   /**

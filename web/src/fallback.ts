@@ -73,7 +73,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
     "cue_en": "Drive through the heels, squeeze the glutes at the top.",
     "cue_th": "ดันส้นเท้าลง บีบก้นตอนอยู่จุดสูงสุด",
     "equipment": null,
-    "demo_url": null,
+    "demo_url": "/demos/glute_bridge.mp4",
     "pose_rule": {
       "mode": "rep",
       "view": "side",
