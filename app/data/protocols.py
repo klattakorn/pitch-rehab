@@ -1391,21 +1391,29 @@ def _apply_position(phase: PhaseTemplate, profile: PositionProfile) -> PhaseTemp
 
 #: Phase one is the same four movements for every position and every injury.
 #:
-#: These are the four whose camera scoring has actually been checked against
-#: video of a real person, with a known rep count, rather than against a
-#: skeleton drawn in code. Everything else in the library is still built from
-#: the injury and the position; only this one phase is pinned, so that the part
-#: anyone is shown first is the part that is known to work.
+#: Three of them have had their camera scoring checked against video of a real
+#: person with a known rep count, rather than against a skeleton drawn in code.
+#: Everything else in the library is still built from the injury and the
+#: position; only this one phase is pinned, so that the part anyone is shown
+#: first is the part that is known to work.
 #:
-#: Clinically this is not a phase-one selection -- a lateral bound is late-stage
-#: plyometric work, not something to hand someone in the first week after an
-#: injury. It is pinned here for demonstration. Deleting `_fixed_phase_one` and
-#: its call below restores the real programmes exactly.
+#: The fourth, the glute bridge, replaced a lateral bound whose reps could not
+#: be counted reliably. A bound is continuous: there is no still moment between
+#: reps for the counter to reset on, and on real footage a landing wobble inside
+#: one bound dipped further than the gap between two separate bounds, so no
+#: threshold could tell them apart. The bridge is the opposite on every count
+#: that mattered -- filmed side-on so the angles are measured in the image
+#: rather than from MediaPipe's depth guess, done lying down so there is no
+#: balance to lose, and it comes to rest between every rep.
+#:
+#: Clinically this is not a phase-one selection. It is pinned here for
+#: demonstration; deleting `_fixed_phase_one` and its call below restores the
+#: real programmes exactly.
 _DEMO_PHASE_ONE: tuple[Rx, ...] = (
     Rx("double_leg_calf_raise", sets=3, reps=12, tempo="2-0-2-0"),
     Rx("wall_sit", sets=3, reps=None, hold_seconds=45),
     Rx("split_squat", sets=3, reps=8, side_mode=Side.BILATERAL, tempo="2-0-2-0"),
-    Rx("lateral_bound", sets=3, reps=6, side_mode=Side.BILATERAL),
+    Rx("glute_bridge", sets=3, reps=12, tempo="2-0-2-0"),
 )
 
 
