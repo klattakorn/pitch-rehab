@@ -403,6 +403,9 @@ EXERCISES: list[ExerciseDef] = [
         category="strength",
         cue_en="Drop the back knee straight down, front shin close to vertical.",
         cue_th="ย่อเข่าหลังลงตรงๆ หน้าแข้งขาหน้าเกือบตั้งฉาก",
+        # Filmed front-on, which is where this rule needs the camera, so the
+        # clip doubles as a demonstration of where to stand the phone.
+        demo_url="/demos/split_squat.mp4",
         rule=ExerciseRule(
             mode="rep",
             view="front",

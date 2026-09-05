@@ -680,7 +680,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
     "cue_en": "Drop the back knee straight down, front shin close to vertical.",
     "cue_th": "ย่อเข่าหลังลงตรงๆ หน้าแข้งขาหน้าเกือบตั้งฉาก",
     "equipment": null,
-    "demo_url": null,
+    "demo_url": "/demos/split_squat.mp4",
     "pose_rule": {
       "mode": "rep",
       "view": "front",
