@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime, timedelta
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.factories import frames_to_payload, squat_trace
+from tests.factories import frames_to_payload, heel_raise_trace, squat_trace
 
 API = "/api/v1"
 
@@ -133,26 +133,48 @@ def test_a_full_session_is_scored_and_feeds_the_exit_criteria(
         json={"device": "pytest", "app_version": "0.1.0"},
     ).json()["id"]
 
-    # Phase 1 for a hamstring asks for 120 degrees of pain-free knee flexion.
-    frames = squat_trace(
-        reps=4, peak_flexion=130.0, sagittal_axis="x", thigh_fixed=True, seconds_per_rep=3.0
-    )
-    response = client.post(
+    # A leg curl, which is scored on how far the knee bends and writes that
+    # reading out as a metric anything can gate on.
+    curl = client.post(
         f"{API}/sessions/{session_id}/sets",
         headers=headers,
         json={
             "exercise_key": "prone_hamstring_curl",
             "side": "left",
             "prescribed_reps": 12,
-            "frames": frames_to_payload(frames),
+            "frames": frames_to_payload(
+                squat_trace(
+                    reps=4,
+                    peak_flexion=130.0,
+                    sagittal_axis="x",
+                    thigh_fixed=True,
+                    seconds_per_rep=3.0,
+                )
+            ),
         },
     )
-    assert response.status_code == 200, response.text
-    result = response.json()
+    assert curl.status_code == 200, curl.text
+    result = curl.json()
     assert result["completed_reps"] == 4
     assert result["valid_reps"] == 4
     assert result["form_score"] > 90
     assert {e["key"] for e in result["emitted"]} == {"pose.knee_flexion_rom"}
+
+    # And a calf raise, which phase 1 actually gates on. It emits no metric of
+    # its own -- the gate counts the reps the camera accepted, so the set has to
+    # be scored correctly for the criterion to move at all.
+    raises = client.post(
+        f"{API}/sessions/{session_id}/sets",
+        headers=headers,
+        json={
+            "exercise_key": "double_leg_calf_raise",
+            "side": "bilateral",
+            "prescribed_reps": 12,
+            "frames": frames_to_payload(heel_raise_trace(reps=12)),
+        },
+    )
+    assert raises.status_code == 200, raises.text
+    assert raises.json()["valid_reps"] == 12
 
     completed = client.post(
         f"{API}/sessions/{session_id}/complete",
@@ -162,11 +184,11 @@ def test_a_full_session_is_scored_and_feeds_the_exit_criteria(
     assert completed.json()["status"] == "completed"
 
     gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
-    rom = next(c for c in gate["criteria"] if c["key"] == "knee_rom")
-    assert rom["status"] == "pass"
-    assert rom["observed"] == pytest.approx(130.0, abs=3.0)
+    reps = next(c for c in gate["criteria"] if c["key"] == "calf_raise_reps")
+    assert reps["status"] == "pass"
+    assert reps["observed"] == 12
     assert gate["passed"] is False  # other gates still open
-    assert "knee_rom" not in gate["blocking"]
+    assert "calf_raise_reps" not in gate["blocking"]
 
 
 def test_wrong_camera_angle_tells_the_player_to_move_the_phone(
@@ -544,21 +566,27 @@ def test_a_tendinopathy_is_not_treated_like_a_torn_ligament(client: TestClient) 
     acl = client.get(f"{API}/catalog/protocols/winger/acl").json()
     tendon = client.get(f"{API}/catalog/protocols/winger/patellar_tendinopathy").json()
 
-    def phase_one(protocol: dict) -> dict:
-        return next(p for p in protocol["phases"] if p["phase_key"] == "p1_protect")
+    def phase(protocol: dict, key: str) -> dict:
+        return next(p for p in protocol["phases"] if p["phase_key"] == key)
 
-    acl_exercises = {rx["exercise"]["key"] for rx in phase_one(acl)["prescriptions"]}
-    tendon_exercises = {rx["exercise"]["key"] for rx in phase_one(tendon)["prescriptions"]}
+    # Phase one is pinned to the same four movements for every injury, so the
+    # exercise choice is compared where the library is still free to differ.
+    acl_exercises = {rx["exercise"]["key"] for rx in phase(acl, "p2_strength")["prescriptions"]}
+    tendon_exercises = {
+        rx["exercise"]["key"] for rx in phase(tendon, "p2_strength")["prescriptions"]
+    }
     assert acl_exercises != tendon_exercises
-    # The tendon programme loads it from day one.
+    # The tendon programme loads it, where the ligament programme protects.
     assert "spanish_squat" in tendon_exercises
+    assert "spanish_squat" not in acl_exercises
 
     # And it tolerates pain that would block an acute injury.
     tendon_pain = next(
-        c for c in phase_one(tendon)["exit_criteria"] if c["key"] == "tendon_pain_during"
+        c for c in phase(tendon, "p1_protect")["exit_criteria"]
+        if c["key"] == "tendon_pain_during"
     )
     acl_pain = next(
-        c for c in phase_one(acl)["exit_criteria"] if c["key"] == "pain_at_rest"
+        c for c in phase(acl, "p1_protect")["exit_criteria"] if c["key"] == "pain_at_rest"
     )
     assert tendon_pain["spec"]["target"]["value"] > acl_pain["spec"]["target"]["value"]
 

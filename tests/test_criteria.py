@@ -104,35 +104,36 @@ def find(gate, key: str):
 # --------------------------------------------------------------------------
 def test_absolute_criterion_reports_no_data_before_any_measurement(db, episode) -> None:
     gate = evaluate_phase(db, episode, PhaseKey.P1_PROTECT)
-    rom = find(gate, "knee_rom")
-    assert rom.status is CriterionStatus.NO_DATA
-    assert rom.progress == 0.0
+    reps = find(gate, "calf_raise_reps")
+    assert reps.status is CriterionStatus.NO_DATA
+    assert reps.progress == 0.0
     assert gate.passed is False
-    assert "knee_rom" in gate.blocking
+    assert "calf_raise_reps" in gate.blocking
 
 
 def test_absolute_criterion_passes_once_the_number_clears_the_target(db, episode) -> None:
-    add_metric(db, episode, "pose.knee_flexion_rom", 128.0, side=Side.LEFT)
-    rom = find(evaluate_phase(db, episode, PhaseKey.P1_PROTECT), "knee_rom")
-    assert rom.status is CriterionStatus.PASS
-    assert rom.observed == 128.0
-    assert rom.target == 120.0
-    assert rom.progress == 1.0
+    add_metric(db, episode, "pose.nordic_break_angle", 60.0, side=Side.LEFT)
+    angle = find(evaluate_phase(db, episode, PhaseKey.P2_STRENGTH), "nordic_break_angle")
+    assert angle.status is CriterionStatus.PASS
+    assert angle.observed == 60.0
+    assert angle.target == 55.0
+    assert angle.progress == 1.0
 
 
 def test_partial_progress_is_reported_so_the_app_can_draw_a_bar(db, episode) -> None:
-    add_metric(db, episode, "pose.knee_flexion_rom", 90.0, side=Side.LEFT)
-    rom = find(evaluate_phase(db, episode, PhaseKey.P1_PROTECT), "knee_rom")
-    assert rom.status is CriterionStatus.FAIL
-    assert rom.progress == pytest.approx(0.75, abs=0.01)
+    # Three quarters of the 55 degrees the gate asks for.
+    add_metric(db, episode, "pose.nordic_break_angle", 41.25, side=Side.LEFT)
+    angle = find(evaluate_phase(db, episode, PhaseKey.P2_STRENGTH), "nordic_break_angle")
+    assert angle.status is CriterionStatus.FAIL
+    assert angle.progress == pytest.approx(0.75, abs=0.01)
 
 
 def test_injured_limb_scope_ignores_the_healthy_side(db, player) -> None:
-    episode = make_episode(db, player, site=InjurySite.ACL, side=Side.LEFT)
+    episode = make_episode(db, player, site=InjurySite.HAMSTRING, side=Side.LEFT)
     # A great number on the *uninjured* leg must not unlock anything.
-    add_metric(db, episode, "pose.knee_flexion_rom", 140.0, side=Side.RIGHT)
-    rom = find(evaluate_phase(db, episode, PhaseKey.P1_PROTECT), "knee_rom")
-    assert rom.status is CriterionStatus.NO_DATA
+    add_metric(db, episode, "pose.nordic_break_angle", 80.0, side=Side.RIGHT)
+    angle = find(evaluate_phase(db, episode, PhaseKey.P2_STRENGTH), "nordic_break_angle")
+    assert angle.status is CriterionStatus.NO_DATA
 
 
 def test_limb_symmetry_index_compares_injured_against_healthy(db, player) -> None:
@@ -203,8 +204,20 @@ def test_optional_criteria_never_block_a_phase(db, episode) -> None:
 
 
 def _clear_phase_one(db: Session, episode) -> None:
+    """Everything phase one asks for, so a test can get past it.
+
+    Phase one is pinned to four fixed movements, and its gate is pinned with
+    them, so clearing it means having actually done two of them: a set of
+    twelve calf raises, and a wall sit held past thirty seconds.
+    """
+    from app.models.session import RepRecord
+
     add_pain_logs(db, episode, days=7, pain=0.0)
-    add_metric(db, episode, "pose.knee_flexion_rom", 130.0, side=Side.LEFT)
+    add_exercise_sets(db, episode, "double_leg_calf_raise", reps=[12])
+    wall_sit = add_exercise_sets(db, episode, "wall_sit", reps=[1])[0]
+    # A hold is timed onto the rep, not the set.
+    db.add(RepRecord(set_id=wall_sit.id, rep_index=0, is_valid=True, hold_seconds=35.0))
+    db.flush()
     add_sessions(db, episode, 30)
 
 
@@ -603,11 +616,8 @@ def test_one_players_custom_criterion_stays_theirs(db) -> None:
 
 def test_a_custom_criterion_can_block_a_phase_that_would_otherwise_pass(db, episode) -> None:
     """The point of letting a player set their own bar is that it holds them."""
-    # A hamstring in phase 1: no pain, full knee range, sessions actually done.
-    add_pain_logs(db, episode, days=6, pain=0.0)
-    # scope=injured, so the reading has to be on the injured side
-    add_metric(db, episode, "pose.knee_flexion_rom", 132.0, side=Side.LEFT)
-    add_sessions(db, episode, 30)
+    # A hamstring in phase 1: no pain, the work done, sessions actually logged.
+    _clear_phase_one(db, episode)
     assert evaluate_phase(db, episode).passed, evaluate_phase(db, episode).blocking
 
     add_custom(

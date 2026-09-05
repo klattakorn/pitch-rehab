@@ -154,6 +154,37 @@ def squat_trace(
     return frames
 
 
+def heel_raise_trace(
+    reps: int = 12,
+    *,
+    fps: int = 30,
+    seconds_per_rep: float = 2.0,
+    peak_raise: float = 1.0,
+    knee_flexion: float = 5.0,
+) -> list[Frame]:
+    """A calf raise filmed from the side: heels up, heels down, ``reps`` times.
+
+    Unlike a squat, the knee barely moves -- what the counter watches is the
+    heel lifting off the floor. ``peak_raise`` is a fraction of foot length, so
+    1.0 is the heel lifted a whole foot-length clear, which is roughly what a
+    good rep looks like once it is normalised.
+    """
+    frames: list[Frame] = []
+    n = int(fps * seconds_per_rep)
+    t = 0.0
+    for _ in range(reps):
+        for i in range(n):
+            # Half-cosine: flat -> up on the toes -> flat.
+            lift = peak_raise * (0.5 - 0.5 * math.cos(2 * math.pi * i / n))
+            frames.append(build_frame(t, knee_flexion, heel_raise=lift, sagittal_axis="x"))
+            t += 1.0 / fps
+        # Heels down between reps, so the hysteresis can reset.
+        for _ in range(fps // 3):
+            frames.append(build_frame(t, knee_flexion, heel_raise=0.0, sagittal_axis="x"))
+            t += 1.0 / fps
+    return frames
+
+
 def frames_to_payload(frames: list[Frame]) -> list[dict]:
     """Turn ``Frame`` objects back into the JSON the API expects."""
     return [

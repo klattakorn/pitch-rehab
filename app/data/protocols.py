@@ -1389,6 +1389,71 @@ def _apply_position(phase: PhaseTemplate, profile: PositionProfile) -> PhaseTemp
     return replace(phase, prescriptions=prescriptions, criteria=tuple(criteria))
 
 
+#: Phase one is the same four movements for every position and every injury.
+#:
+#: These are the four whose camera scoring has actually been checked against
+#: video of a real person, with a known rep count, rather than against a
+#: skeleton drawn in code. Everything else in the library is still built from
+#: the injury and the position; only this one phase is pinned, so that the part
+#: anyone is shown first is the part that is known to work.
+#:
+#: Clinically this is not a phase-one selection -- a lateral bound is late-stage
+#: plyometric work, not something to hand someone in the first week after an
+#: injury. It is pinned here for demonstration. Deleting `_fixed_phase_one` and
+#: its call below restores the real programmes exactly.
+_DEMO_PHASE_ONE: tuple[Rx, ...] = (
+    Rx("double_leg_calf_raise", sets=3, reps=12, tempo="2-0-2-0"),
+    Rx("wall_sit", sets=3, reps=None, hold_seconds=45),
+    Rx("split_squat", sets=3, reps=8, side_mode=Side.BILATERAL, tempo="2-0-2-0"),
+    Rx("lateral_bound", sets=3, reps=6, side_mode=Side.BILATERAL),
+)
+
+
+def _fixed_phase_one(phase: PhaseTemplate) -> PhaseTemplate:
+    """Swap phase one's work for the four, and re-point its gate at them.
+
+    The criteria have to move with the exercises. Every pose-based phase-one
+    criterion in the library is fed by one specific movement -- ankle
+    dorsiflexion by knee-to-wall, extension lag by the quad set, knee range by
+    the heel slide -- so leaving them behind a different set of exercises would
+    leave a gate with nothing to satisfy it. Pain, pain-free days and adherence
+    do not depend on which exercises are prescribed, so those stay exactly as
+    the injury template wrote them.
+    """
+    kept = tuple(c for c in phase.criteria if not c.spec.metric.startswith("pose."))
+    return replace(
+        phase,
+        prescriptions=_DEMO_PHASE_ONE,
+        criteria=kept
+        + (
+            crit(
+                "wall_sit_hold",
+                "Hold a wall sit for 30 seconds",
+                "นั่งพิงกำแพงค้างได้ 30 วินาที",
+                metric="session.hold.wall_sit",
+                source=CriterionSource.SESSION,
+                aggregate=Aggregate.MAX,
+                window_days=14,
+                target=absolute(30, "s"),
+                help_en="Timed by the camera, and only while your knees stay in position.",
+                help_th="จับเวลาด้วยกล้อง และนับเฉพาะตอนที่เข่าอยู่ในมุมที่ถูกต้อง",
+            ),
+            crit(
+                "calf_raise_reps",
+                "12 double-leg calf raises in one set",
+                "เขย่งปลายเท้าสองขา 12 ครั้งในหนึ่งเซ็ต",
+                metric="session.reps.double_leg_calf_raise",
+                source=CriterionSource.SESSION,
+                aggregate=Aggregate.MAX,
+                window_days=14,
+                target=absolute(12, "reps"),
+                help_en="Counted from reps the camera accepted, so shallow ones do not help.",
+                help_th="นับจากครั้งที่กล้องยอมรับ ครั้งที่ยกไม่สุดจึงไม่ถูกนับ",
+            ),
+        ),
+    )
+
+
 def build_protocols() -> list[BuiltProtocol]:
     """Materialise all 30 position x injury programmes."""
     built: list[BuiltProtocol] = []
@@ -1396,6 +1461,11 @@ def build_protocols() -> list[BuiltProtocol]:
         for site, template in INJURY_TEMPLATES.items():
             injury_en, injury_th = _INJURY_LABELS[site]
             phases = tuple(_apply_position(p, profile) for p in template)
+            # After the position has had its say, so nothing a role adds can
+            # put a fifth exercise into the one phase that is meant to be fixed.
+            phases = tuple(
+                _fixed_phase_one(p) if p.phase_key is _P1 else p for p in phases
+            )
             assert [p.phase_key for p in phases] == PHASE_ORDER
             built.append(
                 BuiltProtocol(
