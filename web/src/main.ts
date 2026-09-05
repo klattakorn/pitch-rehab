@@ -1,5 +1,5 @@
 /**
- * Pitch Rehab — demo front end.
+ * RTP — demo front end.
  *
  * Five tabs once you are signed in (Home, Plan, Progress, Test, Profile), and
  * a linear onboarding before that: welcome → position → injury. Position comes
@@ -1751,7 +1751,7 @@ function profileScreen(): void {
        ${row("edit-injury", "Injury profile", `${injury}${
          state.episode ? ` · ${state.episode.side} side` : ""
        }`)}
-       ${row("about", "About Pitch Rehab")}
+       ${row("about", "About RTP")}
      </div>
 
      <div class="controls">

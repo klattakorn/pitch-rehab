@@ -2,10 +2,14 @@
 
 Two sources, for two different jobs.
 
-``design/crest-source.png`` is the club crest, and it is what a launcher or a
-home screen shows -- it is the identity people recognise. It is a photograph, so
-the code cannot produce it; without the file everything here falls back to the
-drawn mark and still works.
+``design/rtp-mark.png`` is the RTP badge, and it is what a launcher or a home
+screen shows -- it is the identity people recognise. It is artwork, so the code
+cannot produce it; without the file everything here falls back to the drawn mark
+and still works.
+
+It sits on white, not on the app's own near-black. The badge is drawn in two
+colours and one of them is a very dark navy: on #07080a the boot and the ball
+disappear and all that is left is a green outline.
 
 That drawn mark lives in ``web/src/ui.ts`` as an SVG, which is the right form
 for the app and the wrong form for an icon -- the launcher wants PNGs at a dozen
@@ -104,23 +108,23 @@ def draw_mark(size: int, scale: float, background) -> Image.Image:
     return image.resize((size, size), Image.LANCZOS)
 
 
-#: The club crest, if it has been put here. Everything an operating system shows
-#: as "the app" uses it; the drawn mark stays for the places a photograph cannot
+#: The RTP badge, if it has been put here. Everything an operating system shows
+#: as "the app" uses it; the drawn mark stays for the places artwork cannot
 #: survive. See `_crest`.
-CREST = ROOT / "design" / "crest-source.png"
+CREST = ROOT / "design" / "rtp-mark.png"
 
 
 def _crest(size: int, scale: float) -> Image.Image | None:
-    """The crest, scaled onto its own background so a crop cannot bite it.
+    """The badge, scaled onto its own background so a crop cannot bite it.
 
-    Returns ``None`` when there is no crest to use, and the caller falls back to
-    the drawn mark -- which is what happens on a fresh clone, since the artwork
-    is not something the code can produce.
+    Returns ``None`` when there is no artwork to use, and the caller falls back
+    to the drawn mark -- which is what happens on a fresh clone, since the
+    artwork is not something the code can produce.
 
     ``scale`` below 1 is not decoration. Android crops a maskable icon to about
     80% of the square and an adaptive launcher icon to about two thirds, and the
-    crest's banner runs the full width -- at full bleed the club's name is the
-    first thing cut off.
+    badge's arrow runs into the top-right corner -- at full bleed the arrow is
+    the first thing cut off, and it is the half that says "return".
     """
     if not CREST.exists():
         return None
@@ -159,13 +163,16 @@ def main() -> None:
             art = draw_mark(size, 0.52 if "maskable" in name else 0.68, PAGE)
         art.save(PUBLIC / name)
 
-    # The favicon stays the drawn mark even when there is a crest. At 32px the
-    # crest is a dark smudge -- a face, a shield, a ball and a line of Thai
-    # lettering cannot survive that, and a browser tab is the one place legible
-    # beats faithful. Checked by looking at it, not assumed.
+    # The favicon stays the drawn mark even when there is artwork, and it is the
+    # one place the running figure outlives the rebrand. Rendered the badge at
+    # 32px and looked at the two side by side: an outlined square holding a
+    # boot, a ball and an arrow turns to mud at that size, while the figure
+    # stays a figure. A browser tab is the one place legible beats faithful.
+    # If that trade stops being worth it, the fix is a simplified mark drawn for
+    # 32px -- probably the arrow alone -- not shrinking the badge further.
     draw_mark(32, 0.78, PAGE).save(PUBLIC / "favicon.png")
 
-    print(f"Source: {'design/crest-source.png' if using_crest else 'the drawn mark'}\n")
+    print(f"Source: {'design/rtp-mark.png' if using_crest else 'the drawn mark'}\n")
 
     for path in [
         PUBLIC / n

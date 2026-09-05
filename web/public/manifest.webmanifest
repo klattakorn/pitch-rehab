@@ -1,6 +1,6 @@
 {
-  "name": "Pitch Rehab",
-  "short_name": "Pitch Rehab",
+  "name": "RTP",
+  "short_name": "RTP",
   "description": "Rehab plans built around your position and your injury, with pose detection checking every rep.",
   "start_url": "/",
   "scope": "/",

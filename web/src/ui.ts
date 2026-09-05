@@ -1,28 +1,23 @@
 /** Shared chrome: the mark, the icon set, and the small data shapes. */
 
 /**
- * The Pitch Rehab mark — a sprinting figure, built from primitives so it stays
- * crisp at 24px in the tab bar and at 80px on the opening screen.
+ * The RTP badge, as a rounded chip — the same artwork a launcher shows, so the
+ * icon on the home screen and the mark in the header are recognisably one
+ * thing.
+ *
+ * It is a picture rather than an inline SVG, and it carries its own white
+ * ground. The badge is drawn in two colours and one of them is a very dark
+ * navy: on the app's near-black the boot and the ball vanish and all that
+ * survives is a green outline. The white square is what makes it legible, and
+ * it is also how it appears everywhere else it is shown.
  */
 export const BRAND_MARK = `
-  <svg class="mark" viewBox="0 0 40 40" aria-hidden="true">
-    <circle cx="26.5" cy="7.5" r="4.2" fill="currentColor"/>
-    <path d="M23.5 14.5 L30 17.5 L35.5 14" fill="none" stroke="currentColor"
-      stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M23.5 14.5 L17 20 L20.5 26.5 L15.5 35" fill="none" stroke="currentColor"
-      stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M20.5 26.5 L28 29 L30 36.5" fill="none" stroke="currentColor"
-      stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M17 20 L9 22.5" fill="none" stroke="currentColor"
-      stroke-width="3.4" stroke-linecap="round"/>
-    <g opacity="0.42" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
-      <path d="M3 13 h7"/><path d="M1 20 h5"/><path d="M4 27 h6"/>
-    </g>
-  </svg>`;
+  <img class="mark badge" src="/brand-mark.png" alt="" aria-hidden="true"
+       width="256" height="256">`;
 
-/** The wordmark. Two weights, because the logo is one word said two ways. */
+/** The wordmark. The app is RTP; the badge says what that stands for. */
 export const WORDMARK = `
-  <span class="wordmark"><b>PITCH</b><i>REHAB</i></span>`;
+  <span class="wordmark"><b>RTP</b></span>`;
 
 export const TICK = `
   <svg class="mark" viewBox="0 0 24 24" aria-hidden="true">

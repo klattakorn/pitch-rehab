@@ -166,6 +166,13 @@ body {
   height: 28px;
   flex: none;
 }
+/* The badge is a picture on its own white ground, so it needs the rounding a
+   launcher would give it -- otherwise it reads as a photograph dropped into the
+   header rather than as the app's icon. */
+.mark.badge {
+  border-radius: 22%;
+  object-fit: cover;
+}
 .brand.big .mark {
   width: 44px;
   height: 44px;

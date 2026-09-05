@@ -1,4 +1,4 @@
-/** Client for the Pitch Rehab backend. Same-origin via the Vite proxy. */
+/** Client for the RTP backend. Same-origin via the Vite proxy. */
 import * as standalone from "./standalone";
 import type { Exercise, ExerciseRule } from "./pose/rules";
 
