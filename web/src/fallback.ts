@@ -412,11 +412,11 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "use_z": false,
       "detection": {
         "signal": "heel_raise_ratio",
-        "enter": 0.18,
-        "exit": 0.06,
+        "enter": 0.17,
+        "exit": 0.12,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 0.1
+        "min_amplitude": 0.05
       },
       "targets": [
         {
@@ -672,11 +672,11 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "use_z": true,
       "detection": {
         "signal": "knee_flexion",
-        "enter": 40.0,
-        "exit": 20.0,
+        "enter": 55.0,
+        "exit": 40.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 30.0
+        "min_amplitude": 10.0
       },
       "targets": [
         {
@@ -901,11 +901,11 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "use_z": false,
       "detection": {
         "signal": "heel_raise_ratio",
-        "enter": 0.18,
-        "exit": 0.06,
+        "enter": 0.17,
+        "exit": 0.12,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 0.1
+        "min_amplitude": 0.05
       },
       "targets": [
         {
@@ -1290,6 +1290,149 @@ export const FALLBACK_EXERCISES: Exercise[] = [
   },
   {
     "id": 19,
+    "key": "spanish_squat",
+    "name_en": "Spanish squat (isometric hold)",
+    "name_th": "สแปนิชสควอทค้างไว้",
+    "category": "strength",
+    "cue_en": "Sit back against a band at knee height, shins vertical, hold.",
+    "cue_th": "ย่อตัวโดยมียางยืดคล้องใต้เข่า หน้าแข้งตั้งฉาก แล้วค้างไว้",
+    "equipment": "strong resistance band anchored at knee height",
+    "demo_url": null,
+    "pose_rule": {
+      "mode": "hold",
+      "view": "side",
+      "enforce_view": true,
+      "space": "image",
+      "use_z": false,
+      "detection": null,
+      "targets": [
+        {
+          "metric": "knee_flexion",
+          "aggregate": "mean",
+          "min": 60.0,
+          "max": 95.0,
+          "tolerance": 8.0,
+          "weight": 1.0,
+          "critical": false,
+          "code": "knee_angle_off",
+          "message_en": "Aim for roughly 70-80 degrees at the knee.",
+          "message_th": "ให้มุมเข่าประมาณ 70-80 องศา"
+        },
+        {
+          "metric": "trunk_lean",
+          "aggregate": "peak",
+          "min": null,
+          "max": 25.0,
+          "tolerance": 6.0,
+          "weight": 1.0,
+          "critical": false,
+          "code": "trunk_lean",
+          "message_en": "Keep the chest up and the shins vertical.",
+          "message_th": "ยกอกขึ้น และให้หน้าแข้งตั้งฉาก"
+        }
+      ],
+      "required_landmarks": [
+        "LEFT_HIP",
+        "RIGHT_HIP",
+        "LEFT_KNEE",
+        "RIGHT_KNEE",
+        "LEFT_ANKLE",
+        "RIGHT_ANKLE"
+      ],
+      "min_visibility": 0.5,
+      "min_tracking_quality": 0.55,
+      "smoothing_window": 5,
+      "tempo_min_s": null,
+      "tempo_max_s": null,
+      "hold_target_s": 45.0,
+      "emit": [
+        {
+          "metric": "hold_seconds",
+          "as_key": "pose.spanish_squat_hold",
+          "rep_aggregate": "max",
+          "set_aggregate": "max",
+          "unit": "s"
+        }
+      ]
+    }
+  },
+  {
+    "id": 20,
+    "key": "decline_squat",
+    "name_en": "Single-leg decline squat",
+    "name_th": "สควอทขาเดียวบนพื้นเอียง",
+    "category": "strength",
+    "cue_en": "On a decline board, lower slowly on one leg. Some tendon pain is fine.",
+    "cue_th": "ยืนบนแผ่นเอียง ย่อขาเดียวลงช้าๆ ปวดเอ็นเล็กน้อยได้",
+    "equipment": "25 degree decline board",
+    "demo_url": null,
+    "pose_rule": {
+      "mode": "rep",
+      "view": "side",
+      "enforce_view": true,
+      "space": "image",
+      "use_z": false,
+      "detection": {
+        "signal": "knee_flexion",
+        "enter": 25.0,
+        "exit": 12.0,
+        "min_duration_s": 0.35,
+        "max_duration_s": 20.0,
+        "min_amplitude": 18.0
+      },
+      "targets": [
+        {
+          "metric": "knee_flexion",
+          "aggregate": "peak",
+          "min": 55.0,
+          "max": null,
+          "tolerance": 6.0,
+          "weight": 1.5,
+          "critical": false,
+          "code": "depth_insufficient",
+          "message_en": "Lower further — the tendon needs the range.",
+          "message_th": "ย่อลงให้ลึกขึ้น เอ็นต้องการช่วงการเคลื่อนไหวนี้"
+        },
+        {
+          "metric": "trunk_lean",
+          "aggregate": "peak",
+          "min": null,
+          "max": 22.0,
+          "tolerance": 5.0,
+          "weight": 1.0,
+          "critical": false,
+          "code": "trunk_lean",
+          "message_en": "Too much lean — that shifts load off the tendon.",
+          "message_th": "เอนตัวมากเกินไป ทำให้แรงไม่ลงที่เอ็น"
+        }
+      ],
+      "required_landmarks": [
+        "LEFT_HIP",
+        "RIGHT_HIP",
+        "LEFT_KNEE",
+        "RIGHT_KNEE",
+        "LEFT_ANKLE",
+        "RIGHT_ANKLE"
+      ],
+      "min_visibility": 0.5,
+      "min_tracking_quality": 0.55,
+      "smoothing_window": 5,
+      "tempo_min_s": 3.0,
+      "tempo_max_s": null,
+      "hold_target_s": null,
+      "emit": [
+        {
+          "metric": "knee_flexion",
+          "as_key": "pose.decline_squat_depth",
+          "rep_aggregate": "peak",
+          "set_aggregate": "median",
+          "unit": "deg"
+        }
+      ]
+    }
+  },
+  {
+    "id": 22,
     "key": "single_leg_hop_landing",
     "name_en": "Single-leg hop and stick",
     "name_th": "กระโดดขาเดียวและหยุดนิ่ง",
@@ -1383,7 +1526,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
     }
   },
   {
-    "id": 20,
+    "id": 23,
     "key": "lateral_bound",
     "name_en": "Lateral bound and stick",
     "name_th": "กระโดดออกข้างและหยุดนิ่ง",
@@ -1470,7 +1613,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
     }
   },
   {
-    "id": 27,
+    "id": 30,
     "key": "heading_jump",
     "name_en": "Two-footed heading jump",
     "name_th": "กระโดดโหม่งสองเท้า",

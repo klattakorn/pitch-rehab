@@ -97,7 +97,7 @@ python scripts/walkthrough.py
 ```
 
 It creates a winger with a hamstring tear and drives the whole journey — assigns the
-protocol, scores a camera session, logs pain, syncs health data, and prints the exit
+protocol, scores a camera session, logs pain, and prints the exit
 criteria gate before and after so you can watch it unlock. Every step prints the
 endpoint it called, so you can repeat any of it by hand in `/docs`. Safe to re-run.
 
@@ -144,7 +144,7 @@ Open <https://localhost:5173> with the backend running in another terminal.
 | **Plan** | All four phases as tabs — drills, doses, and which need the camera |
 | **Progress** | Overall percentage, accuracy over time, sessions per day, milestones |
 | **Test** | The exit-criteria gate: what still stands between you and the next phase |
-| **Profile** | Position, injury, connected apps, and what this is not |
+| **Profile** | Position, injury, and what this is not |
 
 Before that there is a short linear onboarding — welcome → **position** → **injury** —
 because a programme cannot exist until both are known.
@@ -490,7 +490,7 @@ A criterion is declarative JSON. This is the whole vocabulary:
 ```jsonc
 {
   "metric": "test.yo_yo_ir1",
-  "source": "health",
+  "source": "test",           // pose | test | pro | session | manual
   "aggregate": "max",          // latest | max | min | mean | median | p95 | sum | count
   "window_days": 14,           // null = "any time during this injury episode"
   "comparator": "gte",         // gte | gt | lte | lt | eq | between
@@ -679,11 +679,6 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 | `POST` | `/sessions/{id}/sets` | Landmark frames in, scored reps + violations out |
 | `POST` | `/sessions/{id}/complete` | |
 
-**Health**
-
-| Method | Path | |
-|---|---|---|
-
 ### Uploading a set
 
 ```jsonc
@@ -802,12 +797,11 @@ app/
   services/
     pose/      landmarks, geometry, rules, analyzer
     criteria/  spec, resolver, engine
-    health/    platform mapping, ingest
     progression.py
     progress.py  what the Progress tab draws, derived from completed sessions
   data/        exercises, protocols, position norms   ← edit the library here
     authorable.py what a player may build their own tests from
-  api/routers/ auth, players, catalog, injuries, sessions, health
+  api/routers/ auth, players, catalog, injuries, sessions
 tests/
 web/src/
   main.ts      the shell and every screen: onboarding, then five tabs

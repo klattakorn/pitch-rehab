@@ -94,8 +94,10 @@ anything in `app/services/pose/`. That table is your evidence slide.
 ## Lane C — evidence and the talk
 
 **1. Sources for every threshold.** I generated
-**[`docs/sources.md`](sources.md)** today: all **43 exit criteria** and **15 position
-reference values**, one row each, with a blank Source column.
+**[`docs/sources.md`](sources.md)**: all **36 exit criteria** and **9 position
+reference values**, one row each, with a blank Source column. (It was 43 and 15;
+the health-app connection was dropped and phase one was pinned to four fixed
+movements, which retired some of the thresholds.)
 
 This matters more than it sounds. The app stops a player returning to football based on
 these numbers, and right now the README says outright that they are defaults, not
@@ -176,5 +178,5 @@ If you only pass on one thing today, pass on this:
 
 1. **Both of them film with you this weekend.** Eight exercises, good reps and
    deliberately bad reps, all three bodies. Brief is in `videos/README.md`.
-2. **One of them owns `docs/sources.md`** — 58 blank cells, and every one is a question
+2. **One of them owns `docs/sources.md`** — 45 blank cells, and every one is a question
    you would otherwise have to answer live.

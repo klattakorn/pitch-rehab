@@ -13,7 +13,7 @@ with enough detail that someone could go and read it. A blog post is not.
 The rows were generated from the live protocol library, but this file is yours to
 edit — if you add a criterion in `app/data/protocols.py`, add its row here too.
 
-**43 thresholds to account for.**
+**36 thresholds to account for.**
 
 ## Exit criteria
 
@@ -23,6 +23,7 @@ edit — if you add a criterion in `app/data/protocols.py`, add its row here too
 | `adherence`<br><small>Completed ≥ 70% of prescribed sessions</small> | at least 70 % | a fixed number | P1, P2 | all 7 |  |  |
 | `balance_control`<br><small>Pelvis stays level in single-leg stance (drop ≤ 5°)</small> | at most 5 deg | a fixed number | P2 | ankle |  |  |
 | `calf_raise_height`<br><small>Full single-leg calf raise height</small> | at least 0.45 ratio | a fixed number | P2 | calf |  |  |
+| `calf_raise_reps`<br><small>12 double-leg calf raises in one set</small> | at least 12 reps | a fixed number | P1 | all 7 |  |  |
 | `calf_raise_reps_lsi`<br><small>Single-leg calf raise repetitions ≥ 90% of the other side</small> | at least 90 % | injured vs healthy leg | P2 | ankle, calf |  |  |
 | `change_of_direction`<br><small>Change of direction at least 90% of your best</small> | at least 90 % | a fixed number | P3, P4 | all 7 |  |  |
 | `clinician_clearance`<br><small>Cleared by a physio or clinician</small> | at least 1 | a fixed number | P4 | all 7 |  |  |
@@ -32,18 +33,11 @@ edit — if you add a criterion in `app/data/protocols.py`, add its row here too
 | `copenhagen_hold`<br><small>Copenhagen plank hold ≥ 20s each side</small> | at least 20 s | a fixed number | P2 | adductor, groin |  |  |
 | `copenhagen_hold_p3`<br><small>Copenhagen plank hold ≥ 30s each side</small> | at least 30 s | a fixed number | P3 | adductor, groin |  |  |
 | `decline_depth`<br><small>Single-leg decline squat to at least 55 degrees</small> | at least 55 deg | a fixed number | P2 | patellar_tendinopathy |  |  |
-| `distance_vs_baseline`<br><small>Weekly running distance ≥ 90% of baseline</small> | at least 90 | share of their own normal | P4 | all 7 |  |  |
-| `dorsiflexion`<br><small>Ankle dorsiflexion ≥ 25°</small> | at least 25 deg | a fixed number | P1 | calf |  |  |
-| `dorsiflexion_lsi`<br><small>Ankle dorsiflexion symmetry ≥ 90%</small> | at least 90 % | injured vs healthy leg | P1 | ankle |  |  |
-| `extension_lag`<br><small>Full knee extension (lag ≤ 5°)</small> | at most 5 deg | a fixed number | P1 | acl |  |  |
 | `form_quality`<br><small>Mean movement quality ≥ 80/100</small> | at least 80 score | a fixed number | P2, P3 | all 7 |  |  |
 | `groin_pain_rest`<br><small>Pain at rest at most 3/10</small> | at most 3 NPRS | a fixed number | P1 | groin |  |  |
 | `hamstring_lsi`<br><small>Hamstring strength symmetry ≥ 90%</small> | at least 90 % | injured vs healthy leg | P2 | hamstring |  |  |
 | `hop_lsi`<br><small>Triple hop symmetry ≥ 90%</small> | at least 90 % | injured vs healthy leg | P3 | acl, ankle, calf, hamstring |  |  |
 | `hop_triple_lsi`<br><small>Triple hop symmetry ≥ 95%</small> | at least 95 % | injured vs healthy leg | P4 | acl |  |  |
-| `hsr_vs_baseline`<br><small>High-speed running volume ≥ 60% of baseline</small> | at least 60 | share of their own normal | P3, P4 | calf, hamstring |  |  |
-| `isometric_hold`<br><small>Spanish squat hold at least 45s</small> | at least 45 s | a fixed number | P1 | patellar_tendinopathy |  |  |
-| `knee_rom`<br><small>Pain-free knee flexion ≥ 120°</small> | at least 120 deg | a fixed number | P1 | acl, hamstring |  |  |
 | `landing_control`<br><small>Lands softly (knee bend at least 45 degrees)</small> | at least 45 deg | a fixed number | P3 | patellar_tendinopathy |  |  |
 | `landing_valgus`<br><small>Landing knee valgus ≤ 8°</small> | at most 8 deg | a fixed number | P3 | acl |  |  |
 | `lateral_landing_valgus`<br><small>Lateral landing stays controlled (valgus ≤ 8°)</small> | at most 8 deg | a fixed number | P3 | all 7 |  |  |
@@ -58,10 +52,9 @@ edit — if you add a criterion in `app/data/protocols.py`, add its row here too
 | `repeated_sprint_decrement`<br><small>Repeated-sprint drop-off ≤ 5%</small> | at most 5 % | a fixed number | P4 | all 7 |  |  |
 | `slsq_depth`<br><small>Single-leg squat to ≥ 60° knee flexion</small> | at least 60 deg | a fixed number | P2 | acl |  |  |
 | `slsq_valgus`<br><small>Knee stays out of valgus (≤ 8°)</small> | at most 8 deg | a fixed number | P2 | acl |  |  |
-| `speed_vs_baseline`<br><small>Max running speed ≥ 75% of your baseline</small> | at least 75 | share of their own normal | P3, P4 | all 7 |  |  |
 | `tendon_pain_during`<br><small>Pain during loading at most 4/10</small> | at most 4 NPRS | a fixed number | P1 | patellar_tendinopathy |  |  |
 | `tendon_pain_during_p2`<br><small>Pain during loading at most 3/10</small> | at most 3 NPRS | a fixed number | P2 | patellar_tendinopathy |  |  |
-| `walking_symmetry`<br><small>Walking asymmetry ≤ 4%</small> | at most 4 % | a fixed number | P1 | acl, adductor, ankle, calf, groin, hamstring |  |  |
+| `wall_sit_hold`<br><small>Hold a wall sit for 30 seconds</small> | at least 30 s | a fixed number | P1 | all 7 |  |  |
 
 ## Position reference values
 

@@ -378,16 +378,21 @@ generated and tested but unused, so closing the API window still kills the app. 
 a known, accepted risk now rather than an oversight — keep both server windows open,
 and the backup recording from task 12 covers the rest.
 
-### Garmin and WHOOP — do not build these
+### Garmin and WHOOP — cut, and do not say they are wired
 
-They are on your poster and they are a trap. Each is an OAuth flow against a real
-company's API with an approval process, for data you cannot generate on demand.
-That is a week you do not have.
+They were on your poster and they were a trap: each is an OAuth flow against a real
+company's API with an approval process, for data you cannot generate on demand. The
+whole health-app connection was dropped on 5 September, along with the four exit
+criteria that fed on it. There is no ingest path left.
 
-Say this instead: *"Health data comes in through one ingest path that maps any
-platform's types onto our metrics. Apple Health and Google Health Connect are wired;
-Garmin and WHOOP are the same mapping table with different names."* That is true, it
-is a better answer than a half-working integration, and it costs you nothing.
+**Do not say any version of "Apple Health and Google Health Connect are wired."** It
+was true when this plan was written and it is not true now, and it is the kind of
+claim someone asks to see.
+
+Say this instead: *"We cut wearable syncing. Every number the app gates on is one it
+measured itself, through the camera or the player's own check-in — so there is nothing
+in the app we cannot show you where it came from."* That is true, and it is a stronger
+answer than a half-working integration.
 
 ---
 

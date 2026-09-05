@@ -112,9 +112,6 @@ echo.
 echo     The address never changes, so a link you have already sent
 echo     starts serving this version on its own.
 echo   ===============================================================
-echo.
-echo   Note: this does not update a phone that already has the Android
-echo   app installed. That needs  cd web ^&^& npm run apk  and a reinstall.
 goto :end
 
 :nothingtodo

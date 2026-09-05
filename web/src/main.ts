@@ -1750,13 +1750,13 @@ function profileScreen(): void {
 /**
  * Which build this is.
  *
- * Stamped in by scripts/build-apk.mjs. Worth a line on screen because a phone
- * otherwise cannot tell you whether it is running this morning's app or last
- * week's, and with three people installing packages by hand that gets asked a
- * lot. "dirty" on the end means it was built from uncommitted changes.
+ * A plain label, not a version string. It used to be stamped in at package
+ * time, but the packaged app is gone -- the hosted link is the only thing
+ * handed out now, and a link always serves the newest build, so there is
+ * nothing for anyone to check they are up to date with.
  */
 function buildVersion(): string {
-  return (import.meta.env["VITE_APP_VERSION"] as string | undefined) ?? "development build";
+  return "Demo build - September 2026";
 }
 
 function aboutScreen(): void {

@@ -1,5 +1,4 @@
-# Cache rules for Cloudflare Pages (ignored everywhere else, including inside
-# the Android package, which reads these files off disk).
+# Cache rules for Cloudflare Pages (ignored by anything else serving these files).
 #
 # The pose runtime and the models are the only large downloads in the app, and
 # they never change without changing name -- they are vendored copies of a
