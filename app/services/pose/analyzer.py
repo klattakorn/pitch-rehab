@@ -183,13 +183,19 @@ def _series_for(frames: Sequence[Frame], side: Side, rule: ExerciseRule) -> Metr
     return series.smooth(rule.smoothing_window)
 
 
-def _worst(values: list[float], target: MetricTarget) -> float:
-    """For a bilateral movement, judge the limb that looks worst."""
+def _judged(values: list[float], target: MetricTarget) -> float:
+    """Pick the limb this target is about, for a movement scored on both.
+
+    Normally that is the one that looks worst -- an upper bound is failed by the
+    largest reading, a lower bound by the smallest. ``judge="best"`` inverts it,
+    for the movements whose two legs are not doing the same job.
+    """
     if len(values) == 1:
         return values[0]
-    if target.max is not None:
-        return max(values)
-    return min(values)
+    high = target.max is not None
+    if target.judge == "best":
+        high = not high
+    return max(values) if high else min(values)
 
 
 def analyze_set(
@@ -283,7 +289,7 @@ def analyze_set(
                 warnings.append(f"metric_unavailable:{target.metric}")
                 continue
 
-            observed = _worst(observed_per_side, target)
+            observed = _judged(observed_per_side, target)
             total_weight += target.weight
             violation = _evaluate_target(target, observed)
             if violation is None:
@@ -374,7 +380,7 @@ def _longest_clean_hold(
             ]
             if not vals:
                 continue
-            observed = _worst([float(v) for v in vals], target)  # type: ignore[arg-type]
+            observed = _judged([float(v) for v in vals], target)  # type: ignore[arg-type]
             if _evaluate_target(target, observed) is not None:
                 ok = False
                 break

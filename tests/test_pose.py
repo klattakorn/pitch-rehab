@@ -120,6 +120,34 @@ def test_bilateral_analysis_judges_the_worse_limb() -> None:
     assert collapsed.valid_reps == 0
 
 
+def test_a_split_stance_target_is_judged_on_the_working_leg() -> None:
+    """The two legs of a split squat do different jobs.
+
+    Filmed, the front knee reached 103-127 degrees while the rear one bent
+    43-55. Judging the worse limb read the rear knee and told the player their
+    front leg was shallow, on four reps out of five, holding a set that was
+    actually good at 73/100.
+    """
+    from app.services.pose.analyzer import _judged
+
+    depth = MetricTarget(
+        metric="knee_flexion", min=80.0, code="depth_insufficient", judge="best"
+    )
+    worse_limb = depth.model_copy(update={"judge": "worst"})
+
+    # Front leg deep, rear leg bent half as far -- a good rep.
+    assert _judged([104.0, 55.0], depth) == 104.0
+    assert _judged([104.0, 55.0], worse_limb) == 55.0
+
+    # `best` is not "be lenient": a genuinely shallow rep still fails, because
+    # the front leg itself did not get there.
+    assert _judged([62.0, 40.0], depth) == 62.0
+
+    # And an upper bound inverts the same way, so valgus stays strict.
+    valgus = MetricTarget(metric="knee_valgus", max=8.0, code="knee_valgus")
+    assert _judged([2.0, 14.0], valgus) == 14.0
+
+
 def test_poor_but_usable_tracking_is_flagged_and_the_reps_do_not_count() -> None:
     frames = squat_trace(reps=3, peak_flexion=75.0)
     for f in frames:

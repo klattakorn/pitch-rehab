@@ -30,6 +30,16 @@ class MetricTarget(BaseModel):
     weight: float = 1.0
     #: A critical violation makes the rep not count towards the prescribed reps.
     critical: bool = False
+    #: Which leg to judge, when the movement is scored on both.
+    #:
+    #: ``worst`` is right almost everywhere: a squat is only as good as the leg
+    #: that collapsed, so the target tests whichever side looks worse. But some
+    #: movements ask the two legs to do different jobs. In a split squat the
+    #: front knee bends to about 100 degrees while the rear one bends half that
+    #: by design, so a depth target reading the worse side reads the rear leg and
+    #: complains that the front one is shallow -- on a rep that was deep. Those
+    #: targets set ``best``, which tests the working limb instead.
+    judge: Literal["worst", "best"] = "worst"
     code: str
     message_en: str = ""
     message_th: str = ""

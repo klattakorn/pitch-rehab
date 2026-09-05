@@ -33,6 +33,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_not_straight",
           "message_en": "Straighten the knee fully.",
           "message_th": "เหยียดเข่าให้สุด"
@@ -96,6 +97,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 4.0,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "hip_not_extended",
           "message_en": "Push the hips higher until the body is in one line.",
           "message_th": "ยกสะโพกให้สูงจนลำตัวเป็นเส้นตรง"
@@ -159,6 +161,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 10.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "rom_limited",
           "message_en": "Aim for more knee bend.",
           "message_th": "พยายามงอเข่าให้มากขึ้น"
@@ -222,6 +225,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 4.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "dorsiflexion_limited",
           "message_en": "Push the knee further forward without lifting the heel.",
           "message_th": "ดันเข่าไปข้างหน้าอีก โดยส้นเท้าห้ามยก"
@@ -234,6 +238,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 0.0,
           "weight": 1.5,
           "critical": true,
+          "judge": "worst",
           "code": "heel_lifted",
           "message_en": "Heel came off the floor — that does not count.",
           "message_th": "ส้นเท้ายกขึ้น ครั้งนี้ไม่นับ"
@@ -297,6 +302,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 10.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "rom_limited",
           "message_en": "Bring the heel closer to the glute.",
           "message_th": "งอเข่าให้ส้นเท้าเข้าใกล้ก้นมากขึ้น"
@@ -309,6 +315,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 5.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "hip_hitch",
           "message_en": "Hips are lifting — keep them down.",
           "message_th": "สะโพกยกขึ้น กดสะโพกให้แนบพื้น"
@@ -372,6 +379,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 5.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "rom_limited",
           "message_en": "Lift the leg a little higher.",
           "message_th": "ยกขาให้สูงขึ้นอีกนิด"
@@ -427,6 +435,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 0.05,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "raise_too_low",
           "message_en": "Get up higher onto the toes.",
           "message_th": "เขย่งให้สูงกว่านี้"
@@ -439,6 +448,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 4.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_bend",
           "message_en": "Keep the knees straight.",
           "message_th": "เหยียดเข่าให้ตรง"
@@ -487,6 +497,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 1.5,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "pelvic_drop",
           "message_en": "Hip is dropping on the other side — keep the pelvis level.",
           "message_th": "สะโพกอีกข้างตก พยายามรักษาระดับเชิงกรานให้ตรง"
@@ -499,6 +510,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 3.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "trunk_lean",
           "message_en": "Too much lean — keep the chest up.",
           "message_th": "ลำตัวเอนมากเกินไป ยกอกขึ้น"
@@ -511,6 +523,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"
@@ -574,6 +587,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 5.0,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "depth_insufficient",
           "message_en": "Go deeper — aim for 60 degrees of knee bend.",
           "message_th": "ย่อให้ลึกขึ้น เป้าหมายงอเข่า 60 องศา"
@@ -586,6 +600,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": true,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"
@@ -598,6 +613,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 1.5,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "pelvic_drop",
           "message_en": "Hip is dropping on the other side — keep the pelvis level.",
           "message_th": "สะโพกอีกข้างตก พยายามรักษาระดับเชิงกรานให้ตรง"
@@ -610,6 +626,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 3.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "trunk_lean",
           "message_en": "Too much lean — keep the chest up.",
           "message_th": "ลำตัวเอนมากเกินไป ยกอกขึ้น"
@@ -687,6 +704,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 8.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "best",
           "code": "depth_insufficient",
           "message_en": "Go deeper on the front leg.",
           "message_th": "ย่อขาหน้าให้ลึกขึ้น"
@@ -699,6 +717,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": true,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"
@@ -711,6 +730,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 3.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "trunk_lean",
           "message_en": "Too much lean — keep the chest up.",
           "message_th": "ลำตัวเอนมากเกินไป ยกอกขึ้น"
@@ -766,6 +786,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 5.0,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "break_point_early",
           "message_en": "Try to hold on further before letting go.",
           "message_th": "พยายามควบคุมให้ลงได้ไกลกว่านี้"
@@ -778,6 +799,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 5.0,
           "weight": 2.0,
           "critical": true,
+          "judge": "worst",
           "code": "hip_hinge",
           "message_en": "You are folding at the hips — keep hips and shoulders in one line.",
           "message_th": "งอที่สะโพก ให้สะโพกกับไหล่อยู่ในเส้นเดียวกัน"
@@ -841,6 +863,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 8.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "hinge_shallow",
           "message_en": "Hinge further forward.",
           "message_th": "พับสะโพกลงให้มากขึ้น"
@@ -853,6 +876,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_bend_excess",
           "message_en": "That is turning into a squat — keep the knee soft, not bent.",
           "message_th": "กลายเป็นสควอท ให้เข่างอเล็กน้อยพอ"
@@ -916,6 +940,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 0.05,
           "weight": 1.5,
           "critical": true,
+          "judge": "worst",
           "code": "raise_too_low",
           "message_en": "Not high enough — that rep does not count.",
           "message_th": "เขย่งไม่สูงพอ ครั้งนี้ไม่นับ"
@@ -928,6 +953,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 4.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_bend",
           "message_en": "Keep the knee straight.",
           "message_th": "เหยียดเข่าให้ตรง"
@@ -984,6 +1010,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 10.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "body_not_horizontal",
           "message_en": "Keep the body horizontal.",
           "message_th": "รักษาลำตัวให้ขนานกับพื้น"
@@ -996,6 +1023,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "hip_sag",
           "message_en": "Hips are sagging — lift them back into line.",
           "message_th": "สะโพกตก ยกขึ้นให้เป็นเส้นตรง"
@@ -1052,6 +1080,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 8.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_angle_off",
           "message_en": "Aim for about 90 degrees at the knee.",
           "message_th": "ให้มุมเข่าประมาณ 90 องศา"
@@ -1107,6 +1136,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "depth_insufficient",
           "message_en": "Lower a little further.",
           "message_th": "ย่อลงให้ลึกขึ้นอีกนิด"
@@ -1119,6 +1149,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": true,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"
@@ -1131,6 +1162,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 1.5,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "pelvic_drop",
           "message_en": "Hip is dropping on the other side — keep the pelvis level.",
           "message_th": "สะโพกอีกข้างตก พยายามรักษาระดับเชิงกรานให้ตรง"
@@ -1143,6 +1175,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 3.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "trunk_lean",
           "message_en": "Too much lean — keep the chest up.",
           "message_th": "ลำตัวเอนมากเกินไป ยกอกขึ้น"
@@ -1199,6 +1232,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "hip_sag",
           "message_en": "Hips dropping — push them up.",
           "message_th": "สะโพกตก ดันขึ้น"
@@ -1254,6 +1288,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 8.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "too_much_knee",
           "message_en": "Bounce off the ankles, not the knees.",
           "message_th": "ใช้ข้อเท้าสปริง ไม่ใช่ย่อเข่า"
@@ -1266,6 +1301,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"
@@ -1314,6 +1350,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 8.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "knee_angle_off",
           "message_en": "Aim for roughly 70-80 degrees at the knee.",
           "message_th": "ให้มุมเข่าประมาณ 70-80 องศา"
@@ -1326,6 +1363,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "trunk_lean",
           "message_en": "Keep the chest up and the shins vertical.",
           "message_th": "ยกอกขึ้น และให้หน้าแข้งตั้งฉาก"
@@ -1389,6 +1427,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "depth_insufficient",
           "message_en": "Lower further — the tendon needs the range.",
           "message_th": "ย่อลงให้ลึกขึ้น เอ็นต้องการช่วงการเคลื่อนไหวนี้"
@@ -1401,6 +1440,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 5.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "trunk_lean",
           "message_en": "Too much lean — that shifts load off the tendon.",
           "message_th": "เอนตัวมากเกินไป ทำให้แรงไม่ลงที่เอ็น"
@@ -1464,6 +1504,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "stiff_landing",
           "message_en": "Absorb the landing — bend the knee more.",
           "message_th": "ซับแรงตอนลง งอเข่าให้มากขึ้น"
@@ -1476,6 +1517,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": true,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"
@@ -1488,6 +1530,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 3.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "trunk_lean",
           "message_en": "Too much lean — keep the chest up.",
           "message_th": "ลำตัวเอนมากเกินไป ยกอกขึ้น"
@@ -1558,6 +1601,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 6.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "stiff_landing",
           "message_en": "Bend the knee to absorb the landing.",
           "message_th": "งอเข่าเพื่อซับแรงตอนลง"
@@ -1570,6 +1614,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": true,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"
@@ -1582,6 +1627,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 1.5,
           "weight": 1.5,
           "critical": false,
+          "judge": "worst",
           "code": "pelvic_drop",
           "message_en": "Hip is dropping on the other side — keep the pelvis level.",
           "message_th": "สะโพกอีกข้างตก พยายามรักษาระดับเชิงกรานให้ตรง"
@@ -1645,6 +1691,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 8.0,
           "weight": 1.0,
           "critical": false,
+          "judge": "worst",
           "code": "stiff_landing",
           "message_en": "Land softer — bend the knees.",
           "message_th": "ลงพื้นให้นุ่มขึ้น งอเข่า"
@@ -1657,6 +1704,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "tolerance": 2.0,
           "weight": 2.0,
           "critical": true,
+          "judge": "worst",
           "code": "knee_valgus",
           "message_en": "Knee is collapsing inward — push it out over the middle toes.",
           "message_th": "เข่าบิดเข้าด้านใน ดันเข่าออกให้อยู่แนวนิ้วเท้ากลาง"

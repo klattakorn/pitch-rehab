@@ -32,7 +32,12 @@ import {
 } from "./geometry";
 import type { Side } from "./landmarks";
 import { LM } from "./landmarks";
-import { type ExerciseRule, type Violation, evaluateTarget } from "./rules";
+import {
+  type ExerciseRule,
+  type MetricTarget,
+  type Violation,
+  evaluateTarget,
+} from "./rules";
 
 /** ~3 seconds at 30fps. Long enough to be stable, short enough to react. */
 const WINDOW_FRAMES = 90;
@@ -283,7 +288,7 @@ export class LiveSession {
   private advanceHold(t: number, perSide: Metrics[]): void {
     let clean = true;
     for (const target of this.rule.targets) {
-      const observed = this.worst(perSide, target.metric, target.min !== null);
+      const observed = this.judged(perSide, target);
       if (observed === null) continue;
       if (evaluateTarget(target, observed)) {
         clean = false;
@@ -364,12 +369,19 @@ export class LiveSession {
   }
 
   /** Worst reading across the limbs being judged. */
-  private worst(perSide: Metrics[], metric: string, preferHigh: boolean): number | null {
+  /**
+   * Pick the limb a target is about. Mirrors `_judged` on the server: an upper
+   * bound is failed by the largest reading and a lower bound by the smallest,
+   * so judging the worse limb means taking whichever of those the bound needs.
+   * `judge: "best"` inverts it for the movements whose legs differ by design.
+   */
+  private judged(perSide: Metrics[], target: MetricTarget): number | null {
     const values = perSide
-      .map((m) => m[metric])
+      .map((m) => m[target.metric])
       .filter((v): v is number => typeof v === "number");
     if (values.length === 0) return null;
-    return preferHigh ? Math.max(...values) : Math.min(...values);
+    const high = target.judge === "best" ? target.max === null : target.max !== null;
+    return high ? Math.max(...values) : Math.min(...values);
   }
 
   private liveCues(perSide: Metrics[]): Violation[] {
@@ -378,7 +390,7 @@ export class LiveSession {
       // Only bounds that can be broken *during* the movement are worth shouting
       // about live. A "not deep enough" only becomes true once the rep is over.
       if (target.max === null) continue;
-      const observed = this.worst(perSide, target.metric, true);
+      const observed = this.judged(perSide, target);
       if (observed === null) continue;
       const violation = evaluateTarget(target, observed);
       if (violation) cues.push(violation);

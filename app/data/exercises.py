@@ -418,6 +418,12 @@ EXERCISES: list[ExerciseDef] = [
                     aggregate="peak",
                     min=80.0,
                     tolerance=8.0,
+                    # The front leg is the one this is about. Judged the usual
+                    # way -- worse limb -- it read the rear knee, which bends
+                    # about half as far by design, and told a player whose front
+                    # knee had hit 104 degrees to go deeper. On the filmed reps
+                    # that fired on four of five and held the score at 73.
+                    judge="best",
                     code="depth_insufficient",
                     message_en="Go deeper on the front leg.",
                     message_th="ย่อขาหน้าให้ลึกขึ้น",

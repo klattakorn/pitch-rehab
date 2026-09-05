@@ -17,6 +17,13 @@ export interface MetricTarget {
   weight: number;
   /** A critical violation means the rep does not count, not just a lower score. */
   critical: boolean;
+  /**
+   * Which leg to judge, when the movement is scored on both. `worst` is right
+   * almost everywhere. `best` is for movements whose two legs do different
+   * jobs -- a split squat bends the front knee twice as far as the rear one by
+   * design, so a depth target reading the worse side reads the rear leg.
+   */
+  judge: "worst" | "best";
   code: string;
   message_en: string;
   message_th: string;
