@@ -2106,6 +2106,59 @@ ul.facts b {
   background: #000;
 }
 
+/* --- title sequence ---------------------------------------------------- */
+/* Sits over everything until it has played. `contain` on black, because the
+   film is somebody's work and cropping it to fit the phone would cut the
+   framing they chose. */
+.intro {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.3s ease;
+}
+.intro.fading {
+  opacity: 0;
+  pointer-events: none;
+}
+.intro video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+/* Deliberately small and out of the way. The film is the point; this is the
+   way out of it, not an invitation. */
+.intro-skip,
+.intro-sound {
+  position: absolute;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.intro-skip {
+  top: max(var(--s3), env(safe-area-inset-top));
+  right: var(--s3);
+  padding: 0.5rem 1.1rem;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.82);
+}
+.intro-sound {
+  bottom: max(var(--s4), env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.7rem 1.4rem;
+  border: none;
+  background: var(--volt);
+  color: var(--volt-ink);
+}
+
 /* Sits under the camera line on the "how to" screen. Quiet, but it has to be
    readable before the camera opens -- afterwards it is too late to say it. */
 .framing {

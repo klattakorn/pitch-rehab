@@ -28,6 +28,7 @@ import {
   windowText,
 } from "./criteria";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
+import { playIntro } from "./intro";
 import type { Facing } from "./mediapipe";
 import {
   createPoseLandmarker,
@@ -2283,6 +2284,10 @@ async function refresh(): Promise<void> {
 }
 
 async function boot(): Promise<void> {
+  // The title sequence, before anything else is drawn. It resolves when the
+  // film ends, when Skip is pressed, or immediately if it cannot play at all --
+  // so nothing below this line depends on it having happened.
+  await playIntro("/intro.mp4");
   shell(`<div class="loading">Loading…</div>`, { brand: true });
   state.online = await api.backendUp();
   if (!state.online) {

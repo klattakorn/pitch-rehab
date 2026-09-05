@@ -38,9 +38,11 @@ videos/*
 *.avi
 *.mkv
 
-# The exception: the shrunk clips the app itself plays on its "how to" screen.
-# These are a couple of megabytes each rather than thirty, and the hosted site
-# 404s without them -- so unlike the raw footage, they have to be in git.
+# The exception: the shrunk clips the app itself plays -- the demonstrations on
+# each "how to" screen, and the title sequence. These are a few megabytes each
+# rather than thirty, and the hosted site 404s without them, so unlike the raw
+# footage they have to be in git.
+!web/public/*.mp4
 !web/public/demos/*.mp4
 
 # --- dev https certificate (machine-specific; regenerate with make-cert.mjs) ---
