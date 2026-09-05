@@ -103,7 +103,13 @@ EXERCISES: list[ExerciseDef] = [
             detection=RepDetection(
                 signal="hip_extension", enter=-20.0, exit=-38.0, min_amplitude=15.0
             ),
-            tempo_min_s=1.2,
+            # Not measured -- there is no footage of this one. Lowered from 1.2s
+            # on the same reasoning as the calf raise: every floor in this file
+            # was guessed, and the two that were finally checked against video
+            # both sat above how fast a real person moves, which refused every
+            # honest rep. A bridge is a slower movement than a calf raise, so
+            # this is deliberately conservative rather than tight.
+            tempo_min_s=0.8,
             targets=[
                 MetricTarget(
                     metric="hip_flexion",
@@ -294,7 +300,13 @@ EXERCISES: list[ExerciseDef] = [
             detection=RepDetection(
                 signal="heel_raise_ratio", enter=0.17, exit=0.12, min_amplitude=0.05
             ),
-            tempo_min_s=1.2,
+            # Measured, not guessed. This was 1.2s, which is slower than a real
+            # calf raise: five filmed reps ran 0.80-1.17s, so every one of them
+            # was found, then refused, and the counter sat at zero -- the thing
+            # this whole rule was supposed to stop. The floor is not the asked-for
+            # tempo, it is the line below which a movement is a bounce rather
+            # than a rep, so it belongs well under the slowest honest rep.
+            tempo_min_s=0.6,
             targets=[
                 MetricTarget(
                     metric="heel_raise_ratio",
@@ -397,7 +409,9 @@ EXERCISES: list[ExerciseDef] = [
             detection=RepDetection(
                 signal="knee_flexion", enter=55.0, exit=40.0, min_amplitude=10.0
             ),
-            tempo_min_s=1.5,
+            # Measured. Was 1.5s; five filmed reps ran 1.07-1.30s, so all five
+            # were refused on tempo alone. See the calf raise for the reasoning.
+            tempo_min_s=0.8,
             targets=[
                 MetricTarget(
                     metric="knee_flexion",
@@ -519,7 +533,8 @@ EXERCISES: list[ExerciseDef] = [
             detection=RepDetection(
                 signal="heel_raise_ratio", enter=0.17, exit=0.12, min_amplitude=0.05
             ),
-            tempo_min_s=1.2,
+            # Same movement as the double-leg version, same floor. See there.
+            tempo_min_s=0.6,
             targets=[
                 MetricTarget(
                     metric="heel_raise_ratio",

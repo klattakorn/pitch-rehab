@@ -1850,6 +1850,15 @@ ul.criteria .src {
   font-weight: 500;
   color: var(--ink-2);
 }
+/* Sits under the count, and only when the two disagree. Quiet on purpose: it
+   is a footnote to the number, not a second number competing with it. */
+.refused {
+  margin-top: var(--s1);
+  font-size: var(--far-label);
+  font-weight: 500;
+  color: var(--fix);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.9);
+}
 
 /* A track along the bottom of the frame rather than a ring: at three metres a
    bar that fills left to right is readable without focusing on it. */

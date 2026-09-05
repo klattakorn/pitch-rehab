@@ -112,7 +112,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
-      "tempo_min_s": 1.2,
+      "tempo_min_s": 0.8,
       "tempo_max_s": null,
       "hold_target_s": null,
       "emit": [
@@ -455,7 +455,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
-      "tempo_min_s": 1.2,
+      "tempo_min_s": 0.6,
       "tempo_max_s": null,
       "hold_target_s": null,
       "emit": []
@@ -727,7 +727,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
-      "tempo_min_s": 1.5,
+      "tempo_min_s": 0.8,
       "tempo_max_s": null,
       "hold_target_s": null,
       "emit": []
@@ -944,7 +944,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
-      "tempo_min_s": 1.2,
+      "tempo_min_s": 0.6,
       "tempo_max_s": null,
       "hold_target_s": null,
       "emit": [

@@ -266,6 +266,20 @@ describe("a rep the camera measured and then refused", () => {
     const { outcome } = run(atSpeed(1));
     expect(outcome.validReps).toBeGreaterThan(0);
   });
+
+  /* The screen's big number reads `repCount`, not `validRepCount`, so that a
+     rep the camera measured and then refused still moves it -- otherwise doing
+     the movement and having nothing change is indistinguishable from not being
+     seen at all. That only works if the frame-level count rises for a refused
+     rep, which is what this pins down. */
+  it("still moves the frame-level count when the rep is refused", () => {
+    const { results } = run(atSpeed(2));
+    const counts = results.map((r) => r.repCount);
+    expect(Math.max(...counts)).toBeGreaterThan(0);
+    expect(Math.max(...results.map((r) => r.validRepCount))).toBe(0);
+    // And it only ever goes up, so the number on screen cannot jump backwards.
+    expect(counts.every((n, i) => i === 0 || n >= counts[i - 1]!)).toBe(true);
+  });
 });
 
 describe("a hold, which has no reps to count", () => {

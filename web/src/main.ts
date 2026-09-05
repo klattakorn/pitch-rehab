@@ -1183,6 +1183,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
                  : `/ ${rx.reps ?? "—"}`
              }</span>
            </div>
+           <div class="refused" id="refused" hidden></div>
          </div>
        </div>
        <div class="reptrack" aria-hidden="true"><i id="reptrack"></i></div>
@@ -1209,6 +1210,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   const readout = app.querySelector<HTMLDivElement>("#readout")!;
   const centre = app.querySelector<HTMLDivElement>("#centre")!;
   const countEl = app.querySelector<HTMLSpanElement>("#count")!;
+  const refusedEl = app.querySelector<HTMLDivElement>("#refused")!;
   const badge = app.querySelector<HTMLDivElement>("#badge")!;
   const reptrack = app.querySelector<HTMLElement>("#reptrack")!;
   const stage = app.querySelector<HTMLDivElement>(".stage")!;
@@ -1302,12 +1304,27 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
             reptrack.style.width = `${Math.min(100, (100 * held) / Math.max(1, target))}%`;
             if (held > 0) pulse(countEl, "tick-up");
           }
-        } else if (result.validRepCount !== shownReps) {
-          shownReps = result.validRepCount;
+        } else if (result.repCount !== shownReps) {
+          // The big number is reps *done*, so it moves every time the player
+          // does one. It used to show valid reps only, which meant a rep the
+          // camera had measured and then refused looked exactly like a rep it
+          // had never seen -- you move, and nothing on screen moves back.
+          shownReps = result.repCount;
           countEl.textContent = String(shownReps);
-          reptrack.style.width = `${Math.min(100, (100 * shownReps) / Math.max(1, target))}%`;
+          // The bar fills with the reps that actually count toward the target,
+          // because that is what the set is finally scored on. When the two
+          // agree, which is the normal case, they look like one thing.
+          const counted = result.validRepCount;
+          reptrack.style.width = `${Math.min(100, (100 * counted) / Math.max(1, target))}%`;
           // The rep landing is the moment the camera proves itself. Give it one.
           pulse(countEl, "tick-up");
+
+          // Only say this when it is true. A count that says "3" while the set
+          // is scoring 1 is worse than either number on its own.
+          const lost = shownReps - counted;
+          refusedEl.hidden = lost === 0;
+          refusedEl.textContent =
+            lost === 1 ? "1 did not count" : `${lost} did not count`;
         }
 
         // A movement that was followed and then thrown away has to say so, and
