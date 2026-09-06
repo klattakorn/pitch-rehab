@@ -82,19 +82,19 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "use_z": false,
       "detection": {
         "signal": "hip_extension",
-        "enter": -20.0,
-        "exit": -38.0,
+        "enter": -38.0,
+        "exit": -44.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 15.0
+        "min_amplitude": 6.0
       },
       "targets": [
         {
           "metric": "hip_flexion",
           "aggregate": "min",
           "min": null,
-          "max": 12.0,
-          "tolerance": 4.0,
+          "max": 34.0,
+          "tolerance": 5.0,
           "weight": 1.5,
           "critical": false,
           "judge": "worst",

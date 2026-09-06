@@ -1391,7 +1391,7 @@ def _apply_position(phase: PhaseTemplate, profile: PositionProfile) -> PhaseTemp
 
 #: Phase one is the same four movements for every position and every injury.
 #:
-#: Three of them have had their camera scoring checked against video of a real
+#: All four have now had their camera scoring checked against video of a real
 #: person with a known rep count, rather than against a skeleton drawn in code.
 #: Everything else in the library is still built from the injury and the
 #: position; only this one phase is pinned, so that the part anyone is shown
@@ -1405,6 +1405,13 @@ def _apply_position(phase: PhaseTemplate, profile: PositionProfile) -> PhaseTemp
 #: that mattered -- filmed side-on so the angles are measured in the image
 #: rather than from MediaPipe's depth guess, done lying down so there is no
 #: balance to lose, and it comes to rest between every rep.
+#:
+#: It was the last of the four to be filmed, and filming it found the same fault
+#: as the other three: thresholds that were reasoned out rather than measured sat
+#: outside what a body actually produces, and refused every honest rep. See the
+#: note on `glute_bridge` in app/data/exercises.py. The 2-0-2-0 tempo below is
+#: worth reading next to that: it asks for a four-second rep, and the six filmed
+#: reps ran 3.2 to 4.3 seconds, so the prescription and the footage agree.
 #:
 #: Clinically this is not a phase-one selection. It is pinned here for
 #: demonstration; deleting `_fixed_phase_one` and its call below restores the

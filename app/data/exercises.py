@@ -104,30 +104,113 @@ EXERCISES: list[ExerciseDef] = [
         category="activation",
         cue_en="Drive through the heels, squeeze the glutes at the top.",
         cue_th="ดันส้นเท้าลง บีบก้นตอนอยู่จุดสูงสุด",
-        # A demonstration only. The clip is filmed close and MediaPipe holds
-        # the body in 77% of its frames against 100% on the others, so it is
-        # not evidence about the thresholds below and nothing here was tuned
-        # against it. This one movement is still unchecked on real footage.
+        # The clip that plays in the panel is a different person from the one the
+        # thresholds below were measured on, and it is the weaker of the two
+        # recordings: filmed close enough that 48 of its frames are thrown out as
+        # untrusted, with a smoothed hip angle that reaches a physically
+        # impossible 157 deg at one point. It is a demonstration of the movement
+        # and nothing more -- no number below was read off it.
         demo_url="/demos/glute_bridge.mp4",
         rule=ExerciseRule(
             mode="rep",
             view="side",
+            # Measured, finally, against 36s of real footage: six bridges filmed
+            # side on, MediaPipe holding the body in 1080 of 1080 frames at 0.83
+            # confidence. The numbers that were here before came from anatomy
+            # rather than from a camera, and they found zero of the six.
+            #
+            # The mistake was assuming a good bridge reads as a straight line.
+            # It does not. Filmed, this movement swings between:
+            #
+            #     hips down    hip_flexion  50 to 54 deg   (hip_extension -50 to -54)
+            #     hips up      hip_flexion  21 to 33 deg   (hip_extension -21 to -33)
+            #
+            # so `enter` at -20 sat above anything a body produces.
+            #
+            # Two things cause that 20-33 deg, and it is worth not conflating
+            # them, because they generalise differently. `hip_flexion` is the
+            # shoulder-hip-knee angle, and MediaPipe puts the shoulder point at
+            # the acromion, forward of and above where a supine torso really
+            # pivots. That bias is measurable on this clip: at the bottom of a
+            # rep the back is flat on the floor, so any tilt in the
+            # shoulder-to-hip line there is pure landmark error, and against the
+            # floor direction it comes to 6-13 deg depending which floor
+            # reference you take. The other 13-20 deg is this person's own hip
+            # extension simply not reaching straight. So these numbers are part
+            # camera correction, which should hold for anyone, and part portrait
+            # of one man's range, which will not. Treat them as a one-body
+            # calibration, not an anatomical constant.
+            #
+            # That is why `enter` is not tucked in tight against the measured
+            # peaks. The six reps peaked at -30.4 to -22.3, so -34 would fit
+            # them with 3.6 deg to spare -- but shift the whole trace to stand
+            # in for a stiffer body and -34 holds all six only from -2 to +4
+            # deg, and reports *zero* at -12. That is the same silent failure
+            # this change exists to fix, just waiting for a different person.
+            # At -38 with the amplitude gate moved to match, the window is -6 to
+            # +4. The cost is that a bridge reaching only 38 deg now counts,
+            # which is a shallow rep; the benefit is that a stiff person gets a
+            # count at all. Those two errors are not equal -- one is a slightly
+            # generous rep, the other is an app that appears broken -- so this
+            # leans toward detecting.
+            #
+            # exit -44: the shallowest trough reached -49.7, so 5.7 deg spare.
+            # All six are found anywhere in enter -32..-40 by exit -42..-48.
+            #
+            # min_amplitude has to move whenever enter and exit do, and this is
+            # the trap in this rule: the real gate is max(enter, exit + amplitude).
+            # At -44 + 6 that is -38, so `enter` is doing the work. Leave it at
+            # 10 and the gate stays at -34 no matter what `enter` says -- which
+            # is exactly what the old 15 did, and why lowering `enter` alone
+            # changes nothing at all.
             detection=RepDetection(
-                signal="hip_extension", enter=-20.0, exit=-38.0, min_amplitude=15.0
+                signal="hip_extension", enter=-38.0, exit=-44.0, min_amplitude=6.0
             ),
-            # Not measured -- there is no footage of this one. Lowered from 1.2s
-            # on the same reasoning as the calf raise: every floor in this file
-            # was guessed, and the two that were finally checked against video
-            # both sat above how fast a real person moves, which refused every
-            # honest rep. A bridge is a slower movement than a calf raise, so
-            # this is deliberately conservative rather than tight.
+            # Now measured too: the six reps ran 3.2-4.3s each, so the floor is
+            # nowhere near them. Left at 0.8 rather than raised -- every tempo
+            # floor in this file that was guessed turned out to sit above how
+            # fast people really move, and refused honest reps.
             tempo_min_s=0.8,
             targets=[
                 MetricTarget(
                     metric="hip_flexion",
                     aggregate="min",
-                    max=12.0,
-                    tolerance=4.0,
+                    # 34, not 12, for the acromion reason above: the worst of
+                    # the six good reps read 32.9, so this sits just over it and
+                    # the tolerance absorbs body-to-body variation.
+                    #
+                    # Be clear about which half of the job this does, because
+                    # the obvious reading is wrong. Detection gates on the MEAN
+                    # of the two legs; this judges the WORSE one against 34 + 5.
+                    # So it only ever speaks when the legs disagree:
+                    #
+                    #   both hips at 36    counted, nothing said
+                    #   both hips at 38    no rep at all
+                    #   one at 26, other at 40 to 48    "push the hips higher"
+                    #   one at 26, other at 50          no rep at all
+                    #
+                    # A bridge that is evenly too low is therefore never coached,
+                    # it is simply not counted -- the counter sits still and the
+                    # set does not advance. That is defensible for a rep counter
+                    # but it is not what this message implies, so do not read a
+                    # form score of 100 as "your height was good". On this
+                    # movement it means "counted", nothing more.
+                    #
+                    # Moving the gate to -38 for the body-variation reason above
+                    # widened the useful half by accident and it is worth saying
+                    # so: at -34 the lagging-hip window was 40 to 41, two degrees
+                    # wide, and a worse asymmetry pulled the mean past the gate
+                    # so the rep vanished and nothing was said at all. At -38 it
+                    # runs 40 to 48. Still bounded, but no longer a sliver.
+                    #
+                    # The remaining hole -- the evenly-shallow bridge -- needs
+                    # detection to gate on the better leg, so the rep still
+                    # exists for this target to judge. That is a change to
+                    # segment_reps, which every bilateral exercise in this file
+                    # shares, so it is not a thing to do on the day of a demo.
+                    # Left measured and written down rather than quietly.
+                    max=34.0,
+                    tolerance=5.0,
                     weight=1.5,
                     code="hip_not_extended",
                     message_en="Push the hips higher until the body is in one line.",

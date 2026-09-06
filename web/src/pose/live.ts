@@ -437,6 +437,28 @@ export class LiveSession {
     this.discardCounts[code] = (this.discardCounts[code] ?? 0) + 1;
   }
 
+  // KNOWN DIVERGENCE from the server, found while checking the glute bridge
+  // against real footage, not yet fixed. Both sides go into ONE bucket per
+  // metric here, and `closeRep` then aggregates that pooled array once -- so
+  // `judge` never runs and the rep is scored on whichever limb happens to win
+  // the aggregate. The server does it the other way round: aggregate each side,
+  // then `_judged` picks the limb the target is about
+  // (app/services/pose/analyzer.py, `_judged`).
+  //
+  // For a `min` aggregate against a `max` bound that is exactly inverted. On the
+  // six filmed bridges the server scores the worse hip at
+  // 32.86 26.81 30.79 25.99 24.05 25.68 while this reports
+  // 27.90 23.78 28.59 23.52 20.58 25.47 -- the better hip, out by up to 4.96 deg.
+  // Neither is near the limit on that clip, so both engines agree 6/6 and score
+  // 100, which is why it went unnoticed: crosscheck.json is filmed left-only, so
+  // `_judged` returns early there and this pooling collapses to a no-op.
+  //
+  // Not fixed on the day of a demo because `record`/`closeRep` are shared by
+  // every bilateral exercise and nothing in the suite would catch a regression.
+  // The fix is to key `series` by side the way `smooth()` already keys its
+  // buffers, aggregate per side, and route the result through `judged()` --
+  // together with a bilateral crosscheck fixture, without which the guard in
+  // crosscheck.test.ts skips the comparison instead of failing it.
   private record(t: number, perSide: Metrics[]): void {
     if (!this.rep) return;
     this.rep.times.push(t);
