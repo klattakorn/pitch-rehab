@@ -5,7 +5,9 @@ the 30 MB Android build. Nothing here is loaded at run time.
 
 | File | What it is |
 |---|---|
-| `player-source.png` | Full-body cut-out, 1042×1510, transparent. The source for the home screen figure. |
+| `max rtp.png` | The photo of Max, 1086×1448, on a plain wall. The original. |
+| `max-rtp-cutout.png` | The same photo with the wall removed, transparent. The source for the home screen figure. |
+| `player-source.png` | The previous home screen figure. No longer used. |
 | `crest-source.png` | The club crest, 1254×1254, opaque. Every icon an operating system shows. |
 
 ## Icons
@@ -30,13 +32,17 @@ cannot survive it, and a browser tab is the one place legible beats faithful.
 
 ## Re-cropping the home screen figure
 
+The cut-out was made by seeding OpenCV's GrabCut with MediaPipe's pose landmarks,
+which works because the wall behind is plain. A busier background would need a
+proper segmentation model.
+
 `web/public/player.png` is the head-to-mid-torso crop the plan card uses. The
 card fills its slot with `object-fit: cover` and anchors the top, so the crop
 decides how much of the player is seen and the card decides how much of the
 crop fits.
 
 ```bash
-python -c "from PIL import Image; Image.open('design/player-source.png').crop((200, 0, 850, 790)).save('web/public/player.png')"
+python -c "from PIL import Image; Image.open('design/max-rtp-cutout.png').crop((203, 470, 863, 1270)).save('web/public/player.png')"
 ```
 
 The four numbers are left, top, right, bottom in source pixels. Lower the
