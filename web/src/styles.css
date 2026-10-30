@@ -2117,6 +2117,19 @@ ul.facts b {
   background: #000;
 }
 
+/* --- prototype notice --------------------------------------------------- */
+.prototype-card .pill {
+  align-self: flex-start;
+}
+.prototype-card .panel h3 {
+  margin: 0 0 var(--s2);
+}
+.prototype-list {
+  margin: var(--s2) 0;
+  padding-left: 1.2rem;
+  line-height: 1.7;
+}
+
 /* Sits under the camera line on the "how to" screen. Quiet, but it has to be
    readable before the camera opens -- afterwards it is too late to say it. */
 .framing {

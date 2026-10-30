@@ -345,6 +345,7 @@ function firstRunScreen(): void {
   );
   on("#demo", () => {
     api.useStandalone(true);
+    prototypeCardDue = true;
     void boot();
   });
 }
@@ -406,6 +407,7 @@ function signInScreen(notice = "", isNew = false): void {
     void (async () => {
       try {
         await api.login(email, password);
+        prototypeCardDue = true;
         await boot();
       } catch (error) {
         // Sign-in failed. The server deliberately does not say whether the email
@@ -509,6 +511,7 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
             full_name: intent.email.split("@")[0]!,
             position: chosen!,
           });
+          prototypeCardDue = true;
           await boot();
         } else {
           await api.updateProfile({ position: chosen! });
@@ -2282,6 +2285,56 @@ async function refresh(): Promise<void> {
   state.catalogue = cat;
 }
 
+// ------------------------------------------------------- prototype notice
+/**
+ * Shown every time somebody signs in or opens the app, before Home.
+ *
+ * `boot()` also runs after ordinary edits (changing position, picking a phase,
+ * the Home button), so the card is keyed to a flag rather than to `boot()`
+ * itself -- otherwise it would interrupt someone halfway through using the app.
+ * The flag starts true, so opening the app counts as a sign-in.
+ */
+let prototypeCardDue = true;
+
+/** The four phase-one movements, the only ones checked against real video. */
+const TRACKED_MOVES = ["Double-leg calf raise", "Wall sit", "Split squat", "Glute bridge"];
+
+function prototypeScreen(): void {
+  shell(
+    `<div class="stack narrow prototype-card">
+       <span class="pill">Prototype</span>
+       <h2>This is a work in progress</h2>
+       <p class="sub">RTP is a school project and is still being built. Please
+         read this before you start.</p>
+       <div class="panel">
+         <h3>Only 4 moves can be tracked</h3>
+         <p class="sub">The camera counts reps and checks form for these four
+           exercises only:</p>
+         <ul class="prototype-list">
+           ${TRACKED_MOVES.map((name) => `<li>${name}</li>`).join("")}
+         </ul>
+         <p class="sub">Other exercises in your plan cannot be tracked by the
+           camera yet.</p>
+       </div>
+       <div class="panel">
+         <h3>Still being built</h3>
+         <ul class="prototype-list">
+           <li>The Progress screen is a work in progress. Its numbers and charts
+             may be incomplete.</li>
+           <li>Some screens show recorded demo data, not your own.</li>
+           <li>Things may not work as expected.</li>
+         </ul>
+       </div>
+       <div class="notice">This is not medical advice. The rehab plans have not
+         been reviewed by a physiotherapist. If you are injured, see a
+         professional.</div>
+       <button class="primary block" id="understood">Got it</button>
+     </div>`,
+    { brand: true },
+  );
+  on("#understood", () => homeScreen());
+}
+
 async function boot(): Promise<void> {
   shell(`<div class="loading">Loading…</div>`, { brand: true });
   state.online = await api.backendUp();
@@ -2334,6 +2387,10 @@ async function boot(): Promise<void> {
     state.progress = null;
     if (!state.episode) return injuryScreen();
     await refresh();
+    if (prototypeCardDue) {
+      prototypeCardDue = false;
+      return prototypeScreen();
+    }
     homeScreen();
   } catch (error) {
     if (error instanceof api.ApiError && error.status === 401) {
