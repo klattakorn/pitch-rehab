@@ -6,7 +6,9 @@ the 30 MB Android build. Nothing here is loaded at run time.
 | File | What it is |
 |---|---|
 | `max rtp.png` | The photo of Max, 1086×1448, on a plain wall. The original. |
-| `max-rtp-cutout.png` | The same photo with the wall removed, transparent. The source for the home screen figure. |
+| `max-rtp-2.png` | The second photo of Max, 1086×1448, on pure black. |
+| `max-rtp-2-cutout.png` | That photo with the black removed, transparent. **The source for the home screen figure.** |
+| `max-rtp-cutout.png` | The first photo, cut out. No longer used. |
 | `player-source.png` | The previous home screen figure. No longer used. |
 | `crest-source.png` | The club crest, 1254×1254, opaque. Every icon an operating system shows. |
 
@@ -32,9 +34,9 @@ cannot survive it, and a browser tab is the one place legible beats faithful.
 
 ## Re-cropping the home screen figure
 
-The cut-out was made by seeding OpenCV's GrabCut with MediaPipe's pose landmarks,
-which works because the wall behind is plain. A busier background would need a
-proper segmentation model.
+The current cut-out came on pure black, so the background is just the near-black
+area connected to the edge of the picture. That keeps the black stripes on the
+shoulders, which a colour-based cutter mistakes for background.
 
 `web/public/player.png` is the head-to-mid-torso crop the plan card uses. The
 card fills its slot with `object-fit: cover` and anchors the top, so the crop
@@ -42,7 +44,7 @@ decides how much of the player is seen and the card decides how much of the
 crop fits.
 
 ```bash
-python -c "from PIL import Image; Image.open('design/max-rtp-cutout.png').crop((203, 470, 863, 1270)).save('web/public/player.png')"
+python -c "from PIL import Image; Image.open('design/max-rtp-2-cutout.png').crop((217, 366, 877, 1166)).save('web/public/player.png')"
 ```
 
 The four numbers are left, top, right, bottom in source pixels. Lower the
