@@ -347,7 +347,6 @@ function firstRunScreen(): void {
   );
   on("#demo", () => {
     api.useStandalone(true);
-    prototypeCardDue = true;
     void boot();
   });
 }
@@ -409,7 +408,6 @@ function signInScreen(notice = "", isNew = false): void {
     void (async () => {
       try {
         await api.login(email, password);
-        prototypeCardDue = true;
         await boot();
       } catch (error) {
         // Sign-in failed. The server deliberately does not say whether the email
@@ -513,7 +511,6 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
             full_name: intent.email.split("@")[0]!,
             position: chosen!,
           });
-          prototypeCardDue = true;
           await boot();
         } else {
           await api.updateProfile({ position: chosen! });
@@ -1464,55 +1461,134 @@ function summaryScreen(
 }
 
 // ---------------------------------------------------------------- progress
+/**
+ * The four phase-one moves -- the only ones the camera has been checked on
+ * against real video. Accuracy on this screen is taken from these alone, so it
+ * never claims accuracy for a move the camera was never checked on.
+ */
+const TRACKED_KEYS = new Set(["double_leg_calf_raise", "wall_sit", "split_squat", "glute_bridge"]);
+
+/** A bare checkmark: TICK_FILLED is a filled disc and vanishes on the volt dot. */
+const ROAD_TICK =
+  '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" ' +
+  'stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
 async function progressScreen(): Promise<void> {
   if (!state.episode) return injuryScreen();
-  if (!state.progress) {
+  if (!state.progress || !state.protocol) {
     shell(`<div class="loading">Working out your progress…</div>`, {
       tab: "progress",
       title: "Progress",
     });
     try {
-      state.progress = await api.progress(state.episode.id);
+      state.progress ??= await api.progress(state.episode.id);
+      // The roadmap needs the phase names; the plan screen usually loaded them.
+      state.protocol ??= await api.protocolFor(state.episode.id).catch(() => null);
     } catch (error) {
       return fail(error);
     }
   }
-  const p = state.progress;
-  const info = PHASE_NAMES[p.phase_key] ?? { n: p.phase_order, name: titleCase(p.phase_key) };
+  const p = state.progress!;
+  const gate = state.gate;
+  const current = p.phase_order;
 
-  const accuracyPoints = p.trend.map((t) => ({ day: t.day, value: t.mean_form_score }));
+  // --- one number: how far through this phase's tests ---------------------
+  // The screen used to lead with an "overall" figure while the ring beside it
+  // and the Home screen both showed this one, so the same player read 50% and
+  // 86% in one glance. This is the number Home shows; the journey across all
+  // four phases is the roadmap below, drawn rather than written as a second %.
+  const phasePct = Math.round(p.phase_pct);
+  const weekLine =
+    p.week_of <= p.weeks_total
+      ? `Week ${p.week_of} of about ${p.weeks_total}`
+      : `Week ${p.week_of}`;
+
+  // --- roadmap -------------------------------------------------------------
+  const phases = [...(state.protocol?.phases ?? [])].sort((a, b) => a.order_index - b.order_index);
+  const steps = (phases.length ? phases.map((ph) => ph.phase_key) : Object.keys(PHASE_NAMES)).map(
+    (key, i) => {
+      const n = i + 1;
+      const stateClass = n < current ? "done" : n === current ? "now" : "next";
+      const mark = n < current ? ROAD_TICK : String(n);
+      const detail =
+        n < current
+          ? "Cleared"
+          : n === current
+            ? `${p.criteria_passed} of ${p.criteria_total} tests passed`
+            : "Locked";
+      return `<li class="road-step ${stateClass}">
+          <span class="road-dot">${mark}</span>
+          <span class="road-text"><b>${phaseName(key)}</b><small>${detail}</small></span>
+        </li>`;
+    },
+  );
+
+  // --- form: camera-tracked moves only ------------------------------------
+  const tracked = p.top_exercises.filter((e) => TRACKED_KEYS.has(e.key));
+  const trackedSets = tracked.reduce((n, e) => n + e.sets, 0);
+  const trackedForm = trackedSets
+    ? Math.round(tracked.reduce((sum, e) => sum + e.mean_form_score * e.sets, 0) / trackedSets)
+    : null;
+
+  // --- the two charts, with a one-line reading so nobody has to decode them --
+  const scoredDays = p.trend.filter((t) => t.mean_form_score !== null);
+  const recentSessions = p.trend.slice(-7).reduce((n, t) => n + t.sessions, 0);
+  const activeDays = p.trend.filter((t) => t.sessions > 0).length;
+  // Only the days that were scored. Days off would break the line into
+  // dashes; on this chart a rest day is not a missing reading, it is a rest day.
+  const accuracyPoints = scoredDays.map((t) => ({ day: t.day, value: t.mean_form_score }));
   const sessionPoints = p.trend.map((t) => ({ day: t.day, value: t.sessions }));
 
+  // --- achievements and what is left --------------------------------------
+  const banked = p.milestones.filter((m) => m.reached);
+  const remaining = (gate?.criteria ?? []).filter((c) => c.required && c.status !== "pass");
+
   shell(
-    `<section class="panel accent">
-       <span class="label">Overall progress</span>
-       <div class="row-between">
-         <div>
-           <!-- The bar that used to sit under this said the same thing as the
-                number. Two readings of one figure, plus the ring beside it
-                reading a different one, and the panel was mostly empty space. -->
-           <div class="bignum" data-count="${Math.round(p.overall_pct)}"
-             data-suffix="%">0%</div>
-           <div class="caption">Phase ${info.n} of 4 — ${phaseName(p.phase_key)}</div>
-           <div class="caption">${
-             p.week_of <= p.weeks_total
-               ? `Week ${p.week_of} of ${p.weeks_total}`
-               : `Week ${p.week_of} · past the ${p.weeks_total}-week minimum`
-           }</div>
-         </div>
-         ${progressRing(p.phase_pct, "this phase", "sm")}
+    `<section class="panel accent progress-head">
+       <div>
+         <span class="label">Phase ${current} of 4</span>
+         <div class="headline">${phaseName(p.phase_key)}</div>
+         <div class="caption">${weekLine}</div>
        </div>
+       ${progressRing(phasePct, "this phase", "sm")}
+     </section>
+
+     <section class="panel">
+       <span class="label">Your road back</span>
+       <ol class="roadmap">${steps.join("")}</ol>
      </section>
 
      <div class="tiles">
        <div class="tile"><div class="n">${tileValue(p.sessions_completed)}</div>
-         <div class="k">Sessions</div></div>
+         <div class="k">Sessions done</div></div>
        <div class="tile"><div class="n">${tileValue(p.exercises_completed)}</div>
-         <div class="k">Exercises</div></div>
+         <div class="k">Exercises done</div></div>
        <div class="tile"><div class="n">${
-         p.mean_form_score == null ? "—" : tileValue(Math.round(p.mean_form_score), "%")
-       }</div><div class="k">Accuracy</div></div>
+         trackedForm === null ? "—" : tileValue(trackedForm, "%")
+       }</div><div class="k">Camera form</div></div>
      </div>
+
+     ${
+       remaining.length
+         ? `<section class="panel">
+              <span class="label">Left to pass this phase</span>
+              <div class="stack tight">
+                ${remaining
+                  .map((c) =>
+                    meterRow(
+                      c.label_en,
+                      c.status === "no_data" ? "Not tested yet" : "In progress",
+                      Math.round(Math.max(0, Math.min(1, c.progress)) * 100),
+                    ),
+                  )
+                  .join("")}
+              </div>
+            </section>`
+         : gate?.passed
+           ? `<div class="notice good">Every test for this phase is passed.
+                You are ready to move on.</div>`
+           : ""
+     }
 
      ${
        p.symmetry
@@ -1521,54 +1597,71 @@ async function progressScreen(): Promise<void> {
               <div class="row-between">
                 <div>
                   <div class="headline">${p.symmetry.label_en}</div>
-                  <div class="caption">Injured side vs healthy ·
-                    ${p.symmetry.samples} readings</div>
+                  <div class="caption">Injured leg compared with the healthy one.
+                    100% means equal.</div>
                 </div>
-                ${progressRing(Math.min(100, p.symmetry.value), "symmetry", "sm")}
+                ${progressRing(Math.min(100, p.symmetry.value), "of healthy", "sm")}
               </div>
             </section>`
          : ""
      }
 
      <section class="panel">
-       <span class="label">Accuracy over time</span>
+       <span class="label">Camera form score by day</span>
+       <p class="caption">${
+         scoredDays.length
+           ? `How cleanly your camera-scored sets were done, out of 100.`
+           : `No camera-scored sets yet. Do one of the 4 tracked moves to start this chart.`
+       }</p>
        ${lineChart(accuracyPoints)}
      </section>
 
      <section class="panel">
        <span class="label">Sessions per day</span>
+       <p class="caption">${recentSessions} ${
+         recentSessions === 1 ? "session" : "sessions"
+       } in the last 7 days · active on ${activeDays} of the last ${p.trend.length} days.</p>
        ${barChart(sessionPoints)}
      </section>
 
-     ${
-       p.top_exercises.length
-         ? `<section class="panel">
-              <span class="label">Top exercises</span>
-              <div class="stack tight">
-                ${p.top_exercises
-                  .map((e) =>
-                    meterRow(
-                      e.name_en,
-                      `${e.sets} ${e.sets === 1 ? "set" : "sets"}`,
-                      e.mean_form_score,
-                    ),
-                  )
-                  .join("")}
-              </div>
-            </section>`
-         : ""
-     }
+     <section class="panel">
+       <span class="label">Camera-tracked moves</span>
+       ${
+         tracked.length
+           ? `<div class="stack tight">${tracked
+               .map((e) =>
+                 meterRow(
+                   e.name_en,
+                   `${e.sets} ${e.sets === 1 ? "set" : "sets"}`,
+                   e.mean_form_score,
+                 ),
+               )
+               .join("")}</div>`
+           : `<p class="caption">None yet. The camera tracks the calf raise, wall
+                sit, split squat and glute bridge.</p>`
+       }
+     </section>
 
-     <h3>Milestones</h3>
+     <h3>Achieved</h3>
      <div class="stack">
-       ${p.milestones
-         .map(
-           (m) => `<div class="rowcard static${m.reached ? "" : " muted"}">
-             <span class="rowmark">${m.reached ? TICK_FILLED : DASH}</span>
-             <span class="rowbody"><b>${m.label_en}</b><small>${m.detail_en}</small></span>
-           </div>`,
-         )
-         .join("")}
+       ${
+         banked.length
+           ? banked
+               .map(
+                 (m) => `<div class="rowcard static">
+                   <span class="rowmark">${TICK_FILLED}</span>
+                   <span class="rowbody"><b>${m.label_en}</b>${
+                     /^Phase \d cleared$/.test(m.detail_en) ? `<small>${m.detail_en}</small>` : ""
+                   }</span>
+                 </div>`,
+               )
+               .join("")
+           : `<div class="rowcard static muted">
+                <span class="rowmark">${DASH}</span>
+                <span class="rowbody"><b>Nothing yet</b>
+                  <small>Finish a few sessions and your first wins appear here.</small></span>
+              </div>`
+       }
      </div>`,
     { tab: "progress", title: "Progress", back: () => homeScreen() },
   );
@@ -2315,56 +2408,6 @@ async function refresh(): Promise<void> {
   state.catalogue = cat;
 }
 
-// ------------------------------------------------------- prototype notice
-/**
- * Shown every time somebody signs in or opens the app, before Home.
- *
- * `boot()` also runs after ordinary edits (changing position, picking a phase,
- * the Home button), so the card is keyed to a flag rather than to `boot()`
- * itself -- otherwise it would interrupt someone halfway through using the app.
- * The flag starts true, so opening the app counts as a sign-in.
- */
-let prototypeCardDue = true;
-
-/** The four phase-one movements, the only ones checked against real video. */
-const TRACKED_MOVES = ["Double-leg calf raise", "Wall sit", "Split squat", "Glute bridge"];
-
-function prototypeScreen(): void {
-  shell(
-    `<div class="stack narrow prototype-card">
-       <span class="pill">Prototype</span>
-       <h2>This is a work in progress</h2>
-       <p class="sub">RTP is a school project and is still being built. Please
-         read this before you start.</p>
-       <div class="panel">
-         <h3>Only 4 moves can be tracked</h3>
-         <p class="sub">The camera counts reps and checks form for these four
-           exercises only:</p>
-         <ul class="prototype-list">
-           ${TRACKED_MOVES.map((name) => `<li>${name}</li>`).join("")}
-         </ul>
-         <p class="sub">Other exercises in your plan cannot be tracked by the
-           camera yet.</p>
-       </div>
-       <div class="panel">
-         <h3>Still being built</h3>
-         <ul class="prototype-list">
-           <li>The Progress screen is a work in progress. Its numbers and charts
-             may be incomplete.</li>
-           <li>Some screens show recorded demo data, not your own.</li>
-           <li>Things may not work as expected.</li>
-         </ul>
-       </div>
-       <div class="notice">This is not medical advice. The rehab plans have not
-         been reviewed by a physiotherapist. If you are injured, see a
-         professional.</div>
-       <button class="primary block" id="understood">Got it</button>
-     </div>`,
-    { brand: true },
-  );
-  on("#understood", () => homeScreen());
-}
-
 async function boot(): Promise<void> {
   shell(`<div class="loading">Loading…</div>`, { brand: true });
   state.online = await api.backendUp();
@@ -2417,10 +2460,6 @@ async function boot(): Promise<void> {
     state.progress = null;
     if (!state.episode) return injuryScreen();
     await refresh();
-    if (prototypeCardDue) {
-      prototypeCardDue = false;
-      return prototypeScreen();
-    }
     homeScreen();
   } catch (error) {
     if (error instanceof api.ApiError && error.status === 401) {

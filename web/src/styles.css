@@ -2117,19 +2117,6 @@ ul.facts b {
   background: #000;
 }
 
-/* --- prototype notice --------------------------------------------------- */
-.prototype-card .pill {
-  align-self: flex-start;
-}
-.prototype-card .panel h3 {
-  margin: 0 0 var(--s2);
-}
-.prototype-list {
-  margin: var(--s2) 0;
-  padding-left: 1.2rem;
-  line-height: 1.7;
-}
-
 /* Sits under the camera line on the "how to" screen. Quiet, but it has to be
    readable before the camera opens -- afterwards it is too late to say it. */
 .framing {
@@ -3293,4 +3280,77 @@ main {
   .lab-stage {
     max-height: 52vh;
   }
+}
+
+/* --- Progress ----------------------------------------------------------------
+   One number up top (this phase), and the four phases drawn as a road rather
+   than written as a second percentage. */
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+.roadmap {
+  margin: var(--s3) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.road-step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: 0.55rem 0;
+}
+/* The line joining each step to the next. */
+.road-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 15px;
+  top: calc(50% + 17px);
+  height: calc(100% - 34px);
+  width: 2px;
+  background: var(--edge);
+}
+.road-step.done:not(:last-child)::after {
+  background: var(--volt);
+}
+.road-dot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--edge);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--dim, #8a97a3);
+}
+.road-dot svg {
+  width: 16px;
+  height: 16px;
+}
+.road-step.done .road-dot {
+  border-color: var(--volt);
+  background: var(--volt);
+  color: var(--volt-ink, #0b0e12);
+}
+.road-step.now .road-dot {
+  border-color: var(--volt);
+  color: var(--volt);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--volt) 18%, transparent);
+}
+.road-text {
+  display: grid;
+  gap: 2px;
+}
+.road-text small {
+  color: var(--dim, #8a97a3);
+  font-size: var(--t-small);
+}
+.road-step.next .road-text b {
+  color: var(--dim, #8a97a3);
 }
