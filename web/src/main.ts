@@ -28,6 +28,8 @@ import {
   windowText,
 } from "./criteria";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
+import { mountLab } from "./lab";
+import type { Exercise } from "./pose/rules";
 import type { Facing } from "./mediapipe";
 import {
   createPoseLandmarker,
@@ -1754,6 +1756,7 @@ function profileScreen(): void {
          state.episode ? ` · ${state.episode.side} side` : ""
        }`)}
        ${row("about", "About RTP")}
+       ${row("lab", "Pose Lab", "Test and tune the pose detection")}
      </div>
 
      <div class="controls">
@@ -1765,6 +1768,7 @@ function profileScreen(): void {
   on("#edit-role", () => void roleScreen({ mode: "edit" }));
   on("#edit-injury", () => injuryScreen());
   on("#about", () => aboutScreen());
+  on("#lab", () => void labScreen());
   on("#signout", () => {
     api.signOut();
     state.user = null;
@@ -1785,6 +1789,32 @@ function profileScreen(): void {
  */
 function buildVersion(): string {
   return "Demo build - September 2026";
+}
+
+/**
+ * Pose Lab: tune the detection against the live camera or a video file.
+ * A testing bench for whoever owns the pose engine, not a player screen --
+ * which is why it lives under Profile rather than in the plan.
+ */
+async function labScreen(): Promise<void> {
+  shell(`<div class="loading">Loading exercises…</div>`, {
+    title: "Pose Lab",
+    back: () => profileScreen(),
+  });
+  let exercises: Exercise[];
+  try {
+    exercises = await api.listExercises();
+  } catch (error) {
+    return fail(error);
+  }
+  shell(`<div id="lab-root"></div>`, {
+    title: "Pose Lab",
+    back: () => {
+      cleanup();
+      profileScreen();
+    },
+  });
+  const cleanup = mountLab(app.querySelector<HTMLElement>("#lab-root")!, exercises);
 }
 
 function aboutScreen(): void {

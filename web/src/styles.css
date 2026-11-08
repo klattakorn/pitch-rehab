@@ -2828,3 +2828,469 @@ main {
   flex: none;
   align-self: center;
 }
+
+/* --- Pose Lab -------------------------------------------------------------
+   Laid out like a video editor: toolbar, preview with transport, an inspector
+   on the side, and a timeline of rep clips underneath. Its own near-black
+   ground, so it reads as a tool rather than another app screen. */
+.lab {
+  --lab-bg: #0b0e12;
+  --lab-panel: #14181e;
+  --lab-raised: #1c2128;
+  --lab-line: #262c35;
+  --lab-text: #e6ebf0;
+  --lab-dim: #8a94a0;
+  --lab-accent: #c0f917;
+  display: grid;
+  gap: 1px;
+  background: var(--lab-line);
+  border: 1px solid var(--lab-line);
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--lab-text);
+  font-size: 0.85rem;
+}
+.lab > * {
+  background: var(--lab-bg);
+}
+
+/* toolbar */
+.lab-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--lab-panel);
+}
+.lab-toolbar select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--lab-line);
+  border-radius: 6px;
+  background: var(--lab-raised);
+  color: var(--lab-text);
+  font: inherit;
+}
+.lab-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: var(--lab-line);
+}
+.lab-grow {
+  flex: 1;
+}
+.lab-tool,
+.lab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--lab-line);
+  border-radius: 6px;
+  background: var(--lab-raised);
+  color: var(--lab-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lab-icon {
+  width: 32px;
+  padding: 0;
+  font-size: 1rem;
+}
+.lab-tool:hover:not(:disabled),
+.lab-icon:hover:not(:disabled) {
+  border-color: #3a4350;
+  background: #232932;
+}
+.lab-tool:disabled,
+.lab-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.lab-tool.accent {
+  border-color: var(--lab-accent);
+  background: var(--lab-accent);
+  color: #0b0e12;
+}
+.lab-tool.rec i {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff4d4d;
+}
+
+/* workspace: preview + inspector */
+.lab-work {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1px;
+  background: var(--lab-line);
+}
+.lab-work > * {
+  background: var(--lab-bg);
+}
+@media (min-width: 760px) {
+  .lab-work {
+    grid-template-columns: minmax(0, 1fr) 300px;
+  }
+}
+.lab-preview {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  align-content: start;
+}
+.lab-stage {
+  position: relative;
+  width: 100%;
+  max-height: 60vh;
+  aspect-ratio: 3 / 4;
+  margin: 0 auto;
+  background: #000;
+  border-radius: 6px;
+  overflow: hidden;
+}
+.lab-stage video,
+.lab-stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.lab-stage.mirrored video {
+  transform: scaleX(-1);
+}
+.lab-live {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.6);
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  color: #fff;
+}
+.lab-live:empty {
+  display: none;
+}
+.lab-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(47, 191, 113, 0.9);
+  color: #04130a;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+.lab-badge.warn {
+  background: rgba(255, 90, 80, 0.92);
+  color: #1a0503;
+}
+.lab-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.lab-icon.play {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border-color: transparent;
+  background: var(--lab-text);
+  color: #0b0e12;
+}
+.lab-time {
+  min-width: 6.5em;
+  margin-left: 8px;
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--lab-dim);
+}
+
+/* inspector */
+.lab-inspector {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 12px 12px;
+  background: var(--lab-panel) !important;
+}
+.lab-tabs {
+  display: flex;
+  margin: 0 -12px;
+  border-bottom: 1px solid var(--lab-line);
+}
+.lab-tab {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--lab-dim);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.lab-tab.on {
+  color: var(--lab-text);
+  border-bottom-color: var(--lab-accent);
+}
+.lab-pane {
+  display: grid;
+  gap: 10px;
+}
+.lab-summary {
+  margin: 0;
+  line-height: 1.6;
+}
+.lab-summary b {
+  color: var(--lab-accent);
+}
+.lab-marks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.lab-hint,
+.lab-status {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--lab-dim);
+  line-height: 1.5;
+}
+.lab-status {
+  margin-top: auto;
+  padding-top: 8px;
+  border-top: 1px solid var(--lab-line);
+}
+.lab-warn {
+  padding: 8px 10px;
+  border-left: 3px solid #ff9f43;
+  border-radius: 4px;
+  background: rgba(255, 159, 67, 0.1);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.lab-card {
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--lab-raised);
+}
+.lab-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.lab-card-head .ok {
+  color: #2fbf71;
+  font-weight: 700;
+}
+.lab-card-head .bad {
+  color: #ff5a50;
+  font-weight: 700;
+}
+.lab-card-meta {
+  margin-top: 2px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  color: var(--lab-dim);
+}
+.lab-card ul {
+  margin: 8px 0 0;
+  padding-left: 1.1rem;
+  line-height: 1.6;
+}
+.lab-card small {
+  color: var(--lab-dim);
+}
+.lab-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.lab-row > * {
+  flex: 1 1 auto;
+}
+.lab-knob {
+  display: grid;
+  grid-template-columns: 1fr 5.5rem;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--lab-dim);
+}
+.lab-knob input,
+.lab-knob select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--lab-line);
+  border-radius: 4px;
+  background: var(--lab-raised);
+  color: var(--lab-text);
+  font: inherit;
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.lab-knob input[type="checkbox"] {
+  justify-self: start;
+  height: auto;
+}
+#lab-knobs {
+  display: grid;
+  gap: 6px;
+}
+
+/* history */
+.lab-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.lab-history li {
+  display: grid;
+  gap: 2px;
+  padding: 7px 9px;
+  border-left: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.78rem;
+}
+.lab-history li:hover {
+  background: var(--lab-raised);
+}
+.lab-history li.now {
+  border-left-color: var(--lab-accent);
+  background: var(--lab-raised);
+}
+/* Undone steps stay visible, the way an editor greys out what Redo brings back. */
+.lab-history li.undone {
+  opacity: 0.38;
+}
+.lab-history small {
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--lab-dim);
+}
+
+/* timeline */
+.lab-timeline {
+  display: grid;
+  grid-template-columns: 74px 1fr;
+  padding: 10px 12px 12px;
+  background: var(--lab-panel) !important;
+}
+.lab-tracklabels {
+  display: grid;
+  grid-template-rows: 26px 40px 1fr;
+  padding-top: 26px;
+  font-size: 0.7rem;
+  color: var(--lab-dim);
+}
+.lab-tracklabels span {
+  align-self: center;
+}
+.lab-tracklabels span:first-child {
+  grid-row: 2;
+}
+.lab-tracklabels span:last-child {
+  grid-row: 3;
+}
+.lab-timeline canvas {
+  width: 100%;
+  height: 150px;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+/* `display: grid` on a pane beats the browser's own [hidden] rule, so restate it. */
+.lab [hidden] {
+  display: none !important;
+}
+/* An editor needs the width. Break out of the app's phone-width column on a
+   desktop, centred on the page; on a phone this is just the screen width. */
+.lab {
+  position: relative;
+  left: 50%;
+  width: min(1180px, calc(100vw - 24px));
+  transform: translateX(-50%);
+}
+/* Keep the timeline on screen with the preview, the way an editor does. */
+.lab-stage {
+  max-height: 48vh;
+}
+/* Rows match the canvas: ruler 26, rep track 40, gap 8, movement track. */
+.lab-tracklabels {
+  grid-template-rows: 26px 40px 8px 1fr;
+  padding-top: 0;
+}
+.lab-tracklabels span:first-child {
+  grid-row: 2;
+}
+.lab-tracklabels span:last-child {
+  grid-row: 4;
+}
+
+/* --- Pose Lab on a phone ----------------------------------------------------
+   One column, in the order an editor app uses on a phone: preview, then the
+   timeline right under it so scrubbing and watching happen together, then the
+   settings. `display: contents` lifts the preview and inspector out of their
+   two-column wrapper so they can be ordered around the timeline. */
+@media (max-width: 759px) {
+  .lab {
+    width: calc(100vw - 16px);
+    border-radius: 10px;
+  }
+  .lab-work {
+    display: contents;
+  }
+  .lab-toolbar {
+    order: 0;
+  }
+  .lab-preview {
+    order: 1;
+    padding: 8px;
+    background: var(--lab-bg);
+  }
+  .lab-timeline {
+    order: 2;
+    grid-template-columns: 1fr;
+    padding: 8px;
+  }
+  .lab-inspector {
+    order: 3;
+  }
+  /* The tracks are self-explanatory once the clips are in them; the label
+     column costs a fifth of a phone's width. */
+  .lab-tracklabels {
+    display: none;
+  }
+  .lab-toolbar {
+    gap: 6px;
+    padding: 8px;
+  }
+  .lab-toolbar select {
+    flex: 1 1 40%;
+    min-width: 0;
+  }
+  .lab-sep,
+  .lab-grow {
+    display: none;
+  }
+  .lab-tool {
+    flex: 1 1 auto;
+    padding: 0 8px;
+  }
+  .lab-stage {
+    max-height: 52vh;
+  }
+}
