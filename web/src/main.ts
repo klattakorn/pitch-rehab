@@ -199,28 +199,48 @@ function tabbar(active: Tab | undefined): string {
 }
 
 /**
- * Say so, on every screen, when the app is running without a backend.
+ * Where the last screen sat, so the next one can slide in from the right side.
  *
- * Not a nicety. Someone shown this in a classroom has no way to tell a live
- * system from a recorded one, and letting them assume the first would be a
- * lie told by omission. It also counts what is sitting on the phone unsent,
- * because "saved" and "counted" are different things here.
+ * Going deeper (a tab into a detail) comes in from the right and going back
+ * comes in from the left, the way a phone's own navigation moves. Switching
+ * tabs slides toward the tab's side of the bar. Anything else -- a loading
+ * screen swapping for its content -- just fades, because nothing moved.
  */
-function standaloneBand(): string {
-  if (!api.standaloneActive()) return "";
-  const waiting = api.standalonePending();
-  return `<div class="offline-band">
-      <span class="tagline">Demo mode</span>
-      Running from a recording of the real system — nothing is being computed.
-      ${waiting ? `<b>${waiting} logged here, not yet counted.</b>` : ""}
-    </div>`;
+let lastPlace: { tab: number; depth: number } | null = null;
+
+function directionFor(chrome: Chrome): "forward" | "back" | "fade" {
+  const tab = chrome.tab ? TABS.findIndex((t) => t.key === chrome.tab) : (lastPlace?.tab ?? 0);
+  const depth = chrome.tab ? 0 : chrome.back ? 1 : 0;
+  const prev = lastPlace;
+  lastPlace = { tab, depth };
+  if (!prev) return "fade";
+  if (depth !== prev.depth) return depth > prev.depth ? "forward" : "back";
+  if (tab !== prev.tab) return tab > prev.tab ? "forward" : "back";
+  return "fade";
 }
 
+let lastTab: Tab | undefined;
+/** Set when the screen on show is a "Loading…" placeholder. */
+let loadingShown: { dir: "forward" | "back" | "fade"; arrived: boolean } | null = null;
+
 function shell(body: string, chrome: Chrome = {}): void {
+  let dir = directionFor(chrome);
+  let arrive = !!chrome.tab && chrome.tab !== lastTab;
+  // A screen that loads first renders twice. The movement belongs to the
+  // real content, so it inherits the slide the placeholder was given.
+  if (loadingShown && dir === "fade") {
+    dir = loadingShown.dir;
+    arrive = arrive || loadingShown.arrived;
+  }
+  loadingShown = body.includes('class="loading"') ? { dir, arrived: arrive } : null;
   app.innerHTML = `
     ${header(chrome)}
-    <main class="${chrome.tab ? "with-tabs" : ""}${chrome.brand || chrome.greeting ? "" : ""}">${standaloneBand()}${body}</main>
+    <main class="${chrome.tab ? "with-tabs" : ""}" data-dir="${dir}">${body}</main>
     ${tabbar(chrome.tab)}`;
+  // The tab rail only animates when the tab actually changed; a screen that
+  // re-renders in place (loading, then content) should not flicker it.
+  if (arrive) app.querySelector(".tab.on")?.classList.add("arrive");
+  lastTab = chrome.tab;
 
   if (chrome.back) on("#nav-back", chrome.back);
   app.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
@@ -1452,6 +1472,9 @@ function summaryScreen(
         note.textContent = api.standaloneActive()
           ? "Stored on this phone. Your testing updates when the laptop is back."
           : "Saved. Your testing has been updated.";
+        // A save is the end of a set: say so with something you can see.
+        note.classList.add("saved");
+        pulse(note, "pop-in");
       } catch (error) {
         note.textContent =
           error instanceof api.ApiError ? String(error.detail) : String(error);

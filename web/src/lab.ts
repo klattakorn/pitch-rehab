@@ -45,6 +45,24 @@ const fmt = (n: number | null | undefined, d?: number): string =>
     ? "—"
     : n.toFixed(d ?? (Math.abs(n) < 5 ? 2 : 1));
 
+/**
+ * Drawn icons. The toolbar used text symbols (⏮ ▶ ↶) before, which every phone
+ * draws in its own font -- some as emoji, some not at all. One stroke weight,
+ * one size, so they read as a set.
+ */
+const svg = (d: string, fill = false): string =>
+  `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" ${
+    fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+  }>${d}</svg>`;
+const ICON = {
+  undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
+  redo: svg('<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'),
+  back: svg('<path d="M18 6 10 12l8 6V6Z"/><path d="M6 6v12"/>', true),
+  fwd: svg('<path d="m6 6 8 6-8 6V6Z"/><path d="M18 6v12"/>', true),
+  play: svg('<path d="M7 5v14l12-7L7 5Z"/>', true),
+  pause: svg('<path d="M7 5h4v14H7zM13 5h4v14h-4z"/>', true),
+};
+
 export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
   const scored = exercises.filter((e) => e.pose_rule);
   if (!scored.length) {
@@ -70,8 +88,8 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
         </label>
         <button class="lab-tool" id="lab-stop" title="Stop">Stop</button>
         <span class="lab-grow"></span>
-        <button class="lab-icon" id="lab-undo" title="Undo (Ctrl+Z)" aria-label="Undo">↶</button>
-        <button class="lab-icon" id="lab-redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">↷</button>
+        <button class="lab-icon" id="lab-undo" title="Undo (Ctrl+Z)" aria-label="Undo">${ICON.undo}</button>
+        <button class="lab-icon" id="lab-redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">${ICON.redo}</button>
         <button class="lab-tool accent" id="lab-copy" title="Copy the numbers for exercises.py">Export</button>
       </div>
 
@@ -84,9 +102,9 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
             <div class="lab-badge" id="lab-result"></div>
           </div>
           <div class="lab-transport">
-            <button class="lab-icon" id="lab-back1" title="Back one frame" aria-label="Back one frame">⏮</button>
-            <button class="lab-icon play" id="lab-play" title="Play / pause" aria-label="Play">▶</button>
-            <button class="lab-icon" id="lab-fwd1" title="Forward one frame" aria-label="Forward one frame">⏭</button>
+            <button class="lab-icon" id="lab-back1" title="Back one frame" aria-label="Back one frame">${ICON.back}</button>
+            <button class="lab-icon play" id="lab-play" title="Play / pause" aria-label="Play">${ICON.play}</button>
+            <button class="lab-icon" id="lab-fwd1" title="Forward one frame" aria-label="Forward one frame">${ICON.fwd}</button>
             <span class="lab-time" id="lab-time">00:00.00</span>
           </div>
         </div>
@@ -1107,7 +1125,7 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
   // Transport, like an editor's: play/pause, a frame either way.
   const syncPlay = (): void => {
     const playing = reviewing && !video.paused;
-    playBtn.textContent = playing ? "❚❚" : "▶";
+    playBtn.innerHTML = playing ? ICON.pause : ICON.play;
     playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
   };
   playBtn.addEventListener("click", () => {

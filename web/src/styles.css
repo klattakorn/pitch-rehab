@@ -2453,10 +2453,12 @@ ul.criteria .src.yours {
 /* ==========================================================================
    Motion
    --------------------------------------------------------------------------
-   One idea: things rise into place and settle. Nothing bounces, nothing slides
-   sideways, nothing spins. Entrances are short because they happen on every
+   One idea: things arrive and settle. Screens slide the way you moved -- in
+   from the right going deeper, from the left coming back -- and their parts
+   rise in one after another. Entrances are short because they happen on every
    screen; data animations are slower, because a bar filling or a number
-   counting is information arriving.
+   counting is information arriving. Only transform and opacity ever move, so
+   it stays smooth on a cheap phone.
 
    Every animation starts from a state that is already laid out and ends on the
    real value, so switching all of it off costs polish and nothing else.
@@ -2500,8 +2502,128 @@ ul.criteria .src.yours {
   }
 }
 
+@keyframes from-right {
+  from {
+    opacity: 0;
+    transform: translateX(22px);
+  }
+}
+@keyframes from-left {
+  from {
+    opacity: 0;
+    transform: translateX(-22px);
+  }
+}
 main {
   animation: screen-in 300ms var(--ease) both;
+}
+main[data-dir="forward"] {
+  animation: from-right 320ms var(--ease) both;
+}
+main[data-dir="back"] {
+  animation: from-left 320ms var(--ease) both;
+}
+
+/* Tab bar: the rail draws out from the middle and the icon gives one small
+   hop, only when the tab actually changes. */
+@keyframes rail-in {
+  from {
+    transform: translateX(-50%) scaleX(0);
+  }
+}
+@keyframes tab-hop {
+  40% {
+    transform: translateY(-3px) scale(1.08);
+  }
+}
+.tab.on.arrive::before {
+  animation: rail-in 280ms var(--ease) both;
+}
+.tab.on.arrive svg {
+  animation: tab-hop 380ms var(--ease);
+}
+.tab svg {
+  transition: transform 0.12s var(--ease);
+}
+.tab:active svg {
+  transform: scale(0.88);
+}
+
+/* Press feedback everywhere you can tap, not just the primary button. The
+   press is quicker than the release, so it feels like it answers the finger. */
+.rowcard,
+.tile,
+button.ghost,
+.lab-tool,
+.lab-icon,
+.roundbtn,
+.iconbtn {
+  transition:
+    transform 0.16s var(--ease),
+    border-color 0.16s,
+    background 0.16s;
+}
+button.rowcard:active,
+button.ghost:active:not(:disabled),
+.lab-tool:active:not(:disabled),
+.lab-icon:active:not(:disabled),
+.iconbtn:active {
+  transform: scale(0.97);
+  transition-duration: 0.06s;
+}
+@media (hover: hover) {
+  button.rowcard:hover,
+  .tile:hover {
+    transform: translateY(-2px);
+  }
+}
+
+/* Loading: the text shimmers left to right, at a steady rate because it is
+   waiting, not arriving. */
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.loading {
+  background: linear-gradient(90deg, var(--ink-3) 30%, var(--ink) 50%, var(--ink-3) 70%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* "You are here" on the progress roadmap: a ring that breathes out from the
+   current phase. Drawn on a pseudo-element so only transform and opacity move. */
+@keyframes here {
+  from {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  to {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+.road-step.now .road-dot {
+  position: relative;
+}
+.road-step.now .road-dot::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--volt);
+  animation: here 2.2s var(--ease) infinite;
+}
+
+/* Saved: the confirmation pops in green, so the end of a set is felt. */
+#savestate.saved {
+  color: var(--pass, #2fbf71);
+  font-weight: 600;
+}
+.pop-in {
+  animation: pop 360ms var(--ease) both;
 }
 
 .stagger-in {
@@ -2569,6 +2691,13 @@ main {
    ========================================================================== */
 
 @media (prefers-reduced-motion: reduce) {
+  .road-step.now .road-dot::after {
+    display: none;
+  }
+  .loading {
+    color: var(--ink-3);
+    background: none;
+  }
   *,
   *::before,
   *::after {
@@ -2579,6 +2708,9 @@ main {
   .role-card:active,
   .card:active,
   .rowcard:active,
+  .rowcard:hover,
+  .tile:hover,
+  .tab:active svg,
   .stepbtn:active,
   .roundbtn:active,
   button.primary:active:not(:disabled),
@@ -3353,4 +3485,47 @@ main {
 }
 .road-step.next .road-text b {
   color: var(--dim, #8a97a3);
+}
+
+/* Pose Lab on a touch screen: compact 32px controls suit a mouse, but a finger
+   needs 44. Keyed on the pointer, not the width, so a touch laptop gets them
+   too and a narrow desktop window keeps the compact editor. */
+@media (pointer: coarse) {
+  .lab-toolbar select,
+  .lab-tool,
+  .lab-icon {
+    min-height: 44px;
+  }
+  .lab-icon {
+    min-width: 44px;
+  }
+  .lab-icon.play {
+    width: 52px;
+    height: 52px;
+  }
+  .lab-tab {
+    min-height: 44px;
+  }
+}
+/* With 44px controls a phone toolbar takes three rows. Keep the capture tools
+   together on one, and Export with undo/redo on the next, rather than leaving
+   Export alone as a full-width green bar. */
+@media (pointer: coarse) and (max-width: 759px) {
+  .lab-toolbar .lab-tool.accent {
+    order: 1;
+  }
+  .lab-toolbar .lab-icon {
+    order: 2;
+    flex: none;
+  }
+}
+@media (pointer: coarse) and (max-width: 759px) {
+  /* Record / Import / Stop share one row exactly, which pushes Export, undo and
+     redo together onto the next. */
+  .lab-toolbar .lab-tool:not(.accent) {
+    flex: 1 1 28%;
+  }
+  .lab-toolbar .lab-tool.accent {
+    flex: 1 1 auto;
+  }
 }

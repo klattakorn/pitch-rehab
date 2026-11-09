@@ -60,6 +60,13 @@ const STAGGERED = [
   ".role-changes > li",
   "ul.criteria > li",
   ".reps .row",
+  // Whole sections of a screen, so a page builds top to bottom rather than
+  // appearing in one block.
+  "main > section.panel",
+  "main > h3",
+  "main > .stack > .rowcard",
+  ".roadmap > li",
+  ".stack.tight > *",
 ].join(", ");
 
 /**
