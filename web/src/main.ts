@@ -29,6 +29,8 @@ import {
 } from "./criteria";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
 import { mountLab } from "./lab";
+import { celebrate, tilt } from "./fx/celebrate";
+import { gsap } from "gsap";
 import type { Exercise } from "./pose/rules";
 import type { Facing } from "./mediapipe";
 import {
@@ -346,10 +348,25 @@ function fail(error: unknown, back?: () => void): void {
  * other screen here. It is still said plainly which one they are getting,
  * because a demo presented as the real thing is worse than no demo.
  */
+/**
+ * Put the 3D skeleton into the welcome artwork. three.js is fetched only here,
+ * so it never weighs down the camera screen; until it arrives (or if the phone
+ * has no WebGL) the logo stays where it was.
+ */
+function mountWelcome3D(): void {
+  const host = app.querySelector<HTMLElement>("#welcome-3d");
+  if (!host) return;
+  void import("./fx/skeleton3d")
+    .then(({ mountSkeleton3D }) => {
+      if (host.isConnected) mountSkeleton3D(host);
+    })
+    .catch(() => {});
+}
+
 function firstRunScreen(): void {
   shell(
     `<div class="welcome">
-       <div class="welcome-art" aria-hidden="true">
+       <div class="welcome-art" id="welcome-3d" aria-hidden="true">
          <span class="glow"></span>
          ${BRAND_MARK}
        </div>
@@ -369,12 +386,13 @@ function firstRunScreen(): void {
     api.useStandalone(true);
     void boot();
   });
+  mountWelcome3D();
 }
 
 function welcomeScreen(): void {
   shell(
     `<div class="welcome">
-       <div class="welcome-art" aria-hidden="true">
+       <div class="welcome-art" id="welcome-3d" aria-hidden="true">
          <span class="glow"></span>
          ${BRAND_MARK}
        </div>
@@ -390,6 +408,7 @@ function welcomeScreen(): void {
   );
   on("#start", () => signInScreen("", true));
   on("#signin", () => signInScreen());
+  mountWelcome3D();
 }
 
 /** Escape a value going into an attribute. Only the server address needs it. */
@@ -873,6 +892,20 @@ function homeScreen(): void {
   }
 
   on("#start", () => void planScreen());
+
+  const hero = app.querySelector<HTMLElement>(".plan-hero");
+  if (hero) {
+    tilt(hero);
+    // The hero arrives as one scene: the photo slides in from its side, the
+    // big phase number settles behind it, the title lifts. Skipped entirely
+    // when the phone asks for less motion.
+    gsap.matchMedia().add("(prefers-reduced-motion: no-preference)", () => {
+      const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+      tl.from(hero.querySelector(".hero-figure"), { x: 40, opacity: 0, duration: 0.9 }, 0)
+        .from(hero.querySelector(".hero-phase"), { scale: 0.7, opacity: 0, duration: 1 }, 0.05)
+        .from(hero.querySelectorAll(".hero-copy > *"), { y: 14, opacity: 0, duration: 0.6, stagger: 0.06 }, 0.12);
+    });
+  }
 }
 
 /** A tile counts up to a real figure, or shows a dash. It never counts up to nothing. */
@@ -1452,6 +1485,12 @@ function summaryScreen(
     { title: rx.exercise.name_en, back: () => sessionOrigin() },
   );
 
+  // A full set is the moment worth marking: every prescribed rep counted.
+  const target = rx.reps ?? 0;
+  if (target > 0 && outcome.validReps >= target) {
+    setTimeout(() => celebrate(app.querySelector<HTMLElement>(".result") ?? undefined), 350);
+  }
+
   on("#again", () => cameraScreen(rx, facing).catch(fail));
   on("#save", () => {
     const note = app.querySelector<HTMLElement>("#savestate")!;
@@ -1688,6 +1727,19 @@ async function progressScreen(): Promise<void> {
      </div>`,
     { tab: "progress", title: "Progress", back: () => homeScreen() },
   );
+
+  // Every test for the phase passed: mark it, once per phase, not on every visit.
+  if (gate?.passed) {
+    const key = `rtp-celebrated-${state.episode.id}-${p.phase_key}`;
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem(key) === "1";
+      sessionStorage.setItem(key, "1");
+    } catch {
+      // Private mode: celebrate anyway, it is only a burst.
+    }
+    if (!seen) setTimeout(() => celebrate(app.querySelector<HTMLElement>(".progress-head") ?? undefined), 400);
+  }
 }
 
 // -------------------------------------------------------------------- test

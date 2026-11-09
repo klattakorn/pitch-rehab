@@ -3529,3 +3529,97 @@ button.ghost:active:not(:disabled),
     flex: 1 1 auto;
   }
 }
+
+/* --- 3D, bursts and tilt ------------------------------------------------- */
+/* The welcome artwork becomes a stage for the 3D skeleton once it loads. The
+   logo stays underneath as the fallback for a phone with no WebGL. */
+.welcome-art.has-3d {
+  height: min(46vh, 340px);
+  margin-bottom: var(--s4);
+}
+.welcome-art.has-3d .mark {
+  display: none;
+}
+.welcome-art.has-3d .glow {
+  width: 300px;
+  height: 300px;
+  bottom: 0;
+}
+.welcome-art canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: pan-y;
+}
+.welcome-art canvas:active {
+  cursor: grabbing;
+}
+/* The readout copies the camera screen's mono HUD, so the figure reads as the
+   engine at work rather than an illustration. */
+.sk3d-readout {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  display: flex;
+  gap: var(--s3);
+  transform: translateX(-50%);
+  padding: 4px 12px;
+  border: 1px solid color-mix(in srgb, var(--volt) 35%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg, #0b0e12) 70%, transparent);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--ink-3);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.sk3d-readout b {
+  color: var(--volt);
+  font-weight: 500;
+}
+.sk3d-readout.tick b:first-child {
+  display: inline-block;
+  animation: tick-up 420ms var(--ease);
+}
+
+.fx-burst {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 100;
+}
+.fx-ring {
+  position: fixed;
+  z-index: 99;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border: 3px solid var(--volt);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* The hero catches the light as it tilts: a soft highlight that follows the
+   pointer. Only on a device with a mouse, where tilt runs at all. */
+@media (hover: hover) and (pointer: fine) {
+  .plan-hero {
+    will-change: transform;
+  }
+  .plan-hero::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(
+      circle at var(--shine-x, 50%) var(--shine-y, 0%),
+      rgba(255, 255, 255, 0.08),
+      transparent 55%
+    );
+    pointer-events: none;
+  }
+}
