@@ -80,6 +80,10 @@ export interface Profile {
   id: number;
   position: string;
   dominant_foot: string;
+  /** What the player picked: "youth" | "adult" | "senior". Null if never asked. */
+  age_group?: string | null;
+  /** What the programme is built for: picked, else worked out from the birth date. */
+  effective_age_group?: string;
 }
 
 export interface User {
@@ -109,8 +113,18 @@ export interface Prescription {
   hold_seconds: number | null;
   rest_seconds: number | null;
   tempo: string | null;
+  /** Why this move stands out for this player (key for the injury, extra set...). */
+  load_note_en?: string | null;
   side_mode: string;
   exercise: Exercise;
+}
+
+/** Why a phase differs from another player's. Mirrors app/data/tailoring.py. */
+export interface Tailoring {
+  age_group: string;
+  age_label_en: string;
+  dose_en: string;
+  left_out: { exercise_key: string; name_en: string; reason_en: string }[];
 }
 
 export interface Phase {
@@ -121,6 +135,7 @@ export interface Phase {
   goal_en: string | null;
   min_days: number;
   sessions_per_week: number;
+  tailoring?: Tailoring | null;
   prescriptions: Prescription[];
   exit_criteria: { key: string; label_en: string; required: boolean }[];
 }
@@ -216,6 +231,7 @@ export async function register(input: {
   password: string;
   full_name: string;
   position: string;
+  age_group?: string;
 }): Promise<void> {
   await post("/auth/register", input);
   await login(input.email, input.password);
@@ -242,7 +258,11 @@ export interface PositionInfo {
 
 export const me = () => request<User>("/auth/me");
 export const listPositions = () => request<PositionInfo[]>("/catalog/positions");
-export const updateProfile = (body: { position?: string; dominant_foot?: string }) =>
+export const updateProfile = (body: {
+  position?: string;
+  dominant_foot?: string;
+  age_group?: string;
+}) =>
   request<Profile>("/players/me/profile", {
     method: "PATCH",
     body: JSON.stringify(body),

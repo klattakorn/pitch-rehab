@@ -9,6 +9,27 @@ class Role(StrEnum):
     ADMIN = "admin"
 
 
+class AgeGroup(StrEnum):
+    """Three bands, because the dose changes at both ends and not in between.
+
+    Under 18 the growth plates are still open; from 40 muscle and tendon recover
+    more slowly and tendons lose spring. See ``app/data/tailoring.py``.
+    """
+
+    YOUTH = "youth"  # under 18
+    ADULT = "adult"  # 18-39
+    SENIOR = "senior"  # 40+
+
+    @classmethod
+    def for_age(cls, years: int | None) -> AgeGroup:
+        """Unknown age is an adult: the standard dose, nothing ruled out by age."""
+        if years is None:
+            return cls.ADULT
+        if years < 18:
+            return cls.YOUTH
+        return cls.SENIOR if years >= 40 else cls.ADULT
+
+
 class Position(StrEnum):
     """The 6 playing positions the rehab library is indexed on."""
 

@@ -808,13 +808,46 @@ EXERCISES: list[ExerciseDef] = [
         rule=ExerciseRule(
             mode="rep",
             view="front",
+            # Counted on feet leaving the floor, not knee bend. Checked on real
+            # footage (videos/pogo-*.mp4, one person, phone on the floor):
+            #
+            #   front, 10 hops  -> 10   (the old knee rule found 6: from the
+            #                            front a stiff-kneed hop bends the knee
+            #                            2-10 degrees in the image, so hops
+            #                            merged into 2-second blobs)
+            #   side, 10 hops   -> 10   (the rule still asks for front; this
+            #                            just shows the counter is not tied to it)
+            #   knees in, 6     -> 6
+            #
+            # Real hops peak at 18-41 (% of torso length); between hops and
+            # standing still it never passed 8. Stepping in or out lifts one foot,
+            # and foot_lift follows the lower one, so steps read 0. The count was
+            # right for every enter from 8 to 18, so 12 sits in the middle, and
+            # exit + min_amplitude (10) stays under enter -- no hidden gate.
+            #
+            # The rep window is the airborne part of each hop. The two targets
+            # below are therefore judged in the air, not on the landing.
+            # Head left out: at the top of a hop it goes out of a portrait
+            # frame unless the phone is unrealistically far away (it did on the
+            # front clip). Shoulders stay, because foot_lift is measured in
+            # torso lengths.
+            in_frame_landmarks=[
+                "LEFT_SHOULDER",
+                "RIGHT_SHOULDER",
+                "LEFT_HIP",
+                "RIGHT_HIP",
+                "LEFT_KNEE",
+                "RIGHT_KNEE",
+                "LEFT_ANKLE",
+                "RIGHT_ANKLE",
+            ],
             detection=RepDetection(
-                signal="knee_flexion",
-                enter=18.0,
-                exit=8.0,
-                min_amplitude=5.0,
-                min_duration_s=0.12,
-                max_duration_s=2.0,
+                signal="foot_lift",
+                enter=12.0,
+                exit=4.0,
+                min_amplitude=6.0,
+                min_duration_s=0.15,
+                max_duration_s=1.0,
             ),
             targets=[
                 MetricTarget(
@@ -826,6 +859,13 @@ EXERCISES: list[ExerciseDef] = [
                     message_en="Bounce off the ankles, not the knees.",
                     message_th="ใช้ข้อเท้าสปริง ไม่ใช่ย่อเข่า",
                 ),
+                # Knees caving on landing is NOT caught. On the knees-in clip
+                # they visibly touch on every landing, yet MediaPipe's knee
+                # points read the same as on the good clip (knee-to-ankle
+                # width, knee off the hip-ankle line, at the deepest point of
+                # each landing: no gap between the two clips). Straight-legged
+                # hops barely bend the knee, and caving needs bend to show. Kept
+                # as a non-critical catch for gross collapse only.
                 _valgus(10.0, critical=False),
             ],
         ),

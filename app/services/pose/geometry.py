@@ -252,6 +252,70 @@ def compute_metrics(frame: Frame, side: Side, use_z: bool = False) -> dict[str, 
     return out
 
 
+#: How far back ``FootLift`` looks for the floor. Long enough to always contain
+#: the last landing (pogo hops land every 0.5-1 s), short enough that the player
+#: shuffling closer to the camera does not leave a stale floor behind.
+FOOT_LIFT_WINDOW_S = 1.2
+_FOOT_POINTS = ("ankle", "heel", "foot_index")
+
+
+class FootLift:
+    """How high the *lower* foot is off the floor, in % of torso length.
+
+    No single frame can say this -- a photo of someone mid-hop and of someone
+    standing tall look the same from the knees up, and the floor is not a
+    landmark. So it is worked out over time: the floor is wherever each foot
+    has been lowest in the last ``FOOT_LIFT_WINDOW_S`` seconds.
+
+    Why not knee bend, or the hips? Found on real footage:
+
+    - knee bend: from the front a pogo hop's knee barely moves in the image
+      (2-10 degrees), so the old knee rule merged hops into 2-second blobs
+    - hip height: counts every hop, but standing up straight after the last one
+      lifts the hips as much as a hop does, so it adds phantom reps
+
+    A foot leaving the floor is what a hop *is*. Taking the lower of the two
+    feet means a step -- one foot up -- reads zero, and only both feet off the
+    floor counts. Causal (looks only backwards), so the live session in the
+    browser computes the same number frame by frame.
+    """
+
+    def __init__(self, window_s: float = FOOT_LIFT_WINDOW_S) -> None:
+        self.window_s = window_s
+        self._history: list[tuple[float, float, float]] = []  # (t, left y, right y)
+
+    def push(self, frame: Frame) -> float | None:
+        # World landmarks are measured from the hip centre, so a jump -- the
+        # whole body going up -- cancels out of them. Only image space works.
+        if frame.space != "image":
+            return None
+        feet: list[float] = []
+        for side in (Side.LEFT, Side.RIGHT):
+            points = [sided(name, side) for name in _FOOT_POINTS]
+            if not frame.visible(*points, threshold=0.3):
+                return None
+            feet.append(float(np.mean([frame.p(lm)[1] for lm in points])))
+        torso = float(
+            np.linalg.norm(
+                midpoint(frame, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER)
+                - midpoint(frame, LM.LEFT_HIP, LM.RIGHT_HIP)
+            )
+        )
+        if torso < _EPS:
+            return None
+        self._history.append((frame.t, feet[0], feet[1]))
+        self._history = [h for h in self._history if frame.t - h[0] <= self.window_s]
+        # y grows downward, so the floor is the largest y seen recently.
+        floor_l = max(h[1] for h in self._history)
+        floor_r = max(h[2] for h in self._history)
+        return min(floor_l - feet[0], floor_r - feet[1]) / torso * 100.0
+
+
+def foot_lift_series(frames: Sequence[Frame]) -> list[float | None]:
+    tracker = FootLift()
+    return [tracker.push(f) for f in frames]
+
+
 #: Below this the player is side-on; above it they are facing the camera.
 #: Measured on real footage: side-on filming sits around 0.17, facing the camera
 #: around 0.64. The gap between the two numbers is deliberately left as

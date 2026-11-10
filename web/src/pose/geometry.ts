@@ -246,6 +246,50 @@ export function computeMetrics(f: Frame, side: Side, useZ = false): Metrics {
   return out;
 }
 
+// ---------------------------------------------------------------- foot lift
+/** Mirrors FOOT_LIFT_WINDOW_S in app/services/pose/geometry.py. */
+export const FOOT_LIFT_WINDOW_S = 1.2;
+const FOOT_POINTS = ["ankle", "heel", "foot_index"] as const;
+
+/**
+ * How high the *lower* foot is off the floor, in % of torso length. Mirrors
+ * `FootLift` on the server, where the reasoning lives: the floor is not a
+ * landmark, so it is wherever each foot was lowest in the last 1.2 s, and the
+ * lower foot is used so a step (one foot up) reads zero. Feed frames in time
+ * order; the answer depends on the ones before.
+ */
+export class FootLift {
+  private history: { t: number; l: number; r: number }[] = [];
+
+  constructor(private readonly windowS = FOOT_LIFT_WINDOW_S) {}
+
+  push(f: Frame): number | null {
+    const feet: number[] = [];
+    for (const side of ["left", "right"] as const) {
+      const points = FOOT_POINTS.map((name) => sided(name, side));
+      if (points.some((i) => f.confidence(i) < 0.3)) return null;
+      feet.push(points.reduce((sum, i) => sum + f.point(i)[1]!, 0) / points.length);
+    }
+    const torso = norm(
+      sub(
+        midpoint(f, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER),
+        midpoint(f, LM.LEFT_HIP, LM.RIGHT_HIP),
+      ),
+    );
+    if (torso < EPS) return null;
+    this.history.push({ t: f.t, l: feet[0]!, r: feet[1]! });
+    this.history = this.history.filter((h) => f.t - h.t <= this.windowS);
+    // y grows downward, so the floor is the largest y seen recently.
+    let floorL = -Infinity;
+    let floorR = -Infinity;
+    for (const h of this.history) {
+      floorL = Math.max(floorL, h.l);
+      floorR = Math.max(floorR, h.r);
+    }
+    return (Math.min(floorL - feet[0]!, floorR - feet[1]!) / torso) * 100;
+  }
+}
+
 // ---------------------------------------------------------- sanity measures
 export const SIDE_VIEW_BELOW = 0.35;
 export const FRONT_VIEW_ABOVE = 0.5;
@@ -315,8 +359,12 @@ export function torsoDirection(f: Frame): [number, number] | null {
 }
 
 /** Is the whole player inside the picture, with a little room to spare? */
-export function fullyInFrame(f: Frame, margin = 0.02): boolean {
-  for (const lm of BODY_EXTENT) {
+export function fullyInFrame(
+  f: Frame,
+  margin = 0.02,
+  joints: readonly number[] = BODY_EXTENT,
+): boolean {
+  for (const lm of joints) {
     if (f.confidence(lm) < 0.3) continue;
     const x = f.screenX(lm);
     const y = f.screenY(lm);

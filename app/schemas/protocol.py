@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.core.enums import InjurySite, PhaseKey, Position, Side
+from app.core.enums import AgeGroup, InjurySite, PhaseKey, Position, Side
 
 
 class ORMModel(BaseModel):
@@ -60,6 +60,8 @@ class PhaseOut(ORMModel):
     goal_th: str | None
     min_days: int
     sessions_per_week: int
+    #: Why this phase differs from another player's. See app/data/tailoring.py.
+    tailoring: dict[str, Any] | None = None
     prescriptions: list[PrescriptionOut]
     exit_criteria: list[ExitCriterionOut]
 
@@ -69,6 +71,7 @@ class ProtocolSummaryOut(ORMModel):
     key: str
     position: Position
     injury_site: InjurySite
+    age_group: AgeGroup
     version: int
     title_en: str
     title_th: str

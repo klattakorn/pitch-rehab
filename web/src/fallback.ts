@@ -47,6 +47,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -111,6 +112,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -175,6 +177,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -252,6 +255,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -329,6 +333,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -393,6 +398,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -462,6 +468,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -537,6 +544,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -640,6 +648,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -744,6 +753,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -813,6 +823,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -890,6 +901,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -967,6 +979,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1037,6 +1050,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1094,6 +1108,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1189,6 +1204,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1246,6 +1262,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1272,12 +1289,12 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "space": "image",
       "use_z": true,
       "detection": {
-        "signal": "knee_flexion",
-        "enter": 18.0,
-        "exit": 8.0,
-        "min_duration_s": 0.12,
-        "max_duration_s": 2.0,
-        "min_amplitude": 5.0
+        "signal": "foot_lift",
+        "enter": 12.0,
+        "exit": 4.0,
+        "min_duration_s": 0.15,
+        "max_duration_s": 1.0,
+        "min_amplitude": 6.0
       },
       "targets": [
         {
@@ -1308,6 +1325,16 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         }
       ],
       "required_landmarks": [
+        "LEFT_HIP",
+        "RIGHT_HIP",
+        "LEFT_KNEE",
+        "RIGHT_KNEE",
+        "LEFT_ANKLE",
+        "RIGHT_ANKLE"
+      ],
+      "in_frame_landmarks": [
+        "LEFT_SHOULDER",
+        "RIGHT_SHOULDER",
         "LEFT_HIP",
         "RIGHT_HIP",
         "LEFT_KNEE",
@@ -1377,6 +1404,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1454,6 +1482,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1544,6 +1573,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1641,6 +1671,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,
@@ -1718,6 +1749,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "LEFT_ANKLE",
         "RIGHT_ANKLE"
       ],
+      "in_frame_landmarks": null,
       "min_visibility": 0.5,
       "min_tracking_quality": 0.55,
       "smoothing_window": 5,

@@ -20,6 +20,7 @@
 import {
   type CameraView,
   Frame,
+  FootLift,
   type Metrics,
   aggregate,
   bodyScale,
@@ -44,6 +45,8 @@ const WINDOW_FRAMES = 90;
 /** Frames needed before the rolling checks are trusted at all. */
 const WARMUP_FRAMES = 15;
 const SMOOTHING = 5;
+/** Mirrors MAX_GROUND_CONTACT_S on the server: longer is a pause, not a contact. */
+const MAX_GROUND_CONTACT_S = 1.0;
 
 export interface ReadinessProblem {
   code:
@@ -88,6 +91,12 @@ export interface FrameResult {
   problems: ReadinessProblem[];
   view: CameraView;
   metrics: Metrics | null;
+  /**
+   * The rep-detection signal as the counter saw it on this frame: smoothed,
+   * both legs averaged. Null when the frame was refused or it is a hold.
+   * Plot this, not `metrics`, to show what was actually counted.
+   */
+  signal: number | null;
   inRep: boolean;
   repCount: number;
   validRepCount: number;
@@ -125,11 +134,13 @@ export class LiveSession {
   private readonly rule: ExerciseRule;
   private readonly sides: Exclude<Side, "bilateral">[];
   private readonly requiredLandmarks: number[];
+  private readonly inFrameLandmarks: number[] | undefined;
 
   private readonly scales: number[] = [];
   private readonly torsos: [number, number][] = [];
   private readonly opennessScores: number[] = [];
   private readonly recent = new Map<string, number[]>();
+  private readonly footLift = new FootLift();
 
   private rep: RepBuffer | null = null;
   private lastBelowExitT = 0;
@@ -148,6 +159,9 @@ export class LiveSession {
     this.sides = side === "bilateral" ? ["left", "right"] : [side];
     this.requiredLandmarks = rule.required_landmarks
       .map((name) => (LM as Record<string, number>)[name])
+      .filter((v): v is number => typeof v === "number");
+    this.inFrameLandmarks = rule.in_frame_landmarks
+      ?.map((name) => (LM as Record<string, number>)[name])
       .filter((v): v is number => typeof v === "number");
   }
 
@@ -189,7 +203,7 @@ export class LiveSession {
       });
       trusted = false;
     }
-    if (!fullyInFrame(frame)) {
+    if (!fullyInFrame(frame, 0.02, this.inFrameLandmarks)) {
       problems.push({
         code: "not_fully_in_frame",
         message_en: "Step back — your whole body needs to be in shot.",
@@ -242,6 +256,7 @@ export class LiveSession {
         problems,
         view,
         metrics: null,
+        signal: null,
         inRep: this.rep !== null,
         repCount: this.repCount,
         validRepCount: this.validRepCount,
@@ -254,6 +269,10 @@ export class LiveSession {
 
     // --- measure ----------------------------------------------------------
     const perSide = this.sides.map((s) => computeMetrics(frame, s, this.rule.use_z));
+    // Needs earlier frames, so it is not in computeMetrics. Same for both legs,
+    // as on the server (analyzer._series_for).
+    const lift = this.footLift.push(frame);
+    if (lift !== null) for (const m of perSide) m.foot_lift = lift;
     const smoothed = this.smooth(perSide);
     const display = perSide[0] ?? {};
 
@@ -268,6 +287,7 @@ export class LiveSession {
       problems,
       view,
       metrics: display,
+      signal: this.signalOf(smoothed),
       inRep: this.rep !== null,
       repCount: this.repCount,
       validRepCount: this.validRepCount,
@@ -396,6 +416,15 @@ export class LiveSession {
       if (violation) cues.push(violation);
     }
     return cues;
+  }
+
+  private signalOf(perSide: Metrics[]): number | null {
+    const det = this.rule.mode === "rep" ? this.rule.detection : null;
+    if (!det) return null;
+    const vals = perSide
+      .map((m) => m[det.signal])
+      .filter((v): v is number => typeof v === "number");
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
   }
 
   private advanceReps(t: number, perSide: Metrics[]): RepResult | null {
@@ -533,6 +562,16 @@ export class LiveSession {
       });
     }
     if (this.rule.tempo_max_s !== null && duration > this.rule.tempo_max_s) tempoOk = false;
+
+    // Air time and the ground contact before it -- mirrors _hop_timing in
+    // app/services/pose/analyzer.py, where the reasoning lives.
+    if (det?.signal === "foot_lift") {
+      metrics.flight_time_s = Math.round(duration * 1000) / 1000;
+      const prev = this.reps[this.reps.length - 1];
+      const contact = prev ? rep.startT - prev.endT : null;
+      if (contact !== null && contact >= 0 && contact <= MAX_GROUND_CONTACT_S)
+        metrics.ground_contact_s = Math.round(contact * 1000) / 1000;
+    }
 
     const result: RepResult = {
       index: this.reps.length,

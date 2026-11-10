@@ -115,6 +115,11 @@ class ExerciseRule(BaseModel):
             "RIGHT_ANKLE",
         ]
     )
+    #: Joints that must stay inside the picture for a live frame to be trusted.
+    #: ``None`` means the whole body, head included. A hop takes the head up
+    #: out of a phone's portrait frame at any sensible filming distance, and
+    #: the hop counter only needs the shoulders down, so pogo hops lists those.
+    in_frame_landmarks: list[str] | None = None
     min_visibility: float = 0.5
     #: Below this mean visibility the rep is returned as untrusted rather than failed.
     min_tracking_quality: float = 0.55

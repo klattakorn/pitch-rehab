@@ -317,3 +317,73 @@ def test_hold_exercise_measures_the_longest_clean_stretch() -> None:
     analysis = analyze_set(good + bad, rule, Side.BILATERAL)
     assert analysis.reps[0].hold_seconds == pytest.approx(2.0, abs=0.2)
     assert analysis.reps[0].is_valid is False  # target is 45s
+
+
+# --------------------------------------------------------------- pogo hops
+# Real footage, reduced to landmarks by scripts/make_video_fixture.py. Counts
+# were read off the frames by eye. See the comment on pogo_hops in
+# app/data/exercises.py for why the rule counts on foot_lift.
+_FIXTURES = __import__("pathlib").Path(__file__).resolve().parent.parent / "web/src/pose/__fixtures__"
+
+
+def _fixture_frames(name: str) -> list[Frame]:
+    import json
+
+    data = json.loads((_FIXTURES / f"{name}.json").read_text(encoding="utf-8"))
+    return [Frame.from_payload(f["t"], f["landmarks"], aspect=data["aspect"]) for f in data["frames"]]
+
+
+@pytest.mark.parametrize(("clip", "hops"), [("pogo-front", 10), ("pogo-valgus", 6)])
+def test_pogo_hops_counts_real_hops(clip: str, hops: int) -> None:
+    from app.data.exercises import EXERCISES_BY_KEY
+
+    rule = EXERCISES_BY_KEY["pogo_hops"].rule
+    assert rule is not None
+    result = analyze_set(_fixture_frames(clip), rule, Side.BILATERAL)
+    assert len(result.reps) == hops
+
+
+def test_foot_lift_ignores_a_step() -> None:
+    """One foot up is a step, not a hop: the lower foot stays on the floor."""
+    from app.services.pose.geometry import FootLift
+
+    tracker = FootLift()
+    base = _fixture_frames("pogo-front")[-1]  # standing still after the set
+    readings = []
+    for i in range(20):
+        f = Frame(t=i / 30, xyz=base.xyz.copy(), vis=base.vis.copy(), aspect=base.aspect)
+        if i >= 10:  # lift the left foot a long way
+            for lm in (LM.LEFT_ANKLE, LM.LEFT_HEEL, LM.LEFT_FOOT_INDEX):
+                f.xyz[int(lm), 1] -= 0.1
+        readings.append(tracker.push(f))
+    assert max(r for r in readings if r is not None) < 1.0
+
+
+def test_pogo_hops_reports_timing_like_the_browser() -> None:
+    """Same numbers as pogo-real.test.ts gets from the live session."""
+    from app.data.exercises import EXERCISES_BY_KEY
+
+    rule = EXERCISES_BY_KEY["pogo_hops"].rule
+    assert rule is not None
+    good = analyze_set(_fixture_frames("pogo-front"), rule, Side.BILATERAL)
+    sinking = analyze_set(_fixture_frames("pogo-valgus"), rule, Side.BILATERAL)
+    gc = [r.metrics["ground_contact_s"] for r in good.reps if "ground_contact_s" in r.metrics]
+    sc = [r.metrics["ground_contact_s"] for r in sinking.reps if "ground_contact_s" in r.metrics]
+    assert len(gc) == 9 and len(sc) == 5
+    assert max(gc) < 0.3 < 0.4 < min(sc)
+    assert all("flight_time_s" in r.metrics for r in good.reps)
+
+
+def test_pogo_hops_refuses_world_space_out_loud() -> None:
+    """World landmarks are hip-centred, so a jump cancels out of them."""
+    from app.data.exercises import EXERCISES_BY_KEY
+
+    rule = EXERCISES_BY_KEY["pogo_hops"].rule
+    assert rule is not None
+    frames = [
+        Frame(t=f.t, xyz=f.xyz, vis=f.vis, space="world", aspect=f.aspect)
+        for f in _fixture_frames("pogo-front")
+    ]
+    result = analyze_set(frames, rule, Side.BILATERAL)
+    assert len(result.reps) == 0
+    assert "foot_lift_needs_image_space" in result.warnings

@@ -12,6 +12,7 @@ from app import __version__
 from app.api.routers import api_router
 from app.core.config import settings
 from app.db.base import Base
+from app.db.migrate import migrate
 from app.db.seed import seed_all
 from app.db.session import SessionLocal, engine
 
@@ -23,6 +24,7 @@ log = logging.getLogger("rtp")
 async def lifespan(_: FastAPI):
     # create_all is fine while the schema is still moving. Swap in Alembic
     # before the first real deployment -- see README.
+    migrate(engine)
     Base.metadata.create_all(bind=engine)
     if settings.seed_on_startup:
         with SessionLocal() as db:

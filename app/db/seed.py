@@ -46,7 +46,7 @@ def seed_exercises(db: Session) -> dict[str, Exercise]:
 
 
 def seed_protocols(db: Session, exercises: dict[str, Exercise]) -> int:
-    """Insert the 42 position x injury programmes.
+    """Insert the 126 position x injury x age-group programmes.
 
     The phases are rebuilt from ``app/data/`` on every seed, so that stays the
     only place the library is authored. The ``protocol`` row itself is updated in
@@ -70,6 +70,7 @@ def seed_protocols(db: Session, exercises: dict[str, Exercise]) -> int:
 
         protocol.position = built.position
         protocol.injury_site = built.injury_site
+        protocol.age_group = built.age_group
         protocol.title_en = built.title_en
         protocol.title_th = built.title_th
         protocol.summary_en = built.summary_en
@@ -88,6 +89,7 @@ def seed_protocols(db: Session, exercises: dict[str, Exercise]) -> int:
                 goal_th=phase_def.goal_th,
                 min_days=phase_def.min_days,
                 sessions_per_week=phase_def.sessions_per_week,
+                tailoring=phase_def.tailoring,
             )
             db.add(phase)
             db.flush()

@@ -55,6 +55,8 @@ export interface ExerciseRule {
   detection: RepDetection | null;
   targets: MetricTarget[];
   required_landmarks: string[];
+  /** Joints that must stay in the picture; null = whole body. See rules.py. */
+  in_frame_landmarks?: string[] | null;
   min_visibility: number;
   min_tracking_quality: number;
   smoothing_window: number;

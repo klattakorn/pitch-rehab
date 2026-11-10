@@ -328,9 +328,10 @@ def test_catalog_exposes_every_position_and_injury_combination(
     client: TestClient,
 ) -> None:
     protocols = client.get(f"{API}/catalog/protocols").json()
-    assert len(protocols) == 42  # 6 positions x 7 injury sites
+    assert len(protocols) == 126  # 6 positions x 7 injury sites x 3 age groups
     combos = {(p["position"], p["injury_site"]) for p in protocols}
     assert len(combos) == 42
+    assert {p["age_group"] for p in protocols} == {"youth", "adult", "senior"}
 
     winger = client.get(f"{API}/catalog/protocols/winger/hamstring").json()
     keeper = client.get(f"{API}/catalog/protocols/goalkeeper/hamstring").json()
@@ -600,3 +601,99 @@ def test_every_running_phase_is_gated_on_change_of_direction(client: TestClient)
             phase = next(p for p in protocol["phases"] if p["phase_key"] == key)
             keys = {c["key"] for c in phase["exit_criteria"]}
             assert "change_of_direction" in keys, f"{site} {key}"
+
+
+# ------------------------------------------------------------- age groups
+def _phase_one(protocol: dict) -> dict:
+    return next(p for p in protocol["phases"] if p["phase_key"] == "p1_protect")
+
+
+def _moves(protocol: dict) -> list[str]:
+    return [rx["exercise"]["key"] for rx in _phase_one(protocol)["prescriptions"]]
+
+
+def test_age_group_changes_which_moves_and_how_much(client: TestClient) -> None:
+    def get(age: str) -> dict:
+        return client.get(
+            f"{API}/catalog/protocols/winger/hamstring", params={"age_group": age}
+        ).json()
+
+    youth, adult, senior = get("youth"), get("adult"), get("senior")
+    # No age group asked for is the adult programme, as it always was.
+    assert client.get(f"{API}/catalog/protocols/winger/hamstring").json()["id"] == adult["id"]
+
+    # A winger with a hamstring strain hops -- until 40, when jumping waits.
+    assert "pogo_hops" in _moves(youth) and "pogo_hops" in _moves(adult)
+    assert "pogo_hops" not in _moves(senior)
+    left_out = _phase_one(senior)["tailoring"]["left_out"]
+    assert [o["exercise_key"] for o in left_out] == ["pogo_hops"]
+    assert "40" in left_out[0]["reason_en"]
+
+    def dose(protocol: dict, key: str) -> dict:
+        return next(
+            rx for rx in _phase_one(protocol)["prescriptions"] if rx["exercise"]["key"] == key
+        )
+
+    assert dose(youth, "glute_bridge")["sets"] < dose(adult, "glute_bridge")["sets"]
+    assert dose(senior, "glute_bridge")["reps"] < dose(adult, "glute_bridge")["reps"]
+    assert (
+        dose(senior, "glute_bridge")["rest_seconds"] > dose(adult, "glute_bridge")["rest_seconds"]
+    )
+
+    # Age reaches phase one only; everything after it is shared.
+    for a, b in zip(adult["phases"][1:], senior["phases"][1:], strict=True):
+        assert [rx["exercise"]["key"] for rx in a["prescriptions"]] == [
+            rx["exercise"]["key"] for rx in b["prescriptions"]
+        ]
+
+
+def test_a_player_is_only_tested_on_moves_they_were_given(client: TestClient) -> None:
+    # A winger with a hamstring strain is not given the wall sit...
+    winger = client.get(f"{API}/catalog/protocols/winger/hamstring").json()
+    assert "wall_sit" not in _moves(winger)
+    assert "wall_sit_hold" not in {c["key"] for c in _phase_one(winger)["exit_criteria"]}
+    # ...and a 40+ player's tests ask for the dose a 40+ player is prescribed.
+    senior = client.get(
+        f"{API}/catalog/protocols/full_back/ankle", params={"age_group": "senior"}
+    ).json()
+    targets = {
+        c["key"]: c["spec"]["target"]["value"] for c in _phase_one(senior)["exit_criteria"]
+    }
+    assert targets["calf_raise_reps"] == 10
+    assert targets["wall_sit_hold"] == 20
+
+
+def test_changing_age_group_rebuilds_the_plan_without_losing_progress(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    before = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    adult = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
+    assert adult["age_group"] == "adult"
+
+    profile = client.patch(
+        f"{API}/players/me/profile", headers=headers, json={"age_group": "senior"}
+    ).json()
+    assert profile["age_group"] == profile["effective_age_group"] == "senior"
+
+    after = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    senior = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
+    assert senior["age_group"] == "senior"
+    assert senior["id"] != adult["id"]
+    assert after["current_phase"] == before["current_phase"]
+    assert _moves(adult) != _moves(senior)
+    assert "pogo_hops" not in _moves(senior)
+
+
+def test_age_group_can_be_chosen_at_sign_up(client: TestClient) -> None:
+    registered = client.post(
+        f"{API}/auth/register",
+        json={
+            "email": "young@rtpapp.com",
+            "password": "correct-horse-battery",
+            "full_name": "Young Player",
+            "position": "striker",
+            "age_group": "youth",
+        },
+    )
+    assert registered.status_code == 201
+    assert registered.json()["profile"]["age_group"] == "youth"

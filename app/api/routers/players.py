@@ -24,15 +24,16 @@ def update_profile(
     payload: ProfileUpdateIn, db: DbSession, player: CurrentPlayer
 ) -> PlayerProfile:
     changes = payload.model_dump(exclude_unset=True)
-    moved_position = "position" in changes and changes["position"] != player.position
+    before = (player.position, player.effective_age_group)
 
     for field, value in changes.items():
         setattr(player, field, value)
 
-    if moved_position:
-        # The position is what sets a player's drills and their role-specific
-        # testing, so a change to it has to reach the rehab they are actually
-        # doing. Their phase and their history survive. See realign_protocol.
+    if (player.position, player.effective_age_group) != before:
+        # Position sets a player's drills and role-specific testing, and age
+        # group sets which movements they are given and how much. A change to
+        # either has to reach the rehab they are actually doing. Their phase
+        # and their history survive. See realign_protocol.
         db.flush()
         realign_active_episodes(db, player.id)
 

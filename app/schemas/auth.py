@@ -4,7 +4,7 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.core.enums import Position, Role, Side
+from app.core.enums import AgeGroup, Position, Role, Side
 
 
 class ORMModel(BaseModel):
@@ -20,6 +20,7 @@ class RegisterIn(BaseModel):
 
     # Player fields -- ignored for clinician/admin registrations.
     position: Position | None = None
+    age_group: AgeGroup | None = None
     dominant_foot: Side = Side.RIGHT
     date_of_birth: date | None = None
     height_cm: float | None = None
@@ -43,6 +44,10 @@ class PlayerProfileOut(ORMModel):
     secondary_position: Position | None
     dominant_foot: Side
     date_of_birth: date | None
+    #: What the player picked; null if they never were asked.
+    age_group: AgeGroup | None
+    #: What the programme is actually built for (picked, else from birth date).
+    effective_age_group: AgeGroup
     height_cm: float | None
     body_mass_kg: float | None
     training_days_per_week: int
@@ -63,6 +68,7 @@ class ProfileUpdateIn(BaseModel):
     position: Position | None = None
     secondary_position: Position | None = None
     dominant_foot: Side | None = None
+    age_group: AgeGroup | None = None
     date_of_birth: date | None = None
     height_cm: float | None = None
     body_mass_kg: float | None = None

@@ -11,6 +11,7 @@ from app.services.pose.geometry import (
     aggregate,
     compute_metrics,
     detect_view,
+    foot_lift_series,
     implausible_frames,
 )
 from app.services.pose.landmarks import LM
@@ -178,9 +179,39 @@ def segment_reps(
 
 def _series_for(frames: Sequence[Frame], side: Side, rule: ExerciseRule) -> MetricSeries:
     series = MetricSeries()
-    for f in frames:
-        series.add(f.t, compute_metrics(f, side, use_z=bool(rule.use_z)))
+    # foot_lift needs the frames before this one, so it cannot live in
+    # compute_metrics. Same value for both legs: it is about the lower foot.
+    lifts = foot_lift_series(frames)
+    for f, lift in zip(frames, lifts, strict=True):
+        metrics = compute_metrics(f, side, use_z=bool(rule.use_z))
+        if lift is not None:
+            metrics["foot_lift"] = lift
+        series.add(f.t, metrics)
     return series.smooth(rule.smoothing_window)
+
+
+#: Longer than this between two hops is a pause, not a ground contact.
+MAX_GROUND_CONTACT_S = 1.0
+
+
+def _hop_timing(
+    times: Sequence[float], windows: Sequence[tuple[int, int]], idx: int
+) -> dict[str, float]:
+    """Air time of a hop, and the ground contact before it.
+
+    A foot_lift rep window runs from the last frame on the floor to the first
+    frame back on it, so its length is the time in the air. The gap since the
+    previous hop's landing is the ground contact -- the springiness pogo hops
+    train, and the number a physio reads (shorter is springier). Both are only
+    as fine as the frame rate: at 30 fps, to about 0.03 s.
+    """
+    a, b = windows[idx]
+    out = {"flight_time_s": round(times[b] - times[a], 3)}
+    if idx > 0:
+        contact = times[a] - times[windows[idx - 1][1]]
+        if 0 <= contact <= MAX_GROUND_CONTACT_S:
+            out["ground_contact_s"] = round(contact, 3)
+    return out
 
 
 def _judged(values: list[float], target: MetricTarget) -> float:
@@ -267,6 +298,8 @@ def analyze_set(
         )
         if not windows:
             warnings.append("no_reps_detected")
+        if det.signal == "foot_lift" and frames[0].space != "image":
+            warnings.append("foot_lift_needs_image_space")
 
     # ---------------------------------------------------------------- scoring
     reps: list[RepAnalysis] = []
@@ -307,6 +340,8 @@ def analyze_set(
             rep_metrics["hold_seconds"] = round(hold_seconds, 2)
 
         duration = times[b] - times[a]
+        if rule.detection is not None and rule.detection.signal == "foot_lift":
+            rep_metrics.update(_hop_timing(times, windows, idx))
         tempo_ok = True
         if rule.tempo_min_s is not None and duration < rule.tempo_min_s:
             tempo_ok = False

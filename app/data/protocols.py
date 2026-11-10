@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, replace
 
 from app.core.enums import (
     PHASE_ORDER,
+    AgeGroup,
     Aggregate,
     Comparator,
     CriterionSource,
@@ -27,6 +28,7 @@ from app.core.enums import (
     Side,
     TargetType,
 )
+from app.data import tailoring
 from app.services.criteria.spec import CriterionSpec, TargetSpec
 
 
@@ -121,6 +123,8 @@ class PhaseTemplate:
     sessions_per_week: int
     prescriptions: tuple[Rx, ...]
     criteria: tuple[CriterionDef, ...]
+    #: Why this phase is what it is for this player. See ``tailoring.py``.
+    tailoring: dict | None = None
 
 
 # --------------------------------------------------------------------------
@@ -1351,6 +1355,7 @@ class BuiltProtocol:
     key: str
     position: Position
     injury_site: InjurySite
+    age_group: AgeGroup
     title_en: str
     title_th: str
     summary_en: str
@@ -1389,9 +1394,11 @@ def _apply_position(phase: PhaseTemplate, profile: PositionProfile) -> PhaseTemp
     return replace(phase, prescriptions=prescriptions, criteria=tuple(criteria))
 
 
-#: Phase one is the same four movements for every position and every injury.
+#: Phase one is drawn from five movements, and nothing else.
 #:
-#: All four have now had their camera scoring checked against video of a real
+#: Which of the five a player gets, and how much, is decided per age group,
+#: injury and position by ``app/data/tailoring.py``. This note is about why
+#: the pool is these five. Four of them have now had their camera scoring checked against video of a real
 #: person with a known rep count, rather than against a skeleton drawn in code.
 #: Everything else in the library is still built from the injury and the
 #: position; only this one phase is pinned, so that the part anyone is shown
@@ -1416,16 +1423,11 @@ def _apply_position(phase: PhaseTemplate, profile: PositionProfile) -> PhaseTemp
 #: Clinically this is not a phase-one selection. It is pinned here for
 #: demonstration; deleting `_fixed_phase_one` and its call below restores the
 #: real programmes exactly.
-_DEMO_PHASE_ONE: tuple[Rx, ...] = (
-    Rx("double_leg_calf_raise", sets=3, reps=12, tempo="2-0-2-0"),
-    Rx("wall_sit", sets=3, reps=None, hold_seconds=45),
-    Rx("split_squat", sets=3, reps=8, side_mode=Side.BILATERAL, tempo="2-0-2-0"),
-    Rx("glute_bridge", sets=3, reps=12, tempo="2-0-2-0"),
-)
-
-
-def _fixed_phase_one(phase: PhaseTemplate) -> PhaseTemplate:
-    """Swap phase one's work for the four, and re-point its gate at them.
+def _fixed_phase_one(
+    phase: PhaseTemplate, position: Position, site: InjurySite, age: AgeGroup
+) -> PhaseTemplate:
+    """Swap phase one's work for this player's pick of the five, and re-point
+    its gate at them.
 
     The criteria have to move with the exercises. Every pose-based phase-one
     criterion in the library is fed by one specific movement -- ankle
@@ -1434,71 +1436,130 @@ def _fixed_phase_one(phase: PhaseTemplate) -> PhaseTemplate:
     leave a gate with nothing to satisfy it. Pain, pain-free days and adherence
     do not depend on which exercises are prescribed, so those stay exactly as
     the injury template wrote them.
+
+    The same holds one level down: a player who was not given the wall sit is
+    not tested on it, and the numbers each test asks for follow the dose their
+    age group was prescribed.
     """
+    plan = tailoring.tailor(position, site, age)
+    doses = {c.move: c.dose for c in plan.chosen}
     kept = tuple(c for c in phase.criteria if not c.spec.metric.startswith("pose."))
-    return replace(
-        phase,
-        prescriptions=_DEMO_PHASE_ONE,
-        criteria=kept
-        + (
+
+    tests: list[CriterionDef] = []
+    if tailoring.WALL in doses:
+        seconds = tailoring.WALL_SIT_TEST_S[age]
+        tests.append(
             crit(
                 "wall_sit_hold",
-                "Hold a wall sit for 30 seconds",
-                "นั่งพิงกำแพงค้างได้ 30 วินาที",
+                f"Hold a wall sit for {seconds} seconds",
+                f"นั่งพิงกำแพงค้างได้ {seconds} วินาที",
                 metric="session.hold.wall_sit",
                 source=CriterionSource.SESSION,
                 aggregate=Aggregate.MAX,
                 window_days=14,
-                target=absolute(30, "s"),
+                target=absolute(seconds, "s"),
                 help_en="Timed by the camera, and only while your knees stay in position.",
                 help_th="จับเวลาด้วยกล้อง และนับเฉพาะตอนที่เข่าอยู่ในมุมที่ถูกต้อง",
-            ),
+            )
+        )
+    if tailoring.CALF in doses:
+        reps = doses[tailoring.CALF].reps or 0
+        tests.append(
             crit(
                 "calf_raise_reps",
-                "12 double-leg calf raises in one set",
-                "เขย่งปลายเท้าสองขา 12 ครั้งในหนึ่งเซ็ต",
+                f"{reps} double-leg calf raises in one set",
+                f"เขย่งปลายเท้าสองขา {reps} ครั้งในหนึ่งเซ็ต",
                 metric="session.reps.double_leg_calf_raise",
                 source=CriterionSource.SESSION,
                 aggregate=Aggregate.MAX,
                 window_days=14,
-                target=absolute(12, "reps"),
+                target=absolute(reps, "reps"),
                 help_en="Counted from reps the camera accepted, so shallow ones do not help.",
                 help_th="นับจากครั้งที่กล้องยอมรับ ครั้งที่ยกไม่สุดจึงไม่ถูกนับ",
-            ),
+            )
+        )
+
+    return replace(
+        phase,
+        prescriptions=tuple(
+            Rx(
+                c.move,
+                sets=c.dose.sets,
+                reps=c.dose.reps,
+                hold_seconds=c.dose.hold_seconds,
+                rest_seconds=c.dose.rest_seconds,
+                tempo=c.dose.tempo,
+                side_mode=Side.BILATERAL,
+                load_en=c.note.en if c.note else None,
+                load_th=c.note.th if c.note else None,
+            )
+            for c in plan.chosen
         ),
+        criteria=kept + tuple(tests),
+        tailoring={
+            "age_group": age.value,
+            "age_label_en": tailoring.AGE_RULES[age].label.en,
+            "age_label_th": tailoring.AGE_RULES[age].label.th,
+            "dose_en": plan.dose.en,
+            "dose_th": plan.dose.th,
+            "left_out": [
+                {
+                    "exercise_key": out.move,
+                    "name_en": tailoring.MOVE_NAMES[out.move][0],
+                    "name_th": tailoring.MOVE_NAMES[out.move][1],
+                    "reason_en": out.why.en,
+                    "reason_th": out.why.th,
+                }
+                for out in plan.left_out
+            ],
+        },
     )
 
 
 def build_protocols() -> list[BuiltProtocol]:
-    """Materialise all 30 position x injury programmes."""
+    """Materialise every position x injury x age-group programme (6 x 7 x 3).
+
+    Age only reaches phase one -- see ``tailoring.py`` -- so the three variants
+    of a programme share everything after it.
+    """
     built: list[BuiltProtocol] = []
-    for position, profile in POSITION_PROFILES.items():
-        for site, template in INJURY_TEMPLATES.items():
-            injury_en, injury_th = _INJURY_LABELS[site]
-            phases = tuple(_apply_position(p, profile) for p in template)
-            # After the position has had its say, so nothing a role adds can
-            # put a fifth exercise into the one phase that is meant to be fixed.
-            phases = tuple(
-                _fixed_phase_one(p) if p.phase_key is _P1 else p for p in phases
+    combos = (
+        (position, profile, site, template, age)
+        for position, profile in POSITION_PROFILES.items()
+        for site, template in INJURY_TEMPLATES.items()
+        for age in AgeGroup
+    )
+    for position, profile, site, template, age in combos:
+        injury_en, injury_th = _INJURY_LABELS[site]
+        phases = tuple(_apply_position(p, profile) for p in template)
+        # After the position has had its say, so nothing a role adds can
+        # put an extra exercise into the one phase that is meant to be fixed.
+        phases = tuple(
+            _fixed_phase_one(p, position, site, age) if p.phase_key is _P1 else p
+            for p in phases
+        )
+        assert [p.phase_key for p in phases] == PHASE_ORDER
+        # The adult key is the one every programme had before age groups
+        # existed, so players already mid-rehab keep the row they point at.
+        suffix = "" if age is AgeGroup.ADULT else f"__{age.value}"
+        built.append(
+            BuiltProtocol(
+                key=f"{position.value}__{site.value}{suffix}",
+                position=position,
+                injury_site=site,
+                age_group=age,
+                title_en=f"{injury_en} rehab — {profile.label_en}",
+                title_th=f"ฟื้นฟู{injury_th} — {profile.label_th}",
+                summary_en=(
+                    f"Four-phase return-to-pitch programme for a {profile.label_en.lower()} "
+                    f"with a {injury_en.lower()} injury. Each phase opens when its own "
+                    f"testing is passed."
+                ),
+                summary_th=(
+                    f"โปรแกรมคืนสู่สนาม 4 เฟส สำหรับ{profile.label_th}ที่บาดเจ็บ{injury_th} "
+                    f"แต่ละเฟสจะเปิดเมื่อผ่านการทดสอบของเฟสนั้น"
+                ),
+                phases=phases,
             )
-            assert [p.phase_key for p in phases] == PHASE_ORDER
-            built.append(
-                BuiltProtocol(
-                    key=f"{position.value}__{site.value}",
-                    position=position,
-                    injury_site=site,
-                    title_en=f"{injury_en} rehab — {profile.label_en}",
-                    title_th=f"ฟื้นฟู{injury_th} — {profile.label_th}",
-                    summary_en=(
-                        f"Four-phase return-to-pitch programme for a {profile.label_en.lower()} "
-                        f"with a {injury_en.lower()} injury. Each phase opens when its own "
-                        f"testing is passed."
-                    ),
-                    summary_th=(
-                        f"โปรแกรมคืนสู่สนาม 4 เฟส สำหรับ{profile.label_th}ที่บาดเจ็บ{injury_th} "
-                        f"แต่ละเฟสจะเปิดเมื่อผ่านการทดสอบของเฟสนั้น"
-                    ),
-                    phases=phases,
-                )
-            )
+        )
     return built

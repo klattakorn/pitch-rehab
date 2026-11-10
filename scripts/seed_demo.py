@@ -51,7 +51,9 @@ from app.core.enums import (  # noqa: E402
     TargetType,
 )
 from app.core.security import hash_password  # noqa: E402
-from app.db.session import SessionLocal  # noqa: E402
+from app.db.base import Base  # noqa: E402
+from app.db.migrate import migrate  # noqa: E402
+from app.db.session import SessionLocal, engine  # noqa: E402
 from app.models.injury import EpisodeCriterion, InjuryEpisode, PhaseAttempt  # noqa: E402
 from app.models.metrics import MetricSample  # noqa: E402
 from app.models.protocol import Exercise  # noqa: E402
@@ -473,6 +475,11 @@ def main() -> None:
     # ceiling on the form scores is what decides whether it clears its 80. Set
     # just under, so the screen reads "nearly there" rather than "miles off".
     ceiling = 83.0 if args.blocker == "form_quality" else 91.0
+
+    # This script is often the first thing to touch the database after a
+    # pull, before any server has started -- so it brings the schema up itself.
+    migrate(engine)
+    Base.metadata.create_all(bind=engine)
 
     with SessionLocal() as db:
         replaced = wipe(db)

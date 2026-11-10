@@ -621,3 +621,85 @@ describe("the mode switch", () => {
     expect(standalone.active()).toBe(false);
   });
 });
+
+describe("changing age group with no laptop", () => {
+  const id = () => episodeId();
+  const pick = (age: string) =>
+    body("/players/me/profile", { method: "PATCH", body: JSON.stringify({ age_group: age }) });
+  const phaseOne = () =>
+    body(`/injuries/${id()}/protocol`).phases.find((p: any) => p.order_index === 0);
+  const moves = (phase: any): string[] => phase.prescriptions.map((rx: any) => rx.exercise.key);
+
+  it("rebuilds phase one for that age, and only phase one", async () => {
+    standalone.setActive(true);
+    await standalone.ready();
+    const adult = body(`/injuries/${id()}/protocol`);
+
+    expect(pick("senior").effective_age_group).toBe("senior");
+    const senior = body(`/injuries/${id()}/protocol`);
+
+    expect(senior.id).not.toBe(adult.id);
+    expect(senior.age_group).toBe("senior");
+    expect(phaseOne().tailoring.age_group).toBe("senior");
+    // Fewer reps and longer rests after 40 -- the dose, not just a label.
+    const calf = (p: any) =>
+      p.phases[0].prescriptions.find((rx: any) => rx.exercise.key === "double_leg_calf_raise");
+    expect(calf(senior).reps).toBeLessThan(calf(adult).reps);
+    expect(calf(senior).rest_seconds).toBeGreaterThan(calf(adult).rest_seconds);
+    // Everything after phase one is the same programme.
+    expect(senior.phases.slice(1)).toEqual(adult.phases.slice(1));
+    // And the profile screen is told, so it shows the choice back.
+    expect(body("/auth/me").profile.age_group).toBe("senior");
+  });
+
+  it("keeps the recorded results for a phase the age group does not touch", async () => {
+    standalone.setActive(true);
+    await standalone.ready();
+    const recorded = (snapshot as any).responses[`/injuries/${id()}/exit-criteria`];
+
+    pick("senior");
+
+    // The demo player is past phase one, where nothing changed. Their results
+    // are still their results; they are not put back at the start.
+    expect(currentPhase()).toBe(recorded.phase_key);
+    const gate = body(`/injuries/${id()}/exit-criteria`);
+    expect(gate.phase_key).toBe(recorded.phase_key);
+    expect(gate.required_passed).toBe(recorded.required_passed);
+    expect(body(`/injuries/${id()}/today`).phase_key).toBe(recorded.phase_key);
+  });
+
+  it("serves that age's phase one, unmeasured, when the player goes back to it", async () => {
+    standalone.setActive(true);
+    await standalone.ready();
+    pick("senior");
+    const first = phaseKeysFor(id())[0]!;
+    body(`/injuries/${id()}/starting-phase`, {
+      method: "PUT",
+      body: JSON.stringify({ phase_key: first }),
+    });
+
+    expect(moves(body(`/injuries/${id()}/today`))).toEqual(moves(phaseOne()));
+    const gate = body(`/injuries/${id()}/exit-criteria`);
+    const calf = gate.criteria.find((c: any) => c.key === "calf_raise_reps");
+    // The test asks for what a 40+ player was prescribed, and nothing is passed.
+    expect(calf.target).toBe(10);
+    expect(calf.status).toBe("no_data");
+  });
+
+  it("combines with the injury: a hamstring hops until 40", async () => {
+    standalone.setActive(true);
+    await standalone.ready();
+    body("/injuries", {
+      method: "POST",
+      body: JSON.stringify({ injury_site: "hamstring", side: "left" }),
+    });
+    expect(moves(phaseOne())).toContain("pogo_hops");
+
+    pick("senior");
+    expect(moves(phaseOne())).not.toContain("pogo_hops");
+    expect(phaseOne().tailoring.left_out.map((o: any) => o.exercise_key)).toEqual(["pogo_hops"]);
+
+    pick("youth");
+    expect(moves(phaseOne())).toContain("pogo_hops");
+  });
+});

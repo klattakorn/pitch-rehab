@@ -70,7 +70,7 @@ def _reseed() -> None:
 
 
 def _write_protocols() -> None:
-    """Every one of the 42 programmes, so the demo can switch between them.
+    """Every one of the 126 programmes, so the demo can switch between them.
 
     The snapshot proper records one player's answers, which is enough until
     somebody changes their position or their injury -- and then the app was
@@ -83,6 +83,7 @@ def _write_protocols() -> None:
     """
     from sqlalchemy import select
 
+    from app.core.enums import AgeGroup
     from app.db.session import SessionLocal
     from app.models.protocol import Protocol
     from app.schemas.protocol import ProtocolOut
@@ -93,12 +94,25 @@ def _write_protocols() -> None:
         )
         # Keyed by what the app knows about the player, so the lookup is a
         # dictionary hit rather than a search.
-        protocols = {
-            f"{row.position}|{row.injury_site}": json.loads(
-                ProtocolOut.model_validate(row).model_dump_json()
-            )
-            for row in rows
-        }
+        #
+        # Age group only changes phase one (app/data/tailoring.py), so the
+        # youth and senior variants are stored as that one phase rather than
+        # as two more full copies: three times the programmes for about a
+        # sixth more bytes. The app puts them back together -- see
+        # `protocol()` in web/src/standalone.ts.
+        protocols: dict[str, Any] = {}
+        for row in rows:
+            dumped = json.loads(ProtocolOut.model_validate(row).model_dump_json())
+            base = f"{row.position}|{row.injury_site}"
+            if row.age_group is AgeGroup.ADULT:
+                protocols[base] = dumped
+            else:
+                protocols[f"{base}|{row.age_group}"] = {
+                    "id": dumped["id"],
+                    "key": dumped["key"],
+                    "age_group": dumped["age_group"],
+                    "phase_one": dumped["phases"][0],
+                }
 
     PROTOCOLS.parent.mkdir(parents=True, exist_ok=True)
     PROTOCOLS.write_text(

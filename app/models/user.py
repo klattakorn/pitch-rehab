@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import Date, Enum, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import Position, Role, Side
+from app.core.enums import AgeGroup, Position, Role, Side
 from app.db.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
@@ -53,6 +53,9 @@ class PlayerProfile(Base, TimestampMixin):
     dominant_foot: Mapped[Side] = mapped_column(Enum(Side, native_enum=False), default=Side.RIGHT)
 
     date_of_birth: Mapped[date | None] = mapped_column(Date())
+    #: Picked by the player on a three-card screen. Wins over ``date_of_birth``
+    #: when both are set -- it is the one they were asked for.
+    age_group: Mapped[AgeGroup | None] = mapped_column(Enum(AgeGroup, native_enum=False))
     height_cm: Mapped[float | None] = mapped_column(Float())
     body_mass_kg: Mapped[float | None] = mapped_column(Float())
     training_days_per_week: Mapped[int] = mapped_column(default=3)
@@ -73,6 +76,11 @@ class PlayerProfile(Base, TimestampMixin):
             self.date_of_birth.day,
         )
         return today.year - self.date_of_birth.year - (0 if had_birthday else 1)
+
+    @property
+    def effective_age_group(self) -> AgeGroup:
+        """The band the programme is built for: chosen, else from the birth date."""
+        return self.age_group or AgeGroup.for_age(self.age)
 
 
 class PlayerBaseline(Base, TimestampMixin):

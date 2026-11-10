@@ -22,7 +22,7 @@ import {
 } from "./mediapipe";
 import { Frame, computeMetrics, type RawLandmark } from "./pose/geometry";
 import type { Side } from "./pose/landmarks";
-import { LiveSession, type SetResult } from "./pose/live";
+import { type FrameResult, LiveSession, type SetResult } from "./pose/live";
 import type { Exercise, ExerciseRule } from "./pose/rules";
 import { drawSkeleton } from "./render";
 
@@ -52,11 +52,17 @@ const fmt = (n: number | null | undefined, d?: number): string =>
  */
 const svg = (d: string, fill = false): string =>
   `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" ${
-    fill ? 'fill="currentColor"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
+    fill
+      ? 'fill="currentColor"'
+      : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
   }>${d}</svg>`;
 const ICON = {
-  undo: svg('<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>'),
-  redo: svg('<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>'),
+  undo: svg(
+    '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+  ),
+  redo: svg(
+    '<path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/>',
+  ),
   back: svg('<path d="M18 6 10 12l8 6V6Z"/><path d="M6 6v12"/>', true),
   fwd: svg('<path d="m6 6 8 6-8 6V6Z"/><path d="M18 6v12"/>', true),
   play: svg('<path d="M7 5v14l12-7L7 5Z"/>', true),
@@ -117,11 +123,22 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
           </div>
           <div class="lab-pane" data-pane="simple">
             <p class="lab-summary" id="lab-summary"></p>
-            <div id="lab-adjust" class="lab-marks">
-              <button class="lab-tool" id="lab-set-rest">Mark rest</button>
-              <button class="lab-tool accent" id="lab-set-full">Mark full rep</button>
+            <div class="lab-how">
+              <b>Pick a good rep</b>
+              <span>Drag across your <b>smallest</b> good rep on the
+                <i>Movement</i> track below, then press <b>Use this rep</b>.
+                Anything smaller stops counting. Or drag the <i>start</i> and
+                <i>end</i> lines up and down.</span>
             </div>
-            <p class="lab-hint" id="lab-picks"></p>
+            <div class="lab-card lab-sel" id="lab-sel" hidden></div>
+            <details class="lab-more">
+              <summary>Or mark positions on the video</summary>
+              <div id="lab-adjust" class="lab-marks">
+                <button class="lab-tool" id="lab-set-rest">Mark rest</button>
+                <button class="lab-tool" id="lab-set-full">Mark full rep</button>
+              </div>
+              <p class="lab-hint" id="lab-picks"></p>
+            </details>
             <div class="lab-card" id="lab-rep-card" hidden></div>
           </div>
           <div class="lab-pane" data-pane="adv" hidden>
@@ -147,7 +164,10 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
 
       <div class="lab-timeline">
         <div class="lab-tracklabels"><span>Reps</span><span>Movement</span></div>
-        <canvas id="lab-chart" height="150"></canvas>
+        <div class="lab-chartwrap">
+          <canvas id="lab-chart" height="150"></canvas>
+          <div class="lab-delta" id="lab-delta" role="status" aria-live="polite" hidden></div>
+        </div>
       </div>
     </div>`;
 
@@ -174,6 +194,8 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
   const undoBtn = $<HTMLButtonElement>("#lab-undo");
   const redoBtn = $<HTMLButtonElement>("#lab-redo");
   const picksEl = $<HTMLParagraphElement>("#lab-picks");
+  const selCard = $<HTMLDivElement>("#lab-sel");
+  const deltaEl = $<HTMLDivElement>("#lab-delta");
 
   let exercise = scored[0]!;
   let rule: ExerciseRule = structuredClone(exercise.pose_rule!) as ExerciseRule;
@@ -210,7 +232,15 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     rest: number | null;
     full: number | null;
     result: string;
+    /** The reps this step produced, so the next change can show what moved. */
+    reps: { s: number; e: number; ok: boolean }[];
+    counted: number;
   }
+  /** A time range dragged out on the Movement track. */
+  let selection: { t0: number; t1: number } | null = null;
+  /** How the waveform was last drawn, for hit-testing the draggable lines. */
+  let wave: { lo: number; hi: number; top: number; h: number } | null = null;
+  let deltaTimer = 0;
   let history: Step[] = [];
   let at = -1;
   /** The rep clip last clicked on the timeline, shown in the inspector. */
@@ -343,16 +373,34 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
           const t = rule.targets[Number(input.dataset.critical)]!;
           t.critical = input.checked;
           rescore();
-          commit(`${t.code}: ${input.checked ? "now refuses the rep" : "no longer refuses the rep"}`);
+          commit(
+            `${t.code}: ${input.checked ? "now refuses the rep" : "no longer refuses the rep"}`,
+          );
         });
       });
   }
 
   // ----------------------------------------------------------- scoring
+  // foot_lift depends on the frames before this one, so it cannot be read off
+  // a single frame. It is taken from the scoring session itself, frame by frame
+  // as it is fed, smoothed the way the counter smooths it -- so the chart and
+  // "Use this rep" see exactly what was counted, and a frame the session
+  // refused (out of shot, say) is a gap, not a peak that could never make a rep.
+  let liftByT = new Map<number, number | null>();
+  function feed(frame: Frame): FrameResult {
+    const result = session!.push(frame);
+    liftByT.set(frame.t, result.signal);
+    return result;
+  }
+  function footLiftOf(f: Frame): number | null {
+    return liftByT.get(f.t) ?? null;
+  }
+
   function signalOf(f: Frame): number | null {
     const key =
       rule.mode === "rep" ? rule.detection?.signal : rule.targets[0]?.metric;
     if (!key) return null;
+    if (key === "foot_lift") return footLiftOf(f);
     const sides: Side[] = side === "bilateral" ? ["left", "right"] : [side];
     const vals = sides
       .map((s) => computeMetrics(f, s, rule.use_z)[key])
@@ -367,7 +415,8 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
   /** Re-run every recorded frame through a new session with the current rule. */
   function rescore(): void {
     session = freshSession();
-    for (const r of frames) session.push(Frame.from(r.t, r.landmarks, aspect));
+    liftByT = new Map();
+    for (const r of frames) feed(Frame.from(r.t, r.landmarks, aspect));
     showResults();
   }
 
@@ -379,6 +428,37 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
       rescoreQueued = false;
       rescore();
     }, 0);
+  }
+
+  /** Score the recording with any rule, without touching the current one. */
+  function scoreWith(r: ExerciseRule): SetResult | null {
+    if (!frames.length) return null;
+    const s = new LiveSession(r, side);
+    for (const f of frames) s.push(Frame.from(f.t, f.landmarks, aspect));
+    return s.finish();
+  }
+
+  /**
+   * A new clip makes every saved step's rep list stale -- they were scored on
+   * the old footage, or on none. Re-score each step on this clip, so "before"
+   * and "after" always compare like with like.
+   */
+  function rescoreHistory(): void {
+    for (const step of history) {
+      const out = scoreWith(JSON.parse(step.rule) as ExerciseRule);
+      step.reps = (out?.reps ?? []).map((r) => ({
+        s: r.startT,
+        e: r.endT,
+        ok: r.isValid,
+      }));
+      step.counted = out?.validReps ?? 0;
+      step.result = out
+        ? rule.mode === "hold"
+          ? `held ${fmt(out.holdSeconds)}s`
+          : `${out.completedReps} found · ${out.validReps} counted`
+        : "no recording";
+    }
+    renderHistory();
   }
 
   function currentOutcome(): SetResult | null {
@@ -424,10 +504,13 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     resultEl.className = `lab-badge ${
       rule.mode === "rep" && out.validReps < out.completedReps ? "warn" : ""
     }`;
+    const was = baseline();
+    const diff = was && rule.mode === "rep" ? out.validReps - was.counted : 0;
     resultEl.textContent =
       rule.mode === "hold"
         ? `Held ${fmt(out.holdSeconds, 1)}s`
-        : `${out.validReps} of ${out.completedReps} reps counted`;
+        : `${out.validReps} of ${out.completedReps} reps counted` +
+          (diff ? ` (${diff > 0 ? "+" : ""}${diff})` : "");
     drawTimeline();
     renderRepCard();
   }
@@ -488,6 +571,32 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     roundRect(g, 0, waveTop, W, waveH, 6);
 
     if (frames.length) {
+      const before = baseline();
+      const overlaps = (a0: number, a1: number, b0: number, b1: number) =>
+        a0 < b1 && b0 < a1;
+      // Reps the last change removed: a dashed red outline where they were.
+      for (const b of before?.reps ?? []) {
+        const still = lastOutcome?.reps.some((r) =>
+          overlaps(r.startT, r.endT, b.s, b.e),
+        );
+        if (still) continue;
+        g.strokeStyle = "#ff5a50";
+        g.setLineDash([4, 3]);
+        g.lineWidth = 1.5;
+        g.beginPath();
+        g.roundRect(
+          X(b.s),
+          repTop + 4,
+          Math.max(6, X(b.e) - X(b.s)),
+          REP_TRACK - 8,
+          5,
+        );
+        g.stroke();
+        g.setLineDash([]);
+        g.fillStyle = "#ff5a50";
+        g.font = "bold 10px ui-sans-serif, sans-serif";
+        g.fillText("−", X(b.s) + 4, repTop + REP_TRACK / 2 + 4);
+      }
       // rep clips
       lastOutcome?.reps.forEach((r, i) => {
         const x = X(r.startT);
@@ -508,6 +617,35 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
           g.font = "bold 11px ui-sans-serif, sans-serif";
           g.fillText(String(i + 1), x + 6, repTop + REP_TRACK / 2 + 4);
         }
+        // New since the last change, or changed from refused to counted (or
+        // back): a white outline and a small tag, so the difference is visible
+        // without comparing two counts in your head.
+        if (before) {
+          const match = before.reps.find((b) =>
+            overlaps(r.startT, r.endT, b.s, b.e),
+          );
+          const tag = !match
+            ? "+"
+            : match.ok !== r.isValid
+              ? r.isValid
+                ? "✓"
+                : "✗"
+              : "";
+          if (tag) {
+            g.strokeStyle = "#ffffff";
+            g.lineWidth = 2;
+            g.beginPath();
+            g.roundRect(x, repTop + 3, w, REP_TRACK - 6, 5);
+            g.stroke();
+            g.fillStyle = "#ffffff";
+            g.beginPath();
+            g.arc(x + w - 2, repTop + 4, 7, 0, Math.PI * 2);
+            g.fill();
+            g.fillStyle = "#0b0e12";
+            g.font = "bold 10px ui-sans-serif, sans-serif";
+            g.fillText(tag, x + w - 5.5, repTop + 7.5);
+          }
+        }
       });
 
       // waveform
@@ -524,7 +662,19 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
         const pad = (hi - lo) * 0.12 || 1;
         lo -= pad;
         hi += pad;
-        const Y = (v: number) => waveTop + waveH - ((v - lo) / (hi - lo)) * waveH;
+        const Y = (v: number) =>
+          waveTop + waveH - ((v - lo) / (hi - lo)) * waveH;
+        wave = { lo, hi, top: waveTop, h: waveH };
+        // The dragged-out selection, behind the line so the line stays readable.
+        if (selection) {
+          const a = X(Math.min(selection.t0, selection.t1));
+          const b = X(Math.max(selection.t0, selection.t1));
+          g.fillStyle = "rgba(255,255,255,0.12)";
+          g.fillRect(a, waveTop, b - a, waveH);
+          g.fillStyle = "#ffffff";
+          g.fillRect(a - 1, waveTop, 2, waveH);
+          g.fillRect(b - 1, waveTop, 2, waveH);
+        }
         // Filled under the line, like an audio waveform.
         g.beginPath();
         let first = true;
@@ -557,22 +707,56 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
         g.lineWidth = 1.5;
         g.stroke();
         if (det) {
-          const line = (v: number, colour: string, label: string) => {
+          // Where the lines were before the last change, faint, so a drag or a
+          // pick shows how far it moved them.
+          const prev = before
+            ? (JSON.parse(before.rule) as ExerciseRule).detection
+            : null;
+          if (prev) {
+            for (const [v, now] of [
+              [prev.enter, det.enter],
+              [prev.exit, det.exit],
+            ] as const) {
+              if (Math.abs(v - now) < 1e-9) continue;
+              g.strokeStyle = "rgba(255,255,255,0.28)";
+              g.setLineDash([2, 4]);
+              g.lineWidth = 1;
+              g.beginPath();
+              g.moveTo(0, Y(v));
+              g.lineTo(W, Y(v));
+              g.stroke();
+              g.setLineDash([]);
+            }
+          }
+          const line = (
+            v: number,
+            colour: string,
+            label: string,
+            hot: boolean,
+          ) => {
             g.strokeStyle = colour;
-            g.setLineDash([4, 4]);
-            g.lineWidth = 1;
+            g.setLineDash(hot ? [] : [4, 4]);
+            g.lineWidth = hot ? 2 : 1.25;
             g.beginPath();
             g.moveTo(0, Y(v));
             g.lineTo(W, Y(v));
             g.stroke();
             g.setLineDash([]);
+            // A grab handle on the right: a pill with the value in it, so it
+            // is obvious the line can be dragged and what it is set to.
+            const text = `${label} ${fmt(v)}`;
+            g.font = "bold 10px ui-sans-serif, sans-serif";
+            const tw = g.measureText(text).width + 14;
+            const hx = W - tw - 4;
             g.fillStyle = colour;
-            g.font = "10px ui-sans-serif, sans-serif";
-            // "end" sits under its line so the two never print on top of each other.
-            g.fillText(label, 6, label === "end" ? Y(v) + 11 : Y(v) - 3);
+            g.beginPath();
+            g.roundRect(hx, Y(v) - 8, tw, 16, 8);
+            g.fill();
+            g.fillStyle = "#0b0e12";
+            g.fillText(text, hx + 7, Y(v) + 3.5);
           };
-          line(det.enter, "#ffffff", "start");
-          line(det.exit, "#ff9f43", "end");
+          line(det.exit, "#ff9f43", "END", dragLine === "exit");
+          line(det.enter, "#ffffff", "START", dragLine === "enter");
         }
       }
     }
@@ -672,15 +856,50 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
   /** Record the current state as a new step, dropping anything that was undone. */
   function commit(label: string): void {
     history = history.slice(0, at + 1);
+    const out = currentOutcome();
     history.push({
       label,
       rule: JSON.stringify(rule),
       rest: restPick,
       full: fullPick,
       result: resultLine(),
+      reps: (out?.reps ?? []).map((r) => ({
+        s: r.startT,
+        e: r.endT,
+        ok: r.isValid,
+      })),
+      counted: out?.validReps ?? 0,
     });
     at = history.length - 1;
     renderHistory();
+    showDelta(label);
+    // The badge and the ghost outlines compare against the step before this
+    // one, which only just changed.
+    showResults();
+  }
+
+  /** The step before the current one -- what "before" means on screen. */
+  function baseline(): Step | null {
+    return at > 0 ? history[at - 1]! : null;
+  }
+
+  /**
+   * Say what the last change did, where the eye already is: over the timeline,
+   * in one line, with the rep count before and after.
+   */
+  function showDelta(label: string): void {
+    const before = baseline();
+    const now = history[at];
+    if (!before || !now || !frames.length) return;
+    const d = now.counted - before.counted;
+    const trend = d > 0 ? "up" : d < 0 ? "down" : "same";
+    deltaEl.className = `lab-delta ${trend}`;
+    deltaEl.innerHTML =
+      `<span>${esc(label)}</span>` +
+      `<b>${before.counted} → ${now.counted} counted${d ? ` (${d > 0 ? "+" : ""}${d})` : ""}</b>`;
+    deltaEl.hidden = false;
+    clearTimeout(deltaTimer);
+    deltaTimer = window.setTimeout(() => (deltaEl.hidden = true), 5000);
   }
 
   /** Jump to any step, the way clicking a history entry in an editor does. */
@@ -707,9 +926,11 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
              <span>${esc(s.label)}</span><small>${esc(s.result)}</small></li>`,
       )
       .join("");
-    historyEl.querySelectorAll<HTMLLIElement>("li").forEach((li) =>
-      li.addEventListener("click", () => goTo(Number(li.dataset.step))),
-    );
+    historyEl
+      .querySelectorAll<HTMLLIElement>("li")
+      .forEach((li) =>
+        li.addEventListener("click", () => goTo(Number(li.dataset.step))),
+      );
     renderSummary();
   }
 
@@ -731,9 +952,9 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
   }
 
   function showPane(name: string): void {
-    root.querySelectorAll<HTMLElement>(".lab-tab").forEach((t) =>
-      t.classList.toggle("on", t.dataset.pane === name),
-    );
+    root
+      .querySelectorAll<HTMLElement>(".lab-tab")
+      .forEach((t) => t.classList.toggle("on", t.dataset.pane === name));
     root.querySelectorAll<HTMLElement>(".lab-pane").forEach((pane) => {
       pane.hidden = pane.dataset.pane !== name;
     });
@@ -789,6 +1010,11 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     return landmarker;
   }
 
+  function clearSelection(): void {
+    selection = null;
+    renderSelection();
+  }
+
   function beginRecording(
     width: number,
     height: number,
@@ -796,6 +1022,7 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     live = true,
   ): void {
     frames = [];
+    clearSelection();
     aspect = width / height;
     overlay.width = width;
     overlay.height = height;
@@ -803,6 +1030,7 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     mirrored = isMirrored;
     stage.classList.toggle("mirrored", mirrored);
     session = freshSession();
+    liftByT = new Map();
     lastVideoTime = -1;
     started = performance.now();
     running = live;
@@ -881,6 +1109,7 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
       }
       status.textContent = `Done: ${frames.length} frames from ${file.name}. Scrub the video to set the thresholds, or change the numbers below.`;
       showResults();
+      rescoreHistory();
       enterReview();
     } catch (error) {
       status.textContent = `Video failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -923,7 +1152,7 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
       const frame = Frame.from(t, raw, aspect);
       if (frames.length >= MAX_FRAMES) frames.shift();
       frames.push({ t, landmarks: raw });
-      const result = session!.push(frame);
+      const result = feed(frame);
       drawSkeleton(ctx, frame, result.accepted, mirrored);
       const sig = signalOf(frame);
       liveRead.innerHTML =
@@ -979,6 +1208,7 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     }
     status.textContent = `Stopped: ${frames.length} frames. Scrub the video to set the thresholds.`;
     showResults();
+    rescoreHistory();
     enterReview();
   }
 
@@ -1027,9 +1257,11 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
 
   function showPicks(): void {
     if (!reviewing) {
-      picksEl.textContent = "Record or import a clip, then pause on a position to mark it.";
+      picksEl.textContent =
+        "Record or import a clip, then pause on a position to mark it.";
     } else if (restPick === null && fullPick === null) {
-      picksEl.textContent = "Pause at rest and press Mark rest. Then pause on your shallowest good rep.";
+      picksEl.textContent =
+        "Pause at rest and press Mark rest. Then pause on your shallowest good rep.";
     } else {
       picksEl.textContent = `Rest ${fmt(restPick)} · Full rep ${fmt(fullPick)}`;
     }
@@ -1050,7 +1282,9 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     const det = rule.detection;
     commit(
       `${which === "rest" ? "Rest" : "Full rep"} picked at ${fmt(video.currentTime, 2)}s (${fmt(value)})` +
-        (applied && det ? ` → starts ${fmt(det.enter)}, ends ${fmt(det.exit)}` : ""),
+        (applied && det
+          ? ` → starts ${fmt(det.enter)}, ends ${fmt(det.exit)}`
+          : ""),
     );
   }
 
@@ -1086,6 +1320,63 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     return true;
   }
 
+  // ------------------------------------------------------------ selection
+  function renderSelection(): void {
+    if (!selection) {
+      selCard.hidden = true;
+      return;
+    }
+    const a = Math.min(selection.t0, selection.t1);
+    const b = Math.max(selection.t0, selection.t1);
+    const vals = framesIn(a, b);
+    selCard.hidden = false;
+    selCard.innerHTML =
+      `<div class="lab-card-head"><b>Selected ${clock(a, true)} – ${clock(b, true)}</b>` +
+      `<span>${fmt(b - a, 2)}s</span></div>` +
+      (vals.length >= 3
+        ? `<div class="lab-card-meta">lowest ${fmt(Math.min(...vals))} · highest ${fmt(Math.max(...vals))}</div>`
+        : `<div class="lab-card-meta">Too short: drag across a whole rep.</div>`) +
+      `<div class="lab-row"><button class="lab-tool accent" id="lab-use-sel"${
+        vals.length >= 3 && rule.mode === "rep" ? "" : " disabled"
+      }>Use this rep</button><button class="lab-tool" id="lab-clear-sel">Clear</button></div>`;
+    $("#lab-use-sel").addEventListener("click", useSelection);
+    $("#lab-clear-sel").addEventListener("click", () => {
+      selection = null;
+      renderSelection();
+      drawTimeline();
+    });
+  }
+
+  function framesIn(a: number, b: number): number[] {
+    return frames
+      .filter((r) => r.t >= a && r.t <= b)
+      .map((r) => signalOf(Frame.from(r.t, r.landmarks, aspect)))
+      .filter((v): v is number => v !== null);
+  }
+
+  /**
+   * One good rep, chosen by dragging across it: its lowest reading is rest and
+   * its highest is the full rep, and the thresholds follow from those two the
+   * same way Mark rest / Mark full rep set them.
+   */
+  function useSelection(): void {
+    if (!selection) return;
+    const a = Math.min(selection.t0, selection.t1);
+    const b = Math.max(selection.t0, selection.t1);
+    const vals = framesIn(a, b);
+    if (vals.length < 3) return;
+    restPick = Math.min(...vals);
+    fullPick = Math.max(...vals);
+    showPicks();
+    if (!applyPicks()) return;
+    const det = rule.detection!;
+    selection = null;
+    renderSelection();
+    commit(
+      `Used ${clock(a, true)}–${clock(b, true)} as a good rep → start ${fmt(det.enter)}, end ${fmt(det.exit)}`,
+    );
+  }
+
   // ------------------------------------------------------------ wiring
   video.addEventListener("seeked", showPlayhead);
   video.addEventListener("timeupdate", showPlayhead);
@@ -1118,9 +1409,11 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
     rescore();
     commit("Reset to app values");
   });
-  root.querySelectorAll<HTMLElement>(".lab-tab").forEach((t) =>
-    t.addEventListener("click", () => showPane(t.dataset.pane!)),
-  );
+  root
+    .querySelectorAll<HTMLElement>(".lab-tab")
+    .forEach((t) =>
+      t.addEventListener("click", () => showPane(t.dataset.pane!)),
+    );
 
   // Transport, like an editor's: play/pause, a frame either way.
   const syncPlay = (): void => {
@@ -1145,42 +1438,162 @@ export function mountLab(root: HTMLElement, exercises: Exercise[]): () => void {
   });
   video.addEventListener("pause", syncPlay);
 
-  // Click or drag anywhere on the timeline to scrub; click a rep clip to inspect it.
+  // The timeline has three kinds of drag, by where you grab it:
+  //   a START or END line   -> move that threshold up or down
+  //   the Movement track    -> drag out a selection over one rep
+  //   the ruler / rep clips -> scrub the video (and pick a clip to inspect)
+  // A tap on the Movement track without dragging still just scrubs.
   let scrubbing = false;
+  let dragLine: "enter" | "exit" | null = null;
+  let dragFrom = 0;
+  let selecting: { x0: number } | null = null;
   const timeAt = (e: PointerEvent): number => {
     const box = chart.getBoundingClientRect();
     const f = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
     return f * Math.max(1, timelineSpan());
   };
+  const localY = (e: PointerEvent): number =>
+    e.clientY - chart.getBoundingClientRect().top;
+  const valueAtY = (y: number): number | null =>
+    wave
+      ? wave.lo + ((wave.top + wave.h - y) / wave.h) * (wave.hi - wave.lo)
+      : null;
+  const lineYs = (): { enter: number; exit: number } | null => {
+    const det = rule.mode === "rep" ? rule.detection : null;
+    if (!det || !wave) return null;
+    const Y = (v: number) =>
+      wave!.top + wave!.h - ((v - wave!.lo) / (wave!.hi - wave!.lo)) * wave!.h;
+    return { enter: Y(det.enter), exit: Y(det.exit) };
+  };
+  /** Which line is under the pointer. Fingers get a wider catch than a mouse. */
+  const lineAt = (y: number, coarse: boolean): "enter" | "exit" | null => {
+    const ys = lineYs();
+    if (!ys) return null;
+    const reach = coarse ? 16 : 8;
+    const dE = Math.abs(y - ys.enter);
+    const dX = Math.abs(y - ys.exit);
+    if (Math.min(dE, dX) > reach) return null;
+    return dE <= dX ? "enter" : "exit";
+  };
+  const inWave = (y: number): boolean =>
+    !!wave && y >= wave.top - 4 && y <= wave.top + wave.h + 4;
+
   chart.addEventListener("pointerdown", (e) => {
     if (!frames.length) return;
     const t = timeAt(e);
-    const box = chart.getBoundingClientRect();
-    const y = e.clientY - box.top;
+    const y = localY(e);
+    // Capture keeps a drag alive when the finger slides off the strip. It can
+    // throw if the pointer is already gone; the drag still works without it.
+    try {
+      chart.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+
+    const grab = lineAt(y, e.pointerType !== "mouse");
+    if (grab) {
+      dragLine = grab;
+      dragFrom = rule.detection![grab];
+      drawTimeline();
+      return;
+    }
+    if (inWave(y)) {
+      selecting = { x0: e.clientX };
+      selection = { t0: t, t1: t };
+      return;
+    }
     // In the rep track: select the clip under the pointer.
     if (y >= RULER && y <= RULER + 4 + REP_TRACK) {
-      const hit = lastOutcome?.reps.findIndex((r) => t >= r.startT && t <= r.endT) ?? -1;
+      const hit =
+        lastOutcome?.reps.findIndex((r) => t >= r.startT && t <= r.endT) ?? -1;
       selectedRep = hit >= 0 ? hit : null;
       renderRepCard();
       if (hit >= 0) showPane("simple");
     }
     if (reviewing) {
       scrubbing = true;
-      chart.setPointerCapture(e.pointerId);
       video.pause();
       video.currentTime = t;
     }
     drawTimeline();
   });
+
   chart.addEventListener("pointermove", (e) => {
-    if (scrubbing) video.currentTime = timeAt(e);
+    const y = localY(e);
+    if (dragLine) {
+      const det = rule.detection!;
+      const v = valueAtY(y);
+      if (v === null) return;
+      // Keep the lines in order with a small gap, and keep the amplitude gate
+      // from silently overriding the start line while dragging.
+      const gap = Math.max(1e-3, Math.abs(wave!.hi - wave!.lo) * 0.02);
+      const round = (x: number) =>
+        Math.abs(wave!.hi - wave!.lo) < 5
+          ? Math.round(x * 100) / 100
+          : Math.round(x * 10) / 10;
+      if (dragLine === "enter") det.enter = round(Math.max(v, det.exit + gap));
+      else det.exit = round(Math.min(v, det.enter - gap));
+      det.min_amplitude = Math.min(
+        det.min_amplitude,
+        round(det.enter - det.exit),
+      );
+      queueRescore();
+      return;
+    }
+    if (selecting && selection) {
+      selection.t1 = timeAt(e);
+      drawTimeline();
+      return;
+    }
+    if (scrubbing) {
+      video.currentTime = timeAt(e);
+      return;
+    }
+    // Hover: show that the lines can be grabbed.
+    chart.style.cursor = lineAt(y, false)
+      ? "ns-resize"
+      : inWave(y)
+        ? "crosshair"
+        : "col-resize";
   });
-  chart.addEventListener("pointerup", () => (scrubbing = false));
+
+  const endDrag = (e: PointerEvent): void => {
+    if (dragLine) {
+      const which = dragLine;
+      dragLine = null;
+      const now = rule.detection![which];
+      drawKnobs();
+      rescore();
+      if (now !== dragFrom) {
+        commit(
+          `Dragged ${which === "enter" ? "start" : "end"} line: ${fmt(dragFrom)} → ${fmt(now)}`,
+        );
+      }
+    } else if (selecting && selection) {
+      // Barely moved: that was a tap, so treat it as a scrub instead.
+      if (Math.abs(e.clientX - selecting.x0) < 6) {
+        selection = null;
+        if (reviewing) {
+          video.pause();
+          video.currentTime = timeAt(e);
+        }
+      } else {
+        showPane("simple");
+      }
+      renderSelection();
+      drawTimeline();
+    }
+    selecting = null;
+    scrubbing = false;
+  };
+  chart.addEventListener("pointerup", endDrag);
+  chart.addEventListener("pointercancel", endDrag);
   window.addEventListener("resize", () => root.isConnected && drawTimeline());
   undoBtn.addEventListener("click", () => goTo(at - 1));
   redoBtn.addEventListener("click", () => goTo(at + 1));
   const onKey = (e: KeyboardEvent): void => {
-    if (!root.isConnected) return document.removeEventListener("keydown", onKey);
+    if (!root.isConnected)
+      return document.removeEventListener("keydown", onKey);
     // Leave Ctrl+Z alone inside a number box, where it undoes the typing.
     if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
     if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "z") return;

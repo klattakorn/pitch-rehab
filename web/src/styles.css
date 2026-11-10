@@ -1435,6 +1435,55 @@ ul.role-changes .v {
   border-left: 3px solid var(--edge-control);
 }
 
+/* Why this plan: who it was built for, and what was left out. */
+.panel.tailored {
+  margin-top: var(--s4);
+  border-left: 3px solid var(--volt-dim);
+}
+.panel.tailored .chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: var(--s3) 0;
+}
+.textlink {
+  background: none;
+  border: 0;
+  padding: 10px 0 10px 12px;
+  color: var(--volt);
+  font: inherit;
+  font-size: var(--t-small, 13px);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.leftout {
+  list-style: none;
+  margin: var(--s3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s2);
+}
+.leftout li {
+  display: grid;
+  gap: 2px;
+  padding: var(--s3);
+  border-radius: var(--r-sm, 8px);
+  background: var(--inset);
+}
+.leftout li b::before {
+  content: "\2715\00a0";
+  color: var(--fail, #ff6b6b);
+}
+.leftout li span {
+  color: var(--ink-2);
+  font-size: var(--t-small, 13px);
+}
+.rowbody small.why {
+  color: var(--volt);
+  opacity: 0.85;
+}
+
 /* ==========================================================================
    Rings and charts
    ========================================================================== */
@@ -3621,5 +3670,88 @@ button.ghost:active:not(:disabled),
       transparent 55%
     );
     pointer-events: none;
+  }
+}
+
+/* --- Pose Lab: picking a rep and seeing what changed ---------------------- */
+.lab-how {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px dashed var(--lab-line, #262c35);
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--lab-dim, #8a94a0);
+}
+.lab-how b {
+  color: var(--lab-text, #e6ebf0);
+}
+.lab-how i {
+  font-style: normal;
+  color: var(--lab-accent, #c0f917);
+}
+.lab-sel {
+  border: 1px solid var(--lab-accent, #c0f917);
+}
+.lab-sel .lab-row {
+  margin-top: 8px;
+}
+.lab-more summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--lab-dim, #8a94a0);
+  padding: 4px 0;
+}
+.lab-more[open] summary {
+  margin-bottom: 8px;
+}
+.lab-chartwrap {
+  position: relative;
+}
+/* The change banner sits on the timeline, where your eyes already are when
+   you have just dragged something there. */
+.lab-delta {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  max-width: calc(100% - 16px);
+  padding: 5px 12px;
+  border-radius: 8px;
+  background: rgba(11, 14, 18, 0.92);
+  border: 1px solid var(--lab-line, #262c35);
+  font-size: 0.75rem;
+  color: var(--lab-dim, #8a94a0);
+  /* Over the ruler, which is the least important thing on the strip, so it
+     never sits on top of the clips or the lines you are dragging. */
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  animation: delta-in 260ms var(--ease) both;
+}
+.lab-delta b {
+  color: var(--lab-text, #e6ebf0);
+  white-space: nowrap;
+}
+.lab-delta.up {
+  border-color: #2fbf71;
+}
+.lab-delta.up b {
+  color: #2fbf71;
+}
+.lab-delta.down {
+  border-color: #ff5a50;
+}
+.lab-delta.down b {
+  color: #ff5a50;
+}
+@keyframes delta-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -6px);
   }
 }

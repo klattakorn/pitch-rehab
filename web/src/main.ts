@@ -493,7 +493,8 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
     `${
       intent.mode === "signup"
         ? `<div class="steps"><span class="step on">1 · Position</span>
-             <span class="step">2 · Injury</span></div>`
+             <span class="step">2 · Age</span>
+             <span class="step">3 · Injury</span></div>`
         : ""
     }
      <h2>What's your primary position?</h2>
@@ -544,13 +545,14 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
     void (async () => {
       try {
         if (intent.mode === "signup") {
-          await api.register({
+          // The account is created on the next screen: it needs the age group
+          // too, and a half-made account is worse than none.
+          return ageScreen({
+            mode: "signup",
             email: intent.email,
             password: intent.password,
-            full_name: intent.email.split("@")[0]!,
             position: chosen!,
           });
-          await boot();
         } else {
           await api.updateProfile({ position: chosen! });
           // Changing position swaps the protocol underneath an existing rehab,
@@ -572,6 +574,133 @@ async function roleScreen(intent: RoleIntent): Promise<void> {
         if (error instanceof api.ApiError && error.status === 409) {
           // The email is already registered, so the sign-in failure was a wrong
           // password rather than a missing account. Say so instead of looping.
+          return signInScreen(
+            "That email already has an account — check the password and try again.",
+          );
+        }
+        fail(error);
+      }
+    })();
+  });
+}
+
+// ------------------------------------------------------------ how old
+/**
+ * The three age groups, and what each one changes about phase one.
+ *
+ * The wording mirrors AGE_RULES in app/data/tailoring.py, which is where the
+ * plan is actually built; this is only the picker's description of it.
+ */
+const AGE_GROUPS = [
+  {
+    key: "youth",
+    label: "Under 18",
+    blurb: "Still growing",
+    changes: "Two sets instead of three, and shorter holds.",
+  },
+  {
+    key: "adult",
+    label: "18–39",
+    blurb: "The standard dose",
+    changes: "Three sets, full reps.",
+  },
+  {
+    key: "senior",
+    label: "40+",
+    blurb: "Recovery takes longer",
+    changes: "No jumping in phase 1. Fewer reps, slower tempo, longer rests.",
+  },
+];
+
+function ageGroupOf(user: api.User | null): string {
+  return user?.profile?.age_group ?? user?.profile?.effective_age_group ?? "adult";
+}
+
+type AgeIntent =
+  | { mode: "signup"; email: string; password: string; position: string }
+  | { mode: "edit" };
+
+/**
+ * Choose an age group. Like the position, a real fork rather than a profile
+ * field: it decides which of the camera-checked moves a player is given in
+ * phase one, and how much of each.
+ */
+function ageScreen(intent: AgeIntent): void {
+  let chosen: string | null = intent.mode === "edit" ? ageGroupOf(state.user) : null;
+
+  const chrome: Chrome =
+    intent.mode === "edit"
+      ? { title: "Your age group", back: () => profileScreen() }
+      : { brand: true };
+
+  shell(
+    `${
+      intent.mode === "signup"
+        ? `<div class="steps"><span class="step done">1 · Position</span>
+             <span class="step on">2 · Age</span>
+             <span class="step">3 · Injury</span></div>`
+        : ""
+    }
+     <h2>How old are you?</h2>
+     <p class="sub">A 16-year-old and a 45-year-old should not get the same dose.
+       Your age group decides which exercises you start with, and how much of each.</p>
+     <div class="role-grid">
+       ${AGE_GROUPS.map(
+         (g) => `<button class="role-card${g.key === chosen ? " on" : ""}" data-key="${g.key}"
+           aria-pressed="${g.key === chosen}">
+           <span class="tick" aria-hidden="true"></span>
+           <span class="role-name">${g.label}</span>
+           <span class="role-blurb">${g.blurb}</span>
+           <span class="role-adds">${g.changes}</span>
+         </button>`,
+       ).join("")}
+     </div>
+     <div class="controls">
+       <button class="primary block" id="continue" ${chosen ? "" : "disabled"}>
+         ${intent.mode === "edit" ? "Save age group" : "Next"}
+       </button>
+     </div>`,
+    chrome,
+  );
+
+  app.querySelectorAll<HTMLButtonElement>(".role-card").forEach((card) => {
+    card.onclick = () => {
+      chosen = card.dataset["key"]!;
+      app.querySelectorAll<HTMLButtonElement>(".role-card").forEach((other) => {
+        const isOn = other === card;
+        other.classList.toggle("on", isOn);
+        other.setAttribute("aria-pressed", String(isOn));
+      });
+      app.querySelector<HTMLButtonElement>("#continue")!.disabled = false;
+    };
+  });
+
+  on("#continue", () => {
+    if (!chosen) return;
+    const button = app.querySelector<HTMLButtonElement>("#continue")!;
+    button.disabled = true;
+    button.textContent = intent.mode === "edit" ? "Saving…" : "Setting up…";
+    void (async () => {
+      try {
+        if (intent.mode === "signup") {
+          await api.register({
+            email: intent.email,
+            password: intent.password,
+            full_name: intent.email.split("@")[0]!,
+            position: intent.position,
+            age_group: chosen!,
+          });
+          return void (await boot());
+        }
+        await api.updateProfile({ age_group: chosen! });
+        // The plan underneath has been rebuilt for this age group. Nothing
+        // logged is touched; show phase one, which is where the difference is.
+        state.protocol = null;
+        state.progress = null;
+        await boot();
+        if (state.episode) void planScreen(PHASE_ORDER[0]);
+      } catch (error) {
+        if (error instanceof api.ApiError && error.status === 409) {
           return signInScreen(
             "That email already has an account — check the password and try again.",
           );
@@ -680,7 +809,8 @@ function injuryScreen(): void {
   const render = (): void => {
     shell(
       `<div class="steps"><span class="step done">1 · Position</span>
-         <span class="step on">2 · Injury</span></div>
+         <span class="step done">2 · Age</span>
+         <span class="step on">3 · Injury</span></div>
        <h2>Where is your injury?</h2>
        <p class="sub">${
          position
@@ -755,8 +885,9 @@ function injuryScreen(): void {
           await startingPhaseScreen({
             episodeId: episode.id,
             steps: `<div class="steps"><span class="step done">1 · Position</span>
-                      <span class="step done">2 · Injury</span>
-                      <span class="step on">3 · Phase</span></div>`,
+                      <span class="step done">2 · Age</span>
+                      <span class="step done">3 · Injury</span>
+                      <span class="step on">4 · Phase</span></div>`,
             intro: `Your programme has four phases. Pick the one you are in now —
               the first if the injury is new.`,
             cta: "Build my plan",
@@ -937,6 +1068,40 @@ function weekStrip(): string {
 }
 
 // -------------------------------------------------------------------- plan
+/**
+ * Why this phase is not the same as the next player's: who it was built for,
+ * the dose reasoning, and what was left out. Only phases the server tailored
+ * carry this; the rest render nothing.
+ */
+function tailoredHtml(phase: api.Phase): string {
+  const t = phase.tailoring;
+  if (!t) return "";
+  const position = POSITIONS.find((p) => p.key === state.user?.profile?.position)?.label;
+  const injury = INJURY_SITES.find((i) => i.key === state.episode?.injury_site)?.label;
+  const chips = [position, injury, `Age ${t.age_label_en}`]
+    .filter(Boolean)
+    .map((text) => `<span class="chip on">${text}</span>`)
+    .join("");
+  return `<section class="panel tailored">
+      <div class="row-between">
+        <span class="label">Built for you</span>
+        <button class="textlink" id="change-age">Change age</button>
+      </div>
+      <div class="chips">${chips}</div>
+      <p class="caption">${t.dose_en}</p>
+      ${
+        t.left_out.length
+          ? `<ul class="leftout">${t.left_out
+              .map(
+                (out) => `<li><b>No ${out.name_en.toLowerCase()}</b>
+                  <span>${out.reason_en}</span></li>`,
+              )
+              .join("")}</ul>`
+          : ""
+      }
+    </section>`;
+}
+
 async function planScreen(shown?: string): Promise<void> {
   if (!state.episode) return injuryScreen();
   if (!state.protocol) {
@@ -997,6 +1162,8 @@ async function planScreen(shown?: string): Promise<void> {
        </div>
      </section>
 
+     ${tailoredHtml(phase)}
+
      <h3>Exercises</h3>
      <div class="stack">
        ${phase.prescriptions
@@ -1012,7 +1179,9 @@ async function planScreen(shown?: string): Promise<void> {
              ${isCurrent ? "" : "disabled"}>
              <span class="rowmark">${complete ? TICK_FILLED : DASH}</span>
              <span class="rowbody"><b>${rx.exercise.name_en}</b>
-               <small>${dose} · ${camera}</small></span>
+               <small>${dose} · ${camera}</small>${
+                 rx.load_note_en ? `<small class="why">${rx.load_note_en}</small>` : ""
+               }</span>
              ${isCurrent ? CHEVRON : ""}
            </button>`;
          })
@@ -1055,6 +1224,7 @@ async function planScreen(shown?: string): Promise<void> {
   app.querySelectorAll<HTMLButtonElement>(".phasetab").forEach((button) => {
     button.onclick = () => void planScreen(button.dataset["phase"]!);
   });
+  on("#change-age", () => ageScreen({ mode: "edit" }));
   on("#move-phase", () => {
     const button = app.querySelector<HTMLButtonElement>("#move-phase")!;
     button.disabled = true;
@@ -1460,6 +1630,25 @@ function summaryScreen(
     )
     .join("");
 
+  // Pogo hops: the springiness numbers. Ground contact is what a physio reads
+  // -- shorter is springier -- and air time says how high each hop went.
+  const avgOf = (key: string): number | null => {
+    const vals = outcome.reps
+      .map((r) => r.metrics[key])
+      .filter((v): v is number => typeof v === "number");
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const contact = avgOf("ground_contact_s");
+  const air = avgOf("flight_time_s");
+  const hopTiming =
+    contact !== null || air !== null
+      ? `<div class="tiles">
+           ${contact !== null ? `<div class="tile"><div class="n">${contact.toFixed(2)}s</div><div class="k">Avg ground contact</div></div>` : ""}
+           ${air !== null ? `<div class="tile"><div class="n">${air.toFixed(2)}s</div><div class="k">Avg air time</div></div>` : ""}
+         </div>
+         <p class="caption">Shorter ground contact means springier hops. Measured from the video, to about 0.03s.</p>`
+      : "";
+
   shell(
     `<div class="result">
        ${progressRing(accuracy, outcome.validReps ? "accuracy" : "no reps")}
@@ -1475,6 +1664,7 @@ function summaryScreen(
        </div>
      </div>
      ${outcome.warnings.length ? `<div class="notice">${outcome.warnings.join(", ")}</div>` : ""}
+     ${hopTiming}
      <h3>Rep by rep</h3>
      <div class="reps">${rows || '<div class="row">No reps detected</div>'}</div>
      <div class="controls stackable">
@@ -1524,11 +1714,17 @@ function summaryScreen(
 
 // ---------------------------------------------------------------- progress
 /**
- * The four phase-one moves -- the only ones the camera has been checked on
+ * The five phase-one moves -- the only ones the camera has been checked on
  * against real video. Accuracy on this screen is taken from these alone, so it
  * never claims accuracy for a move the camera was never checked on.
  */
-const TRACKED_KEYS = new Set(["double_leg_calf_raise", "wall_sit", "split_squat", "glute_bridge"]);
+const TRACKED_KEYS = new Set([
+  "double_leg_calf_raise",
+  "wall_sit",
+  "split_squat",
+  "glute_bridge",
+  "pogo_hops",
+]);
 
 /** A bare checkmark: TICK_FILLED is a filled disc and vanishes on the volt dot. */
 const ROAD_TICK =
@@ -1673,7 +1869,7 @@ async function progressScreen(): Promise<void> {
        <p class="caption">${
          scoredDays.length
            ? `How cleanly your camera-scored sets were done, out of 100.`
-           : `No camera-scored sets yet. Do one of the 4 tracked moves to start this chart.`
+           : `No camera-scored sets yet. Do one of the 5 tracked moves to start this chart.`
        }</p>
        ${lineChart(accuracyPoints)}
      </section>
@@ -1700,7 +1896,7 @@ async function progressScreen(): Promise<void> {
                )
                .join("")}</div>`
            : `<p class="caption">None yet. The camera tracks the calf raise, wall
-                sit, split squat and glute bridge.</p>`
+                sit, split squat, glute bridge and pogo hops.</p>`
        }
      </section>
 
@@ -1902,6 +2098,7 @@ function profileScreen(): void {
   const injury = state.episode
     ? (INJURY_SITES.find((i) => i.key === state.episode!.injury_site)?.label ?? "")
     : "No active injury";
+  const ageLabel = AGE_GROUPS.find((g) => g.key === ageGroupOf(user))?.label ?? "Not set";
 
   const row = (id: string, label: string, detail = "") =>
     `<button class="rowcard" id="${id}">
@@ -1920,6 +2117,7 @@ function profileScreen(): void {
 
      <div class="stack">
        ${row("edit-role", "Playing position", position)}
+       ${row("edit-age", "Age group", ageLabel)}
        ${row("edit-injury", "Injury profile", `${injury}${
          state.episode ? ` · ${state.episode.side} side` : ""
        }`)}
@@ -1934,6 +2132,7 @@ function profileScreen(): void {
   );
 
   on("#edit-role", () => void roleScreen({ mode: "edit" }));
+  on("#edit-age", () => ageScreen({ mode: "edit" }));
   on("#edit-injury", () => injuryScreen());
   on("#about", () => aboutScreen());
   on("#lab", () => void labScreen());

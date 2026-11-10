@@ -12,10 +12,11 @@ from app.services.criteria.engine import PhaseGateResult, evaluate_phase
 
 
 def select_protocol(db: Session, episode: InjuryEpisode) -> Protocol | None:
-    """Pick the programme for this player's position and injury site.
+    """Pick the programme for this player's position, injury site and age group.
 
     The same hamstring tear gets a different programme for a winger than for a
-    centre-back -- 6 positions x 7 injury sites.
+    centre-back, and for a 16-year-old than for a 45-year-old -- 6 positions x
+    7 injury sites x 3 age groups.
     """
     player = episode.player
     if player is None:
@@ -24,6 +25,7 @@ def select_protocol(db: Session, episode: InjuryEpisode) -> Protocol | None:
         select(Protocol)
         .where(Protocol.position == player.position)
         .where(Protocol.injury_site == episode.injury_site)
+        .where(Protocol.age_group == player.effective_age_group)
         .where(Protocol.is_active.is_(True))
         .order_by(Protocol.version.desc())
     ).scalars().first()
@@ -68,7 +70,10 @@ def realign_protocol(db: Session, episode: InjuryEpisode) -> Protocol | None:
 
 
 def realign_active_episodes(db: Session, player_id: int) -> int:
-    """Re-point every open episode after a position change. Returns how many moved."""
+    """Re-point every open episode after a position or age-group change.
+
+    Returns how many moved.
+    """
     episodes = db.execute(
         select(InjuryEpisode)
         .where(InjuryEpisode.player_id == player_id)

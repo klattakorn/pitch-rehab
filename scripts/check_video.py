@@ -64,6 +64,7 @@ FRIENDLY = {
     "pelvic_drop": "hip drop",
     "ankle_dorsiflexion": "ankle bend",
     "heel_raise_ratio": "heel height",
+    "foot_lift": "feet off floor",
     "hold_seconds": "hold",
 }
 

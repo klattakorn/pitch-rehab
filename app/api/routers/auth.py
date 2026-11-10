@@ -40,6 +40,7 @@ def register(payload: RegisterIn, db: DbSession) -> User:
             PlayerProfile(
                 user_id=user.id,
                 position=payload.position or Position.CENTRE_MIDFIELD,
+                age_group=payload.age_group,
                 dominant_foot=payload.dominant_foot,
                 date_of_birth=payload.date_of_birth,
                 height_cm=payload.height_cm,

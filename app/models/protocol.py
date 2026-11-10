@@ -5,7 +5,7 @@ from typing import Any
 from sqlalchemy import JSON, Enum, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.enums import InjurySite, PhaseKey, Position, Side
+from app.core.enums import AgeGroup, InjurySite, PhaseKey, Position, Side
 from app.db.base import Base, TimestampMixin
 
 
@@ -35,12 +35,15 @@ class Protocol(Base, TimestampMixin):
     """One of the 6 x 5 = 30 position/injury programmes."""
 
     __tablename__ = "protocol"
-    __table_args__ = (UniqueConstraint("position", "injury_site", "version"),)
+    __table_args__ = (UniqueConstraint("position", "injury_site", "age_group", "version"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     key: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     position: Mapped[Position] = mapped_column(Enum(Position, native_enum=False), index=True)
     injury_site: Mapped[InjurySite] = mapped_column(Enum(InjurySite, native_enum=False), index=True)
+    age_group: Mapped[AgeGroup] = mapped_column(
+        Enum(AgeGroup, native_enum=False), default=AgeGroup.ADULT, index=True
+    )
     version: Mapped[int] = mapped_column(default=1)
     title_en: Mapped[str] = mapped_column(String(160))
     title_th: Mapped[str] = mapped_column(String(200))
@@ -69,6 +72,10 @@ class ProtocolPhase(Base, TimestampMixin):
     goal_th: Mapped[str | None] = mapped_column(Text())
     min_days: Mapped[int] = mapped_column(default=0)
     sessions_per_week: Mapped[int] = mapped_column(default=4)
+    #: Why this phase looks the way it does for this player: what was left out
+    #: and the dose reasoning. See ``app/data/tailoring.py``. Null when a phase
+    #: is the same for everyone.
+    tailoring: Mapped[dict[str, Any] | None] = mapped_column(JSON())
 
     protocol: Mapped[Protocol] = relationship(back_populates="phases")
     prescriptions: Mapped[list[PhasePrescription]] = relationship(

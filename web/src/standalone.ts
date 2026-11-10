@@ -176,13 +176,39 @@ export function ready(): Promise<void> {
 }
 
 /** What the app currently believes about the player, for choosing a protocol. */
-function playerKey(): string | null {
+function playerKey(): { base: string; age: string } | null {
   const me = RESPONSES["/auth/me"] as Body | undefined;
   const profile = { ...((me?.["profile"] as Body) ?? {}), ...(local.profile ?? {}) };
   const position = profile["position"];
   const episode = (RESPONSES["/injuries?status_filter=active"] as Body[] | undefined)?.[0];
   const site = local.injury?.injury_site ?? episode?.["injury_site"];
-  return position && site ? `${position}|${site}` : null;
+  const age = String(profile["age_group"] ?? profile["effective_age_group"] ?? "adult");
+  return position && site ? { base: `${position}|${site}`, age } : null;
+}
+
+/**
+ * The library's programme for who the player is now, if the library is loaded.
+ *
+ * Age group only changes phase one, so the library holds the youth and senior
+ * variants as that single phase (see `_write_protocols` in
+ * scripts/make_snapshot.py). This puts one back into the adult programme it
+ * belongs to, which is exactly what the server would have sent.
+ */
+function fromLibrary(): (Body & { phases: Body[] }) | undefined {
+  const key = playerKey();
+  if (!key || !library) return undefined;
+  const adult = library[key.base];
+  if (!adult || key.age === "adult") return adult;
+  const variant = library[`${key.base}|${key.age}`] as Body | undefined;
+  const phaseOne = variant?.["phase_one"] as Body | undefined;
+  if (!variant || !phaseOne) return adult;
+  return {
+    ...adult,
+    id: variant["id"],
+    key: variant["key"],
+    age_group: variant["age_group"],
+    phases: adult.phases.map((p) => (p["phase_key"] === phaseOne["phase_key"] ? phaseOne : p)),
+  };
 }
 
 /**
@@ -192,8 +218,7 @@ function playerKey(): string | null {
  * and the only answer if the library never loaded.
  */
 function protocol(id: number): { phases: Body[] } | undefined {
-  const key = playerKey();
-  const chosen = key ? library?.[key] : undefined;
+  const chosen = fromLibrary();
   return chosen ?? (RESPONSES[`/injuries/${id}/protocol`] as { phases: Body[] } | undefined);
 }
 
@@ -208,10 +233,24 @@ function protocol(id: number): { phases: Body[] } | undefined {
  * throwing away the recorded results it exists to show.
  */
 function movedOff(id: number): boolean {
-  const key = playerKey();
-  const chosen = key ? library?.[key] : undefined;
+  const chosen = fromLibrary();
   const recorded = RESPONSES[`/injuries/${id}/protocol`] as Body | undefined;
-  return Boolean(chosen && recorded && chosen["id"] !== recorded["id"]);
+  if (!chosen || !recorded || chosen["id"] === recorded["id"]) return false;
+
+  // A different age group is a different programme by id, but only its
+  // tailored phase differs -- everything else is the recorded programme, and
+  // the recorded results for it are still this player's results. Treating it as
+  // "moved" put a player who is in phase two back at the start of phase one,
+  // with the screen above still saying phase two.
+  const key = playerKey();
+  const sameProgramme =
+    key !== null && `${recorded["position"]}|${recorded["injury_site"]}` === key.base;
+  if (!sameProgramme) return true;
+  const recordedPhase = (
+    RESPONSES["/injuries?status_filter=active"] as Body[] | undefined
+  )?.[0]?.["current_phase"];
+  const phaseNow = local.phase ?? recordedPhase;
+  return chosen.phases.some((p) => p["tailoring"] && p["phase_key"] === phaseNow);
 }
 
 function phaseOf(id: number, key: string): Body | undefined {
@@ -335,6 +374,9 @@ export function handle(path: string, init: RequestInit = {}): Reply {
   if (method === "GET") return get(path, id);
   if (method === "PATCH" && path === "/players/me/profile") {
     local.profile = { ...(local.profile ?? {}), ...body };
+    // The server reports the band the plan is built for alongside the one
+    // picked; a pick made on the phone is both.
+    if (body["age_group"]) local.profile["effective_age_group"] = body["age_group"];
     save(local);
     return ok(local.profile);
   }
@@ -663,7 +705,7 @@ function post(path: string, body: Body, id: number): Reply {
     const side = String(body["side"] ?? "left");
     local.injury = { injury_site: site, side };
     local.phase = null;
-    if (!playerKey() || !library?.[playerKey()!]) {
+    if (!fromLibrary()) {
       local.injury = null;
       return no(
         503,

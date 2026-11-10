@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import DbSession
-from app.core.enums import InjurySite, PhaseKey, Position
+from app.core.enums import AgeGroup, InjurySite, PhaseKey, Position
 from app.data.exercises import EXERCISES_BY_KEY
 from app.data.protocols import POSITION_PROFILES
 from app.models.protocol import Exercise, Protocol, ProtocolPhase
@@ -33,22 +33,31 @@ def list_protocols(
     db: DbSession,
     position: Position | None = None,
     injury_site: InjurySite | None = None,
+    age_group: AgeGroup | None = None,
 ) -> list[Protocol]:
     stmt = select(Protocol).where(Protocol.is_active.is_(True)).order_by(Protocol.key)
     if position:
         stmt = stmt.where(Protocol.position == position)
     if injury_site:
         stmt = stmt.where(Protocol.injury_site == injury_site)
+    if age_group:
+        stmt = stmt.where(Protocol.age_group == age_group)
     return list(db.execute(stmt).scalars())
 
 
 @router.get("/protocols/{position}/{injury_site}", response_model=ProtocolOut)
-def get_protocol(position: Position, injury_site: InjurySite, db: DbSession) -> Protocol:
+def get_protocol(
+    position: Position,
+    injury_site: InjurySite,
+    db: DbSession,
+    age_group: AgeGroup = AgeGroup.ADULT,
+) -> Protocol:
     protocol = (
         db.execute(
             select(Protocol)
             .where(Protocol.position == position)
             .where(Protocol.injury_site == injury_site)
+            .where(Protocol.age_group == age_group)
             .where(Protocol.is_active.is_(True))
             .order_by(Protocol.version.desc())
             .options(
