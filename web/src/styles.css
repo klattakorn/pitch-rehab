@@ -3535,3 +3535,13 @@ main h3 {
     padding-right: max(var(--s4), calc((100% - 620px) / 2));
   }
 }
+/* A screen slides in from 22px to the right when you move to a tab further
+   right. For those 300ms the page was wider than the phone, the browser let it
+   scroll sideways, and the bottom bar jumped -- only ever moving right, because
+   overflow to the left cannot be scrolled to. Clip it: "clip", not "hidden",
+   so nothing becomes a scroll container and sticky elements keep working. */
+html,
+body,
+#app {
+  overflow-x: clip;
+}
