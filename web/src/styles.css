@@ -3244,3 +3244,257 @@ button.ghost:active:not(:disabled),
   grid-column: auto;
   grid-row: auto;
 }
+
+
+/* ==========================================================================
+   MATCHDAY -- the look, layered over the system above.
+
+   One idea: a floodlit pitch at night, shown the way a sports broadcast shows
+   it. Faint pitch markings behind everything, angled "score graphic" corners
+   on the cards, a slanted volt tag on every label, a floating tab bar with a
+   marker that slides between tabs. The accent rules above still hold -- volt
+   marks what you can act on; it is never a background wash.
+   ========================================================================== */
+
+/* --- the pitch behind everything --------------------------------------- */
+body {
+  background:
+    radial-gradient(90% 55% at 15% -10%, rgba(216, 255, 62, 0.07), transparent 60%),
+    radial-gradient(80% 50% at 110% 0%, rgba(80, 140, 255, 0.07), transparent 60%),
+    var(--page);
+  background-attachment: fixed;
+}
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.05;
+  /* halfway line, centre circle, both penalty boxes */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 160' preserveAspectRatio='none'%3E%3Cg fill='none' stroke='white' stroke-width='0.5'%3E%3Crect x='4' y='4' width='92' height='152'/%3E%3Cpath d='M4 80H96'/%3E%3Ccircle cx='50' cy='80' r='14'/%3E%3Crect x='26' y='4' width='48' height='22'/%3E%3Crect x='26' y='134' width='48' height='22'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 100% 100%;
+}
+/* Floodlight: a slow sweep of light across the pitch. Barely there. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20% -50%;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(100deg, transparent 40%, rgba(255, 255, 255, 0.025) 50%, transparent 60%);
+  animation: floodlight 14s ease-in-out infinite alternate;
+}
+@keyframes floodlight {
+  from {
+    transform: translateX(-25%);
+  }
+  to {
+    transform: translateX(25%);
+  }
+}
+
+/* --- cards: a broadcast "score graphic" corner ------------------------- */
+.panel,
+.rowcard,
+.tile,
+ul.criteria li {
+  border-radius: 6px var(--r-lg) 6px var(--r-lg);
+}
+.panel {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 40%),
+    var(--card);
+}
+/* a thin light across the top edge, like glass catching the floodlights */
+.panel::after {
+  content: "";
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: -1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+}
+.panel.accent {
+  border-left-width: 1px;
+  background:
+    repeating-linear-gradient(-55deg, rgba(216, 255, 62, 0.05) 0 2px, transparent 2px 9px) left / 10px 100% no-repeat,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 40%),
+    var(--card);
+  box-shadow: inset 3px 0 0 var(--volt);
+}
+
+/* --- labels: a slanted tag, the way a broadcast names a segment -------- */
+.label {
+  position: relative;
+  padding-left: 14px;
+}
+.label::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 8px;
+  height: 10px;
+  background: var(--volt);
+  transform: translateY(-50%) skewX(-20deg);
+  border-radius: 1px;
+}
+h3 {
+  font-family: var(--display);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* --- primary button: a sheen that runs across on press/hover ----------- */
+button.primary {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow:
+    0 10px 30px -12px rgba(216, 255, 62, 0.55),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.18);
+}
+button.primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(110deg, transparent 35%, rgba(255, 255, 255, 0.45) 50%, transparent 65%);
+  transform: translateX(-120%);
+  transition: transform 0.6s var(--ease);
+}
+button.primary:not(:disabled):active::after {
+  transform: translateX(120%);
+  transition-duration: 0.35s;
+}
+@media (hover: hover) {
+  button.primary:not(:disabled):hover::after {
+    transform: translateX(120%);
+  }
+}
+
+/* --- the tab bar floats, and a marker slides to the active tab -------- */
+.tabbar {
+  left: max(12px, env(safe-area-inset-left));
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  padding: 6px;
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  background: color-mix(in srgb, #0d1015 88%, transparent);
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.8);
+}
+main.with-tabs {
+  padding-bottom: calc(var(--tabbar-h) + var(--s7) + env(safe-area-inset-bottom));
+}
+.tab.on::before {
+  display: none;
+}
+.tab {
+  z-index: 1;
+}
+.tab-ink {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 6px;
+  width: calc((100% - 12px - 4 * var(--s1)) / 5);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(216, 255, 62, 0.16), rgba(216, 255, 62, 0.05));
+  box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.35);
+  transform: translateX(calc(var(--tab-index, 0) * (100% + var(--s1))));
+  transition: transform 0.45s cubic-bezier(0.34, 1.4, 0.5, 1);
+}
+
+/* --- Home hero: the scoreboard, the ball, the streak ------------------ */
+.plan-hero {
+  border-radius: 6px 26px 6px 26px;
+}
+.hero-ball {
+  /* In the top bar beside the bell: the one place it covers nothing. Flick it. */
+  flex: none;
+  width: 52px;
+  height: 52px;
+  margin-right: var(--s2);
+  touch-action: none;
+  filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.55));
+}
+.ball3d-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: grab;
+}
+.streak {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--s3);
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--inset);
+  color: var(--ink-2);
+  font-size: var(--t-small);
+}
+.streak .flame {
+  width: 18px;
+  height: 18px;
+  color: var(--ink-3);
+}
+.streak b {
+  font-family: var(--display);
+  font-size: 22px;
+  line-height: 1;
+  color: var(--ink);
+}
+.streak.on .flame {
+  color: var(--fix);
+  animation: flicker 1.6s ease-in-out infinite;
+}
+.streak.on b {
+  color: var(--fix);
+}
+@keyframes flicker {
+  0%,
+  100% {
+    transform: scale(1) rotate(-3deg);
+  }
+  50% {
+    transform: scale(1.12) rotate(3deg);
+  }
+}
+
+/* --- the rep count lands like a goal on the scoreboard ---------------- */
+.repcount .now {
+  text-shadow: 0 0 28px rgba(216, 255, 62, 0.35);
+}
+
+/* --- focus stays visible on every control ----------------------------- */
+:where(button, [role="tab"], input, select, a):focus-visible {
+  outline: 2px solid var(--volt);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::after,
+  .streak.on .flame {
+    animation: none;
+  }
+  .tab-ink {
+    transition: none;
+  }
+}
+/* A disabled button must not look lit. */
+button.primary:disabled {
+  box-shadow: none;
+}
+/* Section headings: broadcast caps, big enough to read at arm's length. */
+main h3 {
+  font-size: var(--t-small);
+  letter-spacing: 0.14em;
+  color: var(--ink-2);
+}

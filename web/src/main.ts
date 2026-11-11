@@ -191,6 +191,7 @@ function header(chrome: Chrome): string {
         </div>
         <div class="spacer"></div>
         ${state.online ? "" : `<span class="pill bad">Not connected</span>`}
+        <div class="hero-ball" id="hero-ball" aria-hidden="true"></div>
         <button class="iconbtn ghosted" id="bell" aria-label="Notifications">
           ${BELL}<span class="dot-badge"></span></button>
       </header>`;
@@ -212,10 +213,14 @@ function header(chrome: Chrome): string {
   return "";
 }
 
+/** Where the tab marker sits: drawn at the old tab, then slid to the new one. */
+let inkAt = 0;
+
 function tabbar(active: Tab | undefined): string {
   if (!active) return "";
   return `
-    <nav class="tabbar" aria-label="Sections">
+    <nav class="tabbar" aria-label="Sections" style="--tab-index:${inkAt}">
+      <span class="tab-ink" aria-hidden="true"></span>
       ${TABS.map(
         (t) => `<button class="tab${t.key === active ? " on" : ""}" data-tab="${t.key}"
           ${t.key === active ? 'aria-current="page"' : ""}>
@@ -267,6 +272,14 @@ function shell(body: string, chrome: Chrome = {}): void {
   // re-renders in place (loading, then content) should not flicker it.
   if (arrive) app.querySelector(".tab.on")?.classList.add("arrive");
   lastTab = chrome.tab;
+  // The bar is redrawn with every screen, so the marker starts where the last
+  // tab was and moves on the next frame -- that is what makes it slide.
+  const nav = app.querySelector<HTMLElement>(".tabbar");
+  const to = TABS.findIndex((t) => t.key === chrome.tab);
+  if (nav && to >= 0) {
+    setTimeout(() => nav.style.setProperty("--tab-index", String(to)), 20);
+    inkAt = to;
+  }
 
   if (chrome.back) on("#nav-back", chrome.back);
   app.querySelectorAll<HTMLButtonElement>(".tab").forEach((button) => {
@@ -1004,6 +1017,7 @@ function homeScreen(): void {
            ${bar(percent)}
            ${week ? `<div class="caption week">${week}</div>` : ""}
          </div>
+         ${streakHtml()}
        </section>
 
        <section class="panel">
@@ -1053,6 +1067,7 @@ function homeScreen(): void {
   on("#start", () => void planScreen());
 
   const hero = app.querySelector<HTMLElement>(".plan-hero");
+  mountHeroBall();
   if (hero) {
     tilt(hero);
     // The hero arrives as one scene: the photo slides in from its side, the
@@ -1070,6 +1085,47 @@ function homeScreen(): void {
 /** A tile counts up to a real figure, or shows a dash. It never counts up to nothing. */
 function tileValue(value: number, suffix = ""): string {
   return `<span data-count="${value}" data-suffix="${suffix}">0${suffix}</span>`;
+}
+
+/** The 3D ball, loaded only when Home is shown (three.js is its own chunk). */
+function mountHeroBall(): void {
+  const host = app.querySelector<HTMLElement>("#hero-ball");
+  if (!host) return;
+  void import("./fx/ball3d")
+    .then(({ mountBall3D }) => {
+      if (host.isConnected) mountBall3D(host);
+    })
+    .catch(() => {});
+}
+
+/**
+ * Days in a row with a finished session, counting back from today (or from
+ * yesterday, so a streak is not "lost" before today's session is done).
+ */
+function streakDays(): number {
+  const done = new Set(
+    state.sessions
+      .filter((s) => s.status === "completed")
+      .map((s) => new Date(s.started_at).toDateString()),
+  );
+  const day = new Date();
+  if (!done.has(day.toDateString())) day.setDate(day.getDate() - 1);
+  let n = 0;
+  while (done.has(day.toDateString())) {
+    n++;
+    day.setDate(day.getDate() - 1);
+  }
+  return n;
+}
+
+function streakHtml(): string {
+  const n = streakDays();
+  return `<div class="streak${n ? " on" : ""}">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="flame"><path fill="currentColor" d="M12 2c.6 3.2-1 5-2.4 6.6C8.2 10.2 7 11.6 7 14a5 5 0 0 0 10 0c0-1.8-.8-3.2-1.8-4.3.1 1.4-.5 2.4-1.5 2.9.4-2.9-.5-6-1.7-10.6z"/></svg>
+      <b>${n}</b><span>${n === 1 ? "day" : "days"} in a row${
+        n ? "" : " · train today to start a streak"
+      }</span>
+    </div>`;
 }
 
 /** Which days this week already have a completed session on them. */
