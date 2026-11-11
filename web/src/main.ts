@@ -13,6 +13,7 @@ import "./styles.css";
 
 import * as api from "./api";
 import type { Episode, Gate, Phase, Prescription } from "./api";
+import type { Exercise } from "./pose/rules";
 import { INJURY_SITES, bodyMapHtml } from "./bodymap";
 import { lineChart, meterRow } from "./charts";
 import {
@@ -2099,9 +2100,153 @@ async function progressScreen(): Promise<void> {
 }
 
 // -------------------------------------------------------------------- test
-function testScreen(): void {
+/**
+ * Two tabs. "Phase tests" are the ones the programme sets -- they decide when
+ * the player moves on, so every one of them says how to pass it and has a
+ * button that does it. "Your targets" are the ones the player wrote. Both
+ * count; they are kept apart so a player can always tell which is which.
+ */
+type TestTab = "phase" | "mine";
+let testTab: TestTab = "phase";
+
+/** Exercises, loaded once: the camera tests need to know which one to open. */
+let exerciseList: Exercise[] | null = null;
+/** When the Test tab last asked for the protocol, so a failure cannot loop. */
+let protocolTriedAt = 0;
+/** Shown once at the top of the Test tab, after something was saved. */
+let testNotice = "";
+
+/** What to say after a save: on the demo copy nothing is judged until a laptop is back. */
+function savedNotice(what: string): string {
+  return api.standaloneActive()
+    ? `${what} saved on this phone. Your tests update when you connect to the laptop.`
+    : `${what} saved. Your tests are up to date.`;
+}
+
+/** How a phase test is passed, and the one thing the player can do about it. */
+interface HowTo {
+  group: "camera" | "feel" | "measure" | "keep" | "physio";
+  hint: string;
+  action?: { label: string; run: () => void };
+}
+
+const GROUP_TITLES: Record<HowTo["group"], string> = {
+  camera: "Do with the camera",
+  feel: "Tell us how it feels",
+  measure: "Measure and enter",
+  keep: "Keeps itself up to date",
+  physio: "Your physio",
+};
+const GROUP_ORDER: HowTo["group"][] = ["camera", "feel", "measure", "keep", "physio"];
+
+/** The exercise a camera test is read from, if there is one. */
+function exerciseFor(c: api.CriterionResult, cat: api.AuthorableCatalogue): Exercise | null {
+  const list = exerciseList ?? [];
+  const fromKey = splitMetric(c.metric, cat).exerciseKey;
+  if (fromKey) return list.find((e) => e.key === fromKey) ?? null;
+  // pose.* metrics are written by whichever exercise emits them.
+  return list.find((e) => e.pose_rule?.emit?.some((m) => m.as_key === c.metric)) ?? null;
+}
+
+function howToPass(c: api.CriterionResult, cat: api.AuthorableCatalogue): HowTo {
+  const m = c.metric;
+  if (m.startsWith("manual.")) {
+    return { group: "physio", hint: "Your physio checks you and signs this off." };
+  }
+  if (m.startsWith("pro.") || m === "session.pain_free_days") {
+    return {
+      group: "feel",
+      hint:
+        m === "session.pain_free_days"
+          ? "Log your pain each day — pain-free days count here."
+          : "Log how your injury feels. Takes ten seconds.",
+      action: { label: "Log", run: () => painScreen() },
+    };
+  }
+  if (m.startsWith("test.")) {
+    return {
+      group: "measure",
+      hint: "A quick test you do and type in.",
+      action: { label: "Enter", run: () => resultScreen(c) },
+    };
+  }
+  if (m === "session.mean_form_score") {
+    return {
+      group: "camera",
+      hint: "Your average form score across camera sets. Do today's plan.",
+      action: { label: "Plan", run: () => void planScreen() },
+    };
+  }
+  const exercise = exerciseFor(c, cat);
+  if (exercise?.pose_rule && (m.startsWith("pose.") || m.startsWith("session."))) {
+    return {
+      group: "camera",
+      hint: `Do a set of ${exercise.name_en.toLowerCase()} with the camera.`,
+      action: { label: "Start", run: () => startForCriterion(c, exercise) },
+    };
+  }
+  if (m === "session.adherence_pct") {
+    return {
+      group: "keep",
+      hint: "Goes up as you finish your planned sessions.",
+      action: { label: "Plan", run: () => void planScreen() },
+    };
+  }
+  return { group: "keep", hint: "Counts up by itself." };
+}
+
+/** Open the camera on the exercise a phase test reads from. */
+function startForCriterion(c: api.CriterionResult, exercise: Exercise): void {
+  sessionOrigin = () => testScreen("phase");
+  // The dose the plan prescribes, if this phase prescribes the exercise.
+  const rx = state.phase?.prescriptions.find((p) => p.exercise.key === exercise.key);
+  if (rx) return howToScreen(rx);
+  if (splitMetric(c.metric, state.catalogue ?? { groups: [], metrics: [], exercises: [] }).exerciseKey) {
+    return void startTargetSession(c);
+  }
+  const hold = exercise.pose_rule?.mode === "hold";
+  howToScreen({
+    id: 0,
+    order_index: 0,
+    sets: 1,
+    reps: hold ? null : 10,
+    hold_seconds: hold ? (exercise.pose_rule?.hold_target_s ?? 30) : null,
+    rest_seconds: null,
+    tempo: null,
+    side_mode: "bilateral",
+    exercise,
+  });
+}
+
+function testScreen(tab?: TestTab): void {
+  if (tab) testTab = tab;
   const gate = state.gate;
   if (!gate) return homeScreen();
+  // The exercises say which one a camera test opens; the protocol names the
+  // next phase on the advance button. Loaded once, then the screen redraws.
+  const wantProtocol = !state.protocol && state.episode && Date.now() - protocolTriedAt > 5000;
+  if (!exerciseList || wantProtocol) {
+    protocolTriedAt = Date.now();
+    shell(`<div class="loading" id="tests-loading">Loading your tests…</div>`, {
+      tab: "test",
+      title: "Your tests",
+    });
+    void Promise.all([
+      exerciseList ? Promise.resolve(exerciseList) : api.listExercises().catch(() => []),
+      state.protocol || !state.episode
+        ? Promise.resolve(state.protocol)
+        : api.protocolFor(state.episode.id).catch(() => null),
+    ]).then(([list, protocol]) => {
+      exerciseList = list;
+      // A protocol that would not load still leaves a usable screen, and is
+      // not asked for again straight away (protocolTriedAt), so this cannot loop.
+      state.protocol = protocol ?? state.protocol;
+      // Only if the player is still waiting here: they may have tapped another
+      // tab while this loaded, and must not be pulled back.
+      if (document.getElementById("tests-loading")) testScreen();
+    });
+    return;
+  }
   // Both are already loaded by `refresh`; the empty fallbacks only matter on the
   // very first paint, where they simply mean "no pencils yet".
   const cat = state.catalogue ?? { groups: [], metrics: [], exercises: [] };
@@ -2109,8 +2254,8 @@ function testScreen(): void {
   const mark = (c: api.CriterionResult) =>
     c.status === "pass" ? TICK_FILLED : c.status === "fail" ? CROSS : DASH;
 
-  /** "1.9 / 2 NPRS". A missing reading is an em dash, so the target still shows —
-   *  the number you have to beat is worth knowing before you have a number. */
+  /** "1.9 / 2 out of 10". A missing reading is an em dash, so the target still
+   *  shows — the number you have to beat is worth knowing before you have one. */
   const value = (c: api.CriterionResult) => {
     const unit = friendlyUnit(c.unit) ? ` ${friendlyUnit(c.unit)}` : "";
     const observed = c.observed == null ? "—" : round(c.observed);
@@ -2119,126 +2264,147 @@ function testScreen(): void {
   };
 
   /* The engine writes "Not measured yet" as the detail, which the value column
-     already says with its em dash. Printing both put the same fact on the row
-     twice and made every unmeasured row taller than a measured one. */
-  const note = (c: api.CriterionResult): string => {
+     already says with its em dash. */
+  const note = (c: api.CriterionResult, extra = ""): string => {
     const parts: string[] = [];
-    if (c.detail_en && c.detail_en.toLowerCase() !== "not measured yet") {
-      parts.push(c.detail_en);
-    }
+    if (extra) parts.push(extra);
+    if (c.detail_en && c.detail_en.toLowerCase() !== "not measured yet") parts.push(c.detail_en);
     if (!c.required) parts.push("optional");
     return parts.join(" · ");
   };
 
-  const row = (c: api.CriterionResult) => {
-           // Editable when the metric is one the builder understands. Clinician
-           // sign-off never is, which is the point of it.
-           const editable = c.source !== "manual" && splitMetric(c.metric, cat).base !== null;
-           const mine = yours.has(c.key);
-           const detail = note(c);
-           const chips =
-             (c.source === "pose" ? `<span class="src">${CAMERA_ICON} camera</span>` : "") +
-             (mine ? `<span class="src yours">yours</span>` : "");
-           // A fixed three-row grid, so a long label cannot make one row twice
-           // the height of its neighbour. Label, then how close you are, then
-           // whatever else is worth saying.
-           return `<li class="${c.required ? "" : "optional"} ${c.status}${
-             mine ? " mine" : ""
-           }">
-             <span class="crit-mark">${mark(c)}</span>
-             <span class="crit-label">${c.label_en}</span>
-             ${
-               editable
-                 ? `<button class="editbtn" data-edit="${c.key}"
-                      aria-label="Change the target for ${c.label_en}">${PENCIL}</button>`
-                 : `<span class="crit-spacer" aria-hidden="true"></span>`
-             }
-             <span class="crit-meter">
-               ${
-                 // The meter answers "how close am I", so it only belongs on the
-                 // rows where there is still a gap. On a passed criterion it is
-                 // a full bar saying nothing, and it pushed every cleared row
-                 // 26px taller than it needed to be.
-                 c.status === "pass"
-                   ? ""
-                   : `<span class="bar slim ${c.status}">
-                        <i style="width:0" data-width="${Math.round(
-                          Math.max(0, Math.min(1, c.progress)) * 100,
-                        )}"></i></span>`
-               }
-               <span class="crit-val">${value(c)}</span>
-             </span>
-             ${detail || chips ? `<span class="crit-note">${chips}${detail}</span>` : ""}
-           </li>`;
+  const row = (c: api.CriterionResult, how?: HowTo) => {
+    const editable = c.source !== "manual" && splitMetric(c.metric, cat).base !== null;
+    const mine = yours.has(c.key);
+    const detail = note(c, how && c.status !== "pass" ? how.hint : "");
+    const chips = c.source === "pose" ? `<span class="src">${CAMERA_ICON} camera</span>` : "";
+    const action =
+      how?.action && c.status !== "pass"
+        ? `<button class="crit-do" data-do="${c.key}">${how.action.label}</button>`
+        : "";
+    const tail = mine
+      ? editable
+        ? `<button class="editbtn" data-edit="${c.key}"
+             aria-label="Change the target for ${c.label_en}">${PENCIL}</button>`
+        : `<span class="crit-spacer" aria-hidden="true"></span>`
+      : action || `<span class="crit-spacer" aria-hidden="true"></span>`;
+    return `<li class="${c.required ? "" : "optional"} ${c.status}${mine ? " mine" : ""}">
+      <span class="crit-mark">${mark(c)}</span>
+      <span class="crit-label">${c.label_en}</span>
+      ${tail}
+      <span class="crit-meter">
+        ${
+          c.status === "pass"
+            ? ""
+            : `<span class="bar slim ${c.status}">
+                 <i style="width:0" data-width="${Math.round(
+                   Math.max(0, Math.min(1, c.progress)) * 100,
+                 )}"></i></span>`
+        }
+        <span class="crit-val">${value(c)}</span>
+      </span>
+      ${detail || chips ? `<span class="crit-note">${chips}${detail}</span>` : ""}
+    </li>`;
   };
 
-  /* Required first -- those block. The clock goes after them: it is required,
-     but it needs nothing from the player, so it should not sit above the things
-     that do. Optional last. */
-  /* This screen shows what the player wrote for themselves and nothing else.
-     The clinical criteria -- pain scales, symmetry indices, adherence -- still
-     run, still gate the phase, and are still the reason any of this means
-     anything; they are simply not what a player came here to do.
-
-     They have to remain findable, or the app can refuse to advance for a reason
-     that exists nowhere on screen. The bell carries them: it names what is
-     outstanding rather than counting it. If that ever stops being true, this
-     screen becomes a dead end again. */
+  const phaseTests = gate.criteria.filter((c) => !yours.has(c.key));
   const mine = gate.criteria.filter((c) => yours.has(c.key));
+  const required = gate.criteria.filter((c) => c.required);
+  const passedCount = required.filter((c) => c.status === "pass").length;
+  const nextName = gate.next_phase ? phaseName(gate.next_phase) : null;
 
-  /* Which targets the camera can actually score. A target on a hand-logged
-     drill has no rule to score against, so offering a session for it would open
-     a camera that could never count anything. */
+  // The one button this whole tab exists for. Lit only when every required
+  // test -- the programme's and the player's -- is passed; the server re-checks.
+  const advanceHtml = `<section class="panel advance${gate.passed ? " ready" : ""}">
+      <div class="row-between">
+        <div>
+          <span class="label">${passedCount} of ${required.length} required tests passed</span>
+          <div class="headline">${
+            gate.passed
+              ? nextName
+                ? `Ready for ${nextName}`
+                : "Ready to finish your rehab"
+              : "Pass every required test to move on"
+          }</div>
+        </div>
+        ${progressRing(Math.round((passedCount / Math.max(1, required.length)) * 100), "passed", "sm")}
+      </div>
+      <button class="primary block" id="advance" ${gate.passed ? "" : "disabled"}>${
+        nextName ? `Advance to ${nextName}` : "Finish rehab"
+      }</button>
+    </section>`;
+
+  const groups = new Map<HowTo["group"], { c: api.CriterionResult; how: HowTo }[]>();
+  for (const c of phaseTests) {
+    const how = howToPass(c, cat);
+    groups.set(how.group, [...(groups.get(how.group) ?? []), { c, how }]);
+  }
+  const actions = new Map<string, () => void>();
+  const phaseHtml = GROUP_ORDER.filter((g) => groups.has(g))
+    .map((g) => {
+      const items = groups.get(g)!;
+      // Failing first inside a group: those are the ones to do something about.
+      items.sort((a, b) => Number(a.c.status === "pass") - Number(b.c.status === "pass"));
+      for (const { c, how } of items) if (how.action) actions.set(c.key, how.action.run);
+      return `<h3>${GROUP_TITLES[g]}</h3>
+        <ul class="criteria">${items.map(({ c, how }) => row(c, how)).join("")}</ul>`;
+    })
+    .join("");
+
   const scorable = mine.filter((c) => splitMetric(c.metric, cat).exerciseKey !== null);
-
-  shell(
-    `<h3>Your targets</h3>
+  const mineHtml = `
      ${
        mine.length
-         ? `<ul class="criteria">${mine.map(row).join("")}</ul>`
-         : `<p class="sub tiny">Nothing yet. Pick an exercise and a number — it
-              counts toward this phase like anything else here.</p>`
+         ? `<ul class="criteria">${mine.map((c) => row(c)).join("")}</ul>`
+         : `<p class="sub tiny">Nothing yet. Pick an exercise and a number — it counts
+              toward this phase like the phase tests do.</p>`
      }
-
      <button class="addbtn" id="add-test">
        <span class="plus" aria-hidden="true">+</span>
        <span class="rowbody"><b>Add a target</b>
          <small>Choose an exercise, then reps or seconds</small></span>
      </button>
-
      ${
        scorable.length
          ? `<div class="controls">
               <button class="primary block" id="start-target">Start a session</button>
             </div>`
-         : /* Targets that exist but cannot be started. A watch reading or a
-              clinician's measurement is not something the camera can open, and
-              saying nothing here leaves a screen whose only working button adds
-              another target that will not start either. */
-           mine.length
-           ? `<div class="notice">These are read from your sessions and your
-                watch rather than started on their own. Add a target on an
-                exercise to score one with the camera.</div>`
+         : mine.length
+           ? `<div class="notice">These are read from your sessions rather than
+                started on their own. Add a target on an exercise to score one with
+                the camera.</div>`
            : ""
-     }
+     }`;
 
-
-     ${
-       // Says the gate is clear, and nothing more. Moving between phases lives
-       // on the Plan screen, so that one screen owns it -- this screen is for
-       // the tests themselves.
-       gate.passed
-         ? `<div class="notice good">All tests passed. Open Plan to move to the
-              next phase.</div>`
-         : ""
-     }`,
+  const notice = testNotice;
+  testNotice = "";
+  shell(
+    `${notice ? `<div class="notice good">${notice}</div>` : ""}
+     ${advanceHtml}
+     <div class="phasetabs two" role="tablist">
+       <button class="phasetab${testTab === "phase" ? " on" : ""}" data-testtab="phase"
+         role="tab" aria-selected="${testTab === "phase"}">Phase tests</button>
+       <button class="phasetab${testTab === "mine" ? " on" : ""}" data-testtab="mine"
+         role="tab" aria-selected="${testTab === "mine"}">Your targets${
+           mine.length ? ` (${mine.length})` : ""
+         }</button>
+     </div>
+     ${testTab === "phase" ? phaseHtml || `<p class="sub tiny">This phase has no tests.</p>` : mineHtml}`,
     { tab: "test", title: "Your tests", back: () => homeScreen() },
   );
 
+  // Not "data-tab": the bottom navigation bar already uses that attribute.
+  app.querySelectorAll<HTMLButtonElement>("[data-testtab]").forEach((button) => {
+    button.onclick = () => testScreen(button.dataset["testtab"] as TestTab);
+  });
+  app.querySelectorAll<HTMLButtonElement>("[data-do]").forEach((button) => {
+    button.onclick = (event) => {
+      event.stopPropagation();
+      actions.get(button.dataset["do"]!)?.();
+    };
+  });
   on("#add-test", () => void addTargetScreen());
   on("#start-target", () => {
-    // One target, one tap. Several, and the player has to say which -- picking
-    // for them would guess at the thing they opened this screen to choose.
     if (scorable.length === 1 && scorable[0]) return void startTargetSession(scorable[0]);
     pickTargetScreen(scorable);
   });
@@ -2247,6 +2413,191 @@ function testScreen(): void {
       event.stopPropagation();
       void editCriterionScreen(button.dataset["edit"]!);
     };
+  });
+  on("#advance", () => {
+    const button = app.querySelector<HTMLButtonElement>("#advance")!;
+    button.disabled = true;
+    button.textContent = "Checking your tests…";
+    void (async () => {
+      try {
+        // The server re-checks every test and records the phase as cleared.
+        const result = await api.advancePhase(state.episode!.id);
+        state.protocol = null;
+        state.progress = null;
+        await boot();
+        if (result.advanced) {
+          setTimeout(() => celebrate(), 300);
+          await planScreen();
+        } else {
+          testScreen("phase");
+        }
+      } catch (error) {
+        fail(error, () => testScreen("phase"));
+      }
+    })();
+  });
+}
+
+// ------------------------------------------------------------- log pain
+/** 0-10, as buttons: a slider at arm's length on a phone is a guess. */
+function scaleHtml(name: string, label: string, help: string, max = 10): string {
+  const values = Array.from({ length: max + 1 }, (_, i) => i);
+  return `<section class="panel">
+      <span class="label">${label}</span>
+      <p class="sub tiny">${help}</p>
+      <div class="scale" data-scale="${name}" role="radiogroup" aria-label="${label}">
+        ${values
+          .map(
+            (v) => `<button class="scalebtn" data-v="${v}" role="radio"
+              aria-checked="false">${v}</button>`,
+          )
+          .join("")}
+      </div>
+    </section>`;
+}
+
+function painScreen(): void {
+  if (!state.episode) return homeScreen();
+  const picked: Record<string, number> = {};
+  shell(
+    `<p class="sub">0 means no pain at all, 10 the worst you can imagine.</p>
+     ${scaleHtml("pain_rest", "Pain at rest", "Sitting or lying, not moving the injury.")}
+     ${scaleHtml("pain_activity", "Pain while training", "During your exercises today.")}
+     ${scaleHtml("pain_next_morning", "Pain the next morning", "Optional: how it felt when you woke up.")}
+     <div class="controls">
+       <button class="primary block" id="save-pain" disabled>Save</button>
+     </div>
+     <p class="sub center" id="pain-note"></p>`,
+    { title: "How does it feel?", back: () => testScreen("phase") },
+  );
+  const save = app.querySelector<HTMLButtonElement>("#save-pain")!;
+  app.querySelectorAll<HTMLElement>("[data-scale]").forEach((scale) => {
+    const name = scale.dataset["scale"]!;
+    scale.querySelectorAll<HTMLButtonElement>(".scalebtn").forEach((btn) => {
+      btn.onclick = () => {
+        picked[name] = Number(btn.dataset["v"]);
+        scale.querySelectorAll<HTMLButtonElement>(".scalebtn").forEach((other) => {
+          const on = other === btn;
+          other.classList.toggle("on", on);
+          other.setAttribute("aria-checked", String(on));
+        });
+        // The two the server needs; next morning is optional.
+        save.disabled = picked["pain_rest"] === undefined || picked["pain_activity"] === undefined;
+      };
+    });
+  });
+  on("#save-pain", () => {
+    save.disabled = true;
+    save.textContent = "Saving…";
+    const note = app.querySelector<HTMLElement>("#pain-note")!;
+    void (async () => {
+      try {
+        await api.logPain(state.episode!.id, picked);
+        await refresh();
+        testNotice = savedNotice("Pain");
+        testScreen("phase");
+      } catch (error) {
+        save.disabled = false;
+        save.textContent = "Save";
+        note.textContent =
+          error instanceof api.ApiError ? error.message : "Couldn't save that. Please try again.";
+      }
+    })();
+  });
+}
+
+// --------------------------------------------------------- enter a result
+/**
+ * Type in a measured test: a hop distance, a strength reading, a jump. A test
+ * judged on both legs (most of them: "injured leg at least 90% of the other")
+ * asks for each leg, because the comparison is the whole point of it.
+ */
+function resultScreen(c: api.CriterionResult): void {
+  if (!state.episode) return homeScreen();
+  const cat = state.catalogue ?? { groups: [], metrics: [], exercises: [] };
+  const item = cat.metrics.find((m) => m.key === c.metric);
+  const unitCode = item?.unit ?? c.unit ?? "";
+  const unit = friendlyUnit(unitCode);
+  const step = item?.step ?? 0.1;
+  const injured = state.episode.side;
+  const bothLegs = c.target_type === "lsi";
+  const other = injured === "left" ? "right" : injured === "right" ? "left" : null;
+  // An injury on both legs has no healthy side: enter each leg, labelled as such.
+  const fields: { id: string; label: string; side: string | null }[] = bothLegs
+    ? other
+      ? [
+          { id: "v-injured", label: `Injured leg (${injured})`, side: injured },
+          { id: "v-other", label: `Other leg (${other})`, side: other },
+        ]
+      : [
+          { id: "v-left", label: "Left leg", side: "left" },
+          { id: "v-right", label: "Right leg", side: "right" },
+        ]
+    : [{ id: "v-one", label: item?.label_en ?? c.label_en, side: null }];
+
+  shell(
+    `<p class="sub">${c.label_en}</p>
+     ${item?.help_en ? `<div class="notice">${item.help_en}</div>` : ""}
+     ${fields
+       .map(
+         (f) => `<section class="panel">
+           <span class="label">${f.label}</span>
+           <div class="numberbox">
+             <input id="${f.id}" type="number" inputmode="decimal" step="${step}" min="0"
+               placeholder="0" />
+             ${unit ? `<span class="unit">${unit}</span>` : ""}
+           </div>
+         </section>`,
+       )
+       .join("")}
+     ${
+       bothLegs
+         ? `<p class="sub tiny">Test both legs the same way. The app compares them
+              for you.</p>`
+         : ""
+     }
+     <div class="controls">
+       <button class="primary block" id="save-result" disabled>Save result</button>
+     </div>
+     <p class="sub center" id="result-note"></p>`,
+    { title: item?.label_en ?? "Enter a result", back: () => testScreen("phase") },
+  );
+
+  const inputs = fields.map((f) => app.querySelector<HTMLInputElement>(`#${f.id}`)!);
+  const save = app.querySelector<HTMLButtonElement>("#save-result")!;
+  const read = (input: HTMLInputElement): number | null => {
+    const v = Number(input.value);
+    return input.value.trim() !== "" && Number.isFinite(v) && v >= 0 ? v : null;
+  };
+  inputs.forEach((input) => {
+    input.oninput = () => {
+      save.disabled = inputs.some((i) => read(i) === null);
+    };
+  });
+  on("#save-result", () => {
+    save.disabled = true;
+    save.textContent = "Saving…";
+    const note = app.querySelector<HTMLElement>("#result-note")!;
+    void (async () => {
+      try {
+        for (const [i, f] of fields.entries()) {
+          await api.recordTest(state.episode!.id, {
+            metric_key: c.metric,
+            value: read(inputs[i]!)!,
+            unit: unitCode || null,
+            side: f.side,
+          });
+        }
+        await refresh();
+        testNotice = savedNotice("Result");
+        testScreen("phase");
+      } catch (error) {
+        save.disabled = false;
+        save.textContent = "Save result";
+        note.textContent =
+          error instanceof api.ApiError ? error.message : "Couldn't save that. Please try again.";
+      }
+    })();
   });
 }
 

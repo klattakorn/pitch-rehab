@@ -703,3 +703,19 @@ describe("changing age group with no laptop", () => {
     expect(moves(phaseOne())).toContain("pogo_hops");
   });
 });
+
+describe("a test result typed in with no laptop", () => {
+  it("is kept on the phone and counted as waiting, never judged", () => {
+    const id = episodeId();
+    const before = standalone.pending();
+    body(`/injuries/${id}/tests`, {
+      method: "POST",
+      body: JSON.stringify({ metric_key: "test.hop_single", value: 1.3, unit: "m", side: "left" }),
+    });
+    expect(standalone.pending()).toBe(before + 1);
+    // The gate is still the recorded one: nothing on the phone scores a test.
+    const gate = body(`/injuries/${id}/exit-criteria`);
+    const recorded = (snapshot as any).responses[`/injuries/${id}/exit-criteria`];
+    expect(gate.required_passed).toBe(recorded.required_passed);
+  });
+});

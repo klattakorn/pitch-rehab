@@ -74,6 +74,8 @@ interface LocalSession {
 interface LocalState {
   sessions: LocalSession[];
   painLogs: Body[];
+  /** Test results typed in on the phone, waiting for a laptop to count them. */
+  tests: Body[];
   criteria: Body[];
   profile: Body | null;
   /** The phase the player said they were in, if they have said. */
@@ -86,6 +88,7 @@ interface LocalState {
 const EMPTY: LocalState = {
   sessions: [],
   painLogs: [],
+  tests: [],
   criteria: [],
   profile: null,
   phase: null,
@@ -128,7 +131,7 @@ export function setActive(on: boolean): void {
 
 /** How much work is sitting on the phone waiting for a laptop to count it. */
 export function pending(): number {
-  return local.sessions.length + local.painLogs.length;
+  return local.sessions.length + local.painLogs.length + local.tests.length;
 }
 
 /** Throw away everything logged on the phone. The snapshot itself is untouched. */
@@ -786,6 +789,14 @@ function post(path: string, body: Body, id: number): Reply {
       save(local);
     }
     return ok({ id: session?.id ?? 0, status: "completed" });
+  }
+
+  if (path === `/injuries/${id}/tests`) {
+    // Stored, not judged: the comparison between legs, and whether it clears
+    // the test, is the engine's job, and the engine is on the laptop.
+    local.tests = [{ ...body, at: new Date().toISOString() }, ...local.tests];
+    save(local);
+    return ok({ recorded: true });
   }
 
   if (path === `/injuries/${id}/pain-logs`) {

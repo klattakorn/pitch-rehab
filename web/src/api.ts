@@ -332,6 +332,12 @@ export const createEpisode = (input: {
 export const logPain = (episodeId: number, body: Record<string, unknown>) =>
   post(`/injuries/${episodeId}/pain-logs`, body);
 
+/** A measured test typed in by hand: a hop distance, a strength reading. */
+export const recordTest = (
+  episodeId: number,
+  body: { metric_key: string; value: number; unit: string | null; side: string | null },
+) => post(`/injuries/${episodeId}/tests`, body);
+
 /**
  * Put the player in the phase they say they are already in.
  *

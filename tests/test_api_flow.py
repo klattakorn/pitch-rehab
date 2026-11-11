@@ -746,3 +746,71 @@ def test_a_tweaked_test_for_a_move_no_longer_given_does_not_block(db) -> None:  
     db.refresh(episode)
     gate = evaluate_phase(db, episode, PhaseKey.P1_PROTECT)
     assert "wall_sit_hold" not in {c.key for c in gate.criteria}
+
+
+def _move_to_phase_with(client: TestClient, headers: dict[str, str], episode_id: int, pick) -> dict:  # noqa: ANN001
+    """Put the episode in the first phase whose tests include one `pick` accepts."""
+    protocol = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
+    for phase in protocol["phases"]:
+        if any(pick(c["spec"]) for c in phase["exit_criteria"]):
+            client.put(
+                f"{API}/injuries/{episode_id}/starting-phase",
+                headers=headers,
+                json={"phase_key": phase["phase_key"], "backdate": False},
+            )
+            return phase
+    raise AssertionError("no phase has such a test")
+
+
+def test_a_result_typed_in_for_each_leg_passes_the_symmetry_test(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """What the Test tab's "Enter" screen sends: one result per leg."""
+    phase = _move_to_phase_with(
+        client, headers, episode_id,
+        lambda spec: spec["metric"].startswith("test.") and spec["target"]["type"] == "lsi",
+    )
+    spec = next(
+        c["spec"] for c in phase["exit_criteria"]
+        if c["spec"]["metric"].startswith("test.") and c["spec"]["target"]["type"] == "lsi"
+    )
+    metric, needed = spec["metric"], spec["target"]["value"]
+
+    def reading() -> dict:
+        gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
+        return next(c for c in gate["criteria"] if c["metric"] == metric)
+
+    assert reading()["status"] == "no_data"
+    episode = client.get(f"{API}/injuries/{episode_id}", headers=headers).json()
+    injured = episode["side"]
+    other = "right" if injured == "left" else "left"
+    for side, value in ((injured, 95.0), (other, 100.0)):
+        response = client.post(
+            f"{API}/injuries/{episode_id}/tests",
+            headers=headers,
+            json={"metric_key": metric, "value": value, "unit": None, "side": side},
+        )
+        assert response.status_code == 201
+    after = reading()
+    assert round(after["observed"]) == 95
+    assert after["status"] == ("pass" if 95 >= needed else "fail")
+
+
+def test_logged_pain_feeds_the_pain_test(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """What the Test tab's "Log" screen sends."""
+    _move_to_phase_with(
+        client, headers, episode_id,
+        lambda spec: spec["metric"] in ("pro.pain_activity", "pro.pain_rest"),
+    )
+    for _ in range(2):
+        response = client.post(
+            f"{API}/injuries/{episode_id}/pain-logs",
+            headers=headers,
+            json={"pain_rest": 0, "pain_activity": 0},
+        )
+        assert response.status_code == 201
+    gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
+    pain = [c for c in gate["criteria"] if c["metric"] in ("pro.pain_activity", "pro.pain_rest")]
+    assert pain and all(c["status"] == "pass" for c in pain)

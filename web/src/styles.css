@@ -1589,7 +1589,7 @@ ul.criteria {
    and a note -- in that order, at that size, whatever is in them. */
 ul.criteria li {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 32px;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--s2) var(--s3);
   padding: var(--s3) var(--s4);
@@ -3173,4 +3173,63 @@ button.ghost:active:not(:disabled),
     );
     pointer-events: none;
   }
+}
+
+/* --- Test tab: the advance card, the two tabs, the do-it buttons --------- */
+.panel.advance {
+  margin-bottom: var(--s4);
+}
+.panel.advance .primary {
+  margin-top: var(--s4);
+}
+.panel.advance.ready {
+  border-color: var(--volt-dim);
+}
+.phasetabs.two .phasetab {
+  flex: 1;
+}
+.crit-do {
+  grid-column: 3;
+  grid-row: 1;
+  min-height: 32px;
+  padding: 4px 14px;
+  border: 1px solid var(--volt-dim);
+  border-radius: var(--r-full);
+  background: none;
+  color: var(--volt);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: 600;
+  cursor: pointer;
+}
+.crit-do:active {
+  background: var(--inset);
+}
+@media (pointer: coarse) {
+  .crit-do {
+    min-height: 44px;
+  }
+}
+
+/* --- Log pain: 0-10 as buttons ------------------------------------------- */
+.scale {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+.scalebtn {
+  min-height: 44px;
+  border: 1px solid var(--edge-control);
+  border-radius: var(--r-sm);
+  background: var(--inset);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.scalebtn.on {
+  border-color: var(--volt);
+  background: var(--volt);
+  color: #0b0e12;
 }
