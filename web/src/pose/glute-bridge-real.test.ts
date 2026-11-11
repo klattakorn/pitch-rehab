@@ -26,6 +26,7 @@ import { describe, expect, it } from "vitest";
 
 import { FALLBACK_EXERCISES } from "../fallback";
 import fixture from "./__fixtures__/glute-bridge-real.json";
+import second from "./__fixtures__/glute-bridge-second.json";
 import { Frame } from "./geometry";
 import { LiveSession } from "./live";
 import type { ExerciseRule } from "./rules";
@@ -78,16 +79,20 @@ describe("glute bridge on real footage", () => {
     expect(settled.every((r) => r.view === "side")).toBe(true);
   });
 
-  it("leaves the thresholds room on both sides", () => {
-    // The measured peaks ran -30.4 to -22.3 and the troughs -53.8 to -49.7, and
-    // all six are found anywhere in enter -32..-40 by exit -42..-48. Shipping a
-    // value on the edge of that plateau would count six today and five after any
-    // change of camera or body, so the margins are asserted, not just the count.
-    const detection = rule.detection!;
-    expect(detection.enter).toBeLessThanOrEqual(-32);
-    expect(detection.enter).toBeGreaterThanOrEqual(-40);
-    expect(detection.exit).toBeLessThanOrEqual(-42);
-    expect(detection.exit).toBeGreaterThanOrEqual(-48);
+  it("counts on the rise above rest, so the phone's position cannot shift it", () => {
+    // Two clips, two phone positions: one rested at -51 and peaked at -26, the
+    // other rested at -41 and peaked at -4 -- one clip's top was the other's
+    // rest. Fixed lines cannot count both; the rise above rest counts each.
+    expect(rule.detection!.relative_to_rest_s).toBeGreaterThan(0);
+  });
+
+  it("counts all 10 bridges in the second clip, filmed from a different spot", () => {
+    const frames2 = second.frames.map((f) => Frame.from(f.t, f.landmarks, second.aspect));
+    const session = new LiveSession(rule, "bilateral");
+    for (const f of frames2) session.push(f);
+    const outcome = session.finish();
+    expect(outcome.completedReps).toBe(10);
+    expect(outcome.validReps).toBe(10);
   });
 
   it("keeps the amplitude gate from silently overriding `enter`", () => {

@@ -121,7 +121,11 @@ class MetricResolver:
         injured = self.episode.side
         healthy = self.episode.uninjured_side
         if scope is MetricScope.INJURED:
-            return side == injured or (side is None and injured is Side.BILATERAL)
+            # A reading with no side came from a set done on both legs at once
+            # (a Copenhagen plank prescribed both sides, say), so the injured leg
+            # did the work too. Refusing it left tests that no set in the
+            # player's own plan could ever fill.
+            return side == injured or side is None
         if scope is MetricScope.UNINJURED:
             return side == healthy
         return side in (injured, healthy) or side is None  # BOTH

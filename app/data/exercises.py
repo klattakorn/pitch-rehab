@@ -163,8 +163,40 @@ EXERCISES: list[ExerciseDef] = [
             # 10 and the gate stays at -34 no matter what `enter` says -- which
             # is exactly what the old 15 did, and why lowering `enter` alone
             # changes nothing at all.
+            #
+            # SUPERSEDED for counting (the history above is kept because it is
+            # why): a second clip, filmed with the phone placed differently,
+            # rested at -41 and peaked at -4, where the first rested at -51 and
+            # peaked at -26. The first clip's *top* was the second clip's
+            # *rest*, so no fixed pair of lines could count both -- at -38/-44
+            # the second clip read as three 20-second reps. So the bridge now
+            # counts on the rise above the player's own resting angle
+            # (relative_to_rest_s): a rep starts 15 deg above rest and ends back
+            # within 8 deg of it. First clip 6/6, second 10/10, and every
+            # setting tried between 10-18 deg up and 4-8 deg back counted both
+            # right. exit + min_amplitude (16) does not exceed enter.
+            # Shoulders down only: lying side-on and filling the frame, the head
+            # sits at the edge of the picture (it did on the second clip, and
+            # the live camera refused 699 of its frames for it). The hip angle
+            # needs shoulder, hip and knee, not the head.
+            in_frame_landmarks=[
+                "LEFT_SHOULDER",
+                "RIGHT_SHOULDER",
+                "LEFT_HIP",
+                "RIGHT_HIP",
+                "LEFT_KNEE",
+                "RIGHT_KNEE",
+                "LEFT_ANKLE",
+                "RIGHT_ANKLE",
+            ],
+            # exit 8 rather than 6: live, one rest on the first clip only came
+            # back to 8 above the lowest rest, and merged two bridges.
             detection=RepDetection(
-                signal="hip_extension", enter=-38.0, exit=-44.0, min_amplitude=6.0
+                signal="hip_extension",
+                enter=16.0,
+                exit=8.0,
+                min_amplitude=8.0,
+                relative_to_rest_s=12.0,
             ),
             # Now measured too: the six reps ran 3.2-4.3s each, so the floor is
             # nowhere near them. Left at 0.8 rather than raised -- every tempo

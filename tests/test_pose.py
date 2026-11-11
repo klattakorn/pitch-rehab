@@ -409,3 +409,14 @@ def test_pogo_hops_flags_squat_landings_without_refusing_any() -> None:
     deep = [r for r in heavy.reps if any(v.code == "landing_too_deep" for v in r.violations)]
     assert len(deep) >= 8
     assert heavy.form_score <= 75
+
+
+@pytest.mark.parametrize(("clip", "bridges"), [("glute-bridge-real", 6), ("glute-bridge-second", 10)])
+def test_glute_bridge_counts_from_either_phone_position(clip: str, bridges: int) -> None:
+    """The two clips rest 10 deg apart; counting on the rise above rest fits both."""
+    from app.data.exercises import EXERCISES_BY_KEY
+
+    rule = EXERCISES_BY_KEY["glute_bridge"].rule
+    assert rule is not None
+    result = analyze_set(_fixture_frames(clip), rule, Side.BILATERAL)
+    assert len(result.reps) == result.valid_reps == bridges

@@ -436,9 +436,24 @@ export class LiveSession {
     return cues;
   }
 
+  /** Mirrors rise_above_rest on the server: the value minus its recent lowest. */
+  private readonly restHistory: { t: number; v: number }[] = [];
+  private riseAboveRest(t: number, v: number): number {
+    const window = this.rule.detection?.relative_to_rest_s;
+    if (!window) return v;
+    this.restHistory.push({ t, v });
+    while (this.restHistory.length && t - this.restHistory[0]!.t > window) this.restHistory.shift();
+    let low = Infinity;
+    for (const h of this.restHistory) low = Math.min(low, h.v);
+    return v - low;
+  }
+  private lastSignal: number | null = null;
+
   private signalOf(perSide: Metrics[]): number | null {
     const det = this.rule.mode === "rep" ? this.rule.detection : null;
     if (!det) return null;
+    // Counted on the rise above rest: report that, which is what was counted.
+    if (det.relative_to_rest_s) return this.lastSignal;
     const vals = perSide
       .map((m) => m[det.signal])
       .filter((v): v is number => typeof v === "number");
@@ -462,8 +477,15 @@ export class LiveSession {
     const signalValues = perSide
       .map((m) => m[det.signal])
       .filter((v): v is number => typeof v === "number");
-    if (signalValues.length === 0) return null;
-    const signal = signalValues.reduce((a, b) => a + b, 0) / signalValues.length;
+    if (signalValues.length === 0) {
+      this.lastSignal = null;
+      return null;
+    }
+    const signal = this.riseAboveRest(
+      t,
+      signalValues.reduce((a, b) => a + b, 0) / signalValues.length,
+    );
+    this.lastSignal = signal;
 
     if (!this.rep) {
       // Only after a rep: the first hop has no landing before it, as on the server.

@@ -42,6 +42,8 @@ export interface RepDetection {
   max_ground_contact_s?: number | null;
   /** Hops only: deepest landing, % of full leg. Deeper is scored down. See rules.py. */
   max_landing_sink?: number | null;
+  /** Count on the rise above the lowest value in the last N seconds. See rules.py. */
+  relative_to_rest_s?: number | null;
 }
 
 export interface EmitMetric {

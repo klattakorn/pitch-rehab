@@ -73,6 +73,12 @@ class RepDetection(BaseModel):
     #: Hops only: deepest the hips may sink toward the ankles on landing,
     #: as % of the player's full leg length. Deeper is flagged and scored down.
     max_landing_sink: float | None = None
+    #: Count on the rise above the player's own resting value rather than on
+    #: the raw angle: the signal becomes itself minus its lowest value in the
+    #: last this-many seconds. For a movement whose resting angle depends on
+    #: where the phone is (the glute bridge read -51 at rest on one clip and
+    #: -41 on another), so fixed lines cannot fit every setup.
+    relative_to_rest_s: float | None = None
 
     @model_validator(mode="after")
     def _exit_below_enter(self) -> RepDetection:

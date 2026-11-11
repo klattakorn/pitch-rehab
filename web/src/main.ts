@@ -2159,7 +2159,9 @@ function howToPass(c: api.CriterionResult, cat: api.AuthorableCatalogue): HowTo 
       hint:
         m === "session.pain_free_days"
           ? "Log your pain each day — pain-free days count here."
-          : "Log how your injury feels. Takes ten seconds.",
+          : m === "pro.confidence"
+            ? "Say how ready you feel to play, when you log how it feels."
+            : "Log how your injury feels. Takes ten seconds.",
       action: { label: "Log", run: () => painScreen() },
     };
   }
@@ -2224,20 +2226,23 @@ function testScreen(tab?: TestTab): void {
   if (!gate) return homeScreen();
   // The exercises say which one a camera test opens; the protocol names the
   // next phase on the advance button. Loaded once, then the screen redraws.
-  const wantProtocol = !state.protocol && state.episode && Date.now() - protocolTriedAt > 5000;
-  if (!exerciseList || wantProtocol) {
+  const retry = Date.now() - protocolTriedAt > 5000;
+  const wantProtocol = !state.protocol && state.episode && retry;
+  // A failed load leaves exerciseList null and is tried again after a pause,
+  // rather than cached as "no exercises" for the rest of the session.
+  if ((!exerciseList && retry) || wantProtocol) {
     protocolTriedAt = Date.now();
     shell(`<div class="loading" id="tests-loading">Loading your tests…</div>`, {
       tab: "test",
       title: "Your tests",
     });
     void Promise.all([
-      exerciseList ? Promise.resolve(exerciseList) : api.listExercises().catch(() => []),
+      exerciseList ? Promise.resolve(exerciseList) : api.listExercises().catch(() => null),
       state.protocol || !state.episode
         ? Promise.resolve(state.protocol)
         : api.protocolFor(state.episode.id).catch(() => null),
     ]).then(([list, protocol]) => {
-      exerciseList = list;
+      exerciseList = list ?? exerciseList;
       // A protocol that would not load still leaves a usable screen, and is
       // not asked for again straight away (protocolTriedAt), so this cannot loop.
       state.protocol = protocol ?? state.protocol;
@@ -2277,17 +2282,22 @@ function testScreen(tab?: TestTab): void {
     const editable = c.source !== "manual" && splitMetric(c.metric, cat).base !== null;
     const mine = yours.has(c.key);
     const detail = note(c, how && c.status !== "pass" ? how.hint : "");
-    const chips = c.source === "pose" ? `<span class="src">${CAMERA_ICON} camera</span>` : "";
+    const chips =
+      (c.source === "pose" ? `<span class="src">${CAMERA_ICON} camera</span>` : "") +
+      (mine && libraryKeys.has(c.key) ? `<span class="src yours">yours</span>` : "");
     const action =
       how?.action && c.status !== "pass"
         ? `<button class="crit-do" data-do="${c.key}">${how.action.label}</button>`
         : "";
-    const tail = mine
-      ? editable
+    const pencil =
+      mine && editable
         ? `<button class="editbtn" data-edit="${c.key}"
              aria-label="Change the target for ${c.label_en}">${PENCIL}</button>`
-        : `<span class="crit-spacer" aria-hidden="true"></span>`
-      : action || `<span class="crit-spacer" aria-hidden="true"></span>`;
+        : "";
+    const tail =
+      action || pencil
+        ? `<span class="crit-tail">${action}${pencil}</span>`
+        : `<span class="crit-spacer" aria-hidden="true"></span>`;
     return `<li class="${c.required ? "" : "optional"} ${c.status}${mine ? " mine" : ""}">
       <span class="crit-mark">${mark(c)}</span>
       <span class="crit-label">${c.label_en}</span>
@@ -2307,8 +2317,17 @@ function testScreen(tab?: TestTab): void {
     </li>`;
   };
 
-  const phaseTests = gate.criteria.filter((c) => !yours.has(c.key));
-  const mine = gate.criteria.filter((c) => yours.has(c.key));
+  // A player's version of a phase test ("the hop test, but 95%") is still that
+  // phase test, so it stays on the Phase tests tab, marked as theirs. Only
+  // targets with a key the programme never had are "Your targets".
+  const libraryKeys = new Set(
+    (state.protocol?.phases.find((p) => p.phase_key === gate.phase_key)?.exit_criteria ?? []).map(
+      (c) => c.key,
+    ),
+  );
+  const isOwn = (c: api.CriterionResult) => yours.has(c.key) && !libraryKeys.has(c.key);
+  const phaseTests = gate.criteria.filter((c) => !isOwn(c));
+  const mine = gate.criteria.filter(isOwn);
   const required = gate.criteria.filter((c) => c.required);
   const passedCount = required.filter((c) => c.status === "pass").length;
   const nextName = gate.next_phase ? phaseName(gate.next_phase) : null;
@@ -2355,7 +2374,13 @@ function testScreen(tab?: TestTab): void {
   const mineHtml = `
      ${
        mine.length
-         ? `<ul class="criteria">${mine.map((c) => row(c)).join("")}</ul>`
+         ? `<ul class="criteria">${mine
+             .map((c) => {
+               const how = howToPass(c, cat);
+               if (how.action) actions.set(c.key, how.action.run);
+               return row(c, how);
+             })
+             .join("")}</ul>`
          : `<p class="sub tiny">Nothing yet. Pick an exercise and a number — it counts
               toward this phase like the phase tests do.</p>`
      }
@@ -2369,11 +2394,7 @@ function testScreen(tab?: TestTab): void {
          ? `<div class="controls">
               <button class="primary block" id="start-target">Start a session</button>
             </div>`
-         : mine.length
-           ? `<div class="notice">These are read from your sessions rather than
-                started on their own. Add a target on an exercise to score one with
-                the camera.</div>`
-           : ""
+         : ""
      }`;
 
   const notice = testNotice;
@@ -2424,6 +2445,9 @@ function testScreen(tab?: TestTab): void {
         const result = await api.advancePhase(state.episode!.id);
         state.protocol = null;
         state.progress = null;
+        // The last phase passed: the rehab is over, and the injury is no longer
+        // an active one -- so this is said here, before the app starts over.
+        if (result.advanced && !gate.next_phase) return finishedScreen();
         await boot();
         if (result.advanced) {
           setTimeout(() => celebrate(), 300);
@@ -2438,10 +2462,29 @@ function testScreen(tab?: TestTab): void {
   });
 }
 
+// ------------------------------------------------------------- finished
+function finishedScreen(): void {
+  shell(
+    `<div class="result">
+       <div class="verdict">
+         <div class="big pass">Rehab complete</div>
+         <p>Every test in every phase is passed, and your physio has signed you off.
+           You are cleared to return to team training.</p>
+       </div>
+     </div>
+     <div class="controls">
+       <button class="primary block" id="done">Done</button>
+     </div>`,
+    { title: "Cleared", brand: true },
+  );
+  setTimeout(() => celebrate(app.querySelector<HTMLElement>(".result") ?? undefined), 300);
+  on("#done", () => void boot());
+}
+
 // ------------------------------------------------------------- log pain
 /** 0-10, as buttons: a slider at arm's length on a phone is a guess. */
-function scaleHtml(name: string, label: string, help: string, max = 10): string {
-  const values = Array.from({ length: max + 1 }, (_, i) => i);
+function scaleHtml(name: string, label: string, help: string, max = 10, step = 1): string {
+  const values = Array.from({ length: Math.floor(max / step) + 1 }, (_, i) => i * step);
   return `<section class="panel">
       <span class="label">${label}</span>
       <p class="sub tiny">${help}</p>
@@ -2464,6 +2507,13 @@ function painScreen(): void {
      ${scaleHtml("pain_rest", "Pain at rest", "Sitting or lying, not moving the injury.")}
      ${scaleHtml("pain_activity", "Pain while training", "During your exercises today.")}
      ${scaleHtml("pain_next_morning", "Pain the next morning", "Optional: how it felt when you woke up.")}
+     ${scaleHtml(
+       "confidence",
+       "How ready do you feel to play?",
+       "Optional: 0 is not at all, 100 is completely ready. Your last phase asks for this.",
+       100,
+       10,
+     )}
      <div class="controls">
        <button class="primary block" id="save-pain" disabled>Save</button>
      </div>

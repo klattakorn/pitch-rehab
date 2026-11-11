@@ -3233,3 +3233,14 @@ button.ghost:active:not(:disabled),
   background: var(--volt);
   color: #0b0e12;
 }
+.crit-tail {
+  grid-column: 3;
+  grid-row: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+}
+.crit-tail .crit-do {
+  grid-column: auto;
+  grid-row: auto;
+}

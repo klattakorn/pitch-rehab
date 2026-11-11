@@ -128,6 +128,25 @@ def _evaluate_target(target: MetricTarget, observed: float) -> Violation | None:
     return None
 
 
+def rise_above_rest(
+    times: Sequence[float], signal: Sequence[float | None], window_s: float
+) -> list[float | None]:
+    """Each value minus the lowest one in the last ``window_s`` seconds.
+
+    Causal (looks only backwards), so the browser computes the same number live.
+    """
+    out: list[float | None] = []
+    recent: list[tuple[float, float]] = []
+    for t, raw in zip(times, signal, strict=True):
+        if raw is None:
+            out.append(None)
+            continue
+        recent.append((t, float(raw)))
+        recent = [r for r in recent if t - r[0] <= window_s]
+        out.append(float(raw) - min(r[1] for r in recent))
+    return out
+
+
 def segment_reps(
     times: Sequence[float],
     signal: Sequence[float | None],
@@ -312,6 +331,8 @@ def analyze_set(
                 if s.column(det.signal)[i] is not None
             ]
             combined.append(sum(vals) / len(vals) if vals else None)
+        if det.relative_to_rest_s:
+            combined = rise_above_rest(times, combined, det.relative_to_rest_s)
         windows = segment_reps(
             times,
             combined,

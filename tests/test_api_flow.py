@@ -814,3 +814,44 @@ def test_logged_pain_feeds_the_pain_test(
     gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
     pain = [c for c in gate["criteria"] if c["metric"] in ("pro.pain_activity", "pro.pain_rest")]
     assert pain and all(c["status"] == "pass" for c in pain)
+
+
+def test_feeling_ready_to_play_can_be_logged_so_the_last_phase_can_pass(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """The Log screen's "how ready do you feel" scale is what fills pro.confidence."""
+    _move_to_phase_with(client, headers, episode_id, lambda spec: spec["metric"] == "pro.confidence")
+    response = client.post(
+        f"{API}/injuries/{episode_id}/pain-logs",
+        headers=headers,
+        json={"pain_rest": 0, "pain_activity": 0, "confidence": 90},
+    )
+    assert response.status_code == 201
+    gate = client.get(f"{API}/injuries/{episode_id}/exit-criteria", headers=headers).json()
+    ready = next(c for c in gate["criteria"] if c["metric"] == "pro.confidence")
+    assert ready["status"] == "pass"
+
+
+def test_a_set_done_on_both_legs_counts_for_the_injured_leg(db, episode) -> None:  # noqa: ANN001
+    """A Copenhagen plank prescribed both sides is stored with no side; a test on
+    the injured leg must still be able to read it."""
+    from app.core.enums import CriterionSource, MetricScope
+    from app.models.metrics import MetricSample
+    from app.services.criteria.resolver import MetricResolver
+
+    db.add(
+        MetricSample(
+            player_id=episode.player_id,
+            episode_id=episode.id,
+            metric_key="pose.copenhagen_hold",
+            source=CriterionSource.POSE,
+            value=32.0,
+            unit="s",
+            side=None,
+            recorded_at=datetime.now(UTC),
+        )
+    )
+    db.flush()
+    resolver = MetricResolver(db, episode)
+    samples = resolver.fetch("pose.copenhagen_hold", 14, MetricScope.INJURED)
+    assert samples.values == [32.0]
