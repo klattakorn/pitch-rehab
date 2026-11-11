@@ -264,10 +264,15 @@ function shell(body: string, chrome: Chrome = {}): void {
     arrive = arrive || loadingShown.arrived;
   }
   loadingShown = body.includes('class="loading"') ? { dir, arrived: arrive } : null;
+  // A loading screen is one line tall. Swapping a long page for it collapsed
+  // the page below the screen height, the phone's browser brought its address
+  // bar back, and the bottom bar dropped and bounced. Hold the old height.
+  const keepHeight = loadingShown ? (app.querySelector("main")?.offsetHeight ?? 0) : 0;
   app.innerHTML = `
     ${header(chrome)}
     <main class="${chrome.tab ? "with-tabs" : ""}" data-dir="${dir}">${body}</main>
     ${tabbar(chrome.tab)}`;
+  if (keepHeight) app.querySelector<HTMLElement>("main")!.style.minHeight = `${keepHeight}px`;
   // The tab rail only animates when the tab actually changed; a screen that
   // re-renders in place (loading, then content) should not flicker it.
   if (arrive) app.querySelector(".tab.on")?.classList.add("arrive");
@@ -1811,6 +1816,19 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
         } else if (performance.now() > cueUntil) {
           setState("good", "Good form");
           centre.innerHTML = "";
+        }
+
+        // A rep that needs a hold at the top: count it down while it is held,
+        // so the player knows when they may lower. Outranks "Good form".
+        const need = rule.detection?.min_top_hold_s;
+        if (need && result.topHold !== null && !blocker) {
+          const left = need - result.topHold;
+          setState("good", left > 0 ? "Hold" : "Lower slowly");
+          centre.innerHTML =
+            left > 0
+              ? `<div class="countdown">${Math.ceil(left)}</div>`
+              : `<div class="cue">Now lower slowly</div>`;
+          cueUntil = performance.now() + 400;
         }
 
         // Target reached: end the set by itself. Counted reps only -- a refused

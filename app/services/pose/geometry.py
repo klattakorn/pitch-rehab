@@ -367,6 +367,57 @@ def landing_sink_series(frames: Sequence[Frame]) -> list[float | None]:
     return [tracker.push(f) for f in frames]
 
 
+#: How far back ToeLift looks for the floor under each toe.
+TOE_LIFT_WINDOW_S = 2.0
+
+
+class ToeLift:
+    """How high the toes are off the floor, in % of torso length.
+
+    A calf raise pivots on the toes: the heel goes up and the toes stay down.
+    A jump lifts the toes too. On real footage the toes rose at most 17 during
+    honest calf raises (the point MediaPipe calls the toe sits a little back on
+    the foot, so it moves slightly as the heel rises) and 26-60 in jumps.
+
+    Side-on, the far foot is often hidden, so each toe that can be seen is
+    tracked on its own and the lower of them is reported. Causal, so the
+    browser computes the same number live.
+    """
+
+    def __init__(self, window_s: float = TOE_LIFT_WINDOW_S) -> None:
+        self.window_s = window_s
+        self._history: dict[LM, list[tuple[float, float]]] = {
+            LM.LEFT_FOOT_INDEX: [],
+            LM.RIGHT_FOOT_INDEX: [],
+        }
+
+    def push(self, frame: Frame) -> float | None:
+        if frame.space != "image":
+            return None
+        torso = float(
+            np.linalg.norm(
+                midpoint(frame, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER)
+                - midpoint(frame, LM.LEFT_HIP, LM.RIGHT_HIP)
+            )
+        )
+        if torso < _EPS:
+            return None
+        lifts: list[float] = []
+        for toe, history in self._history.items():
+            if frame.vis[int(toe)] < 0.3:
+                continue
+            y = float(frame.p(toe)[1])
+            history.append((frame.t, y))
+            history[:] = [h for h in history if frame.t - h[0] <= self.window_s]
+            lifts.append((max(h[1] for h in history) - y) / torso * 100.0)
+        return min(lifts) if lifts else None
+
+
+def toe_lift_series(frames: Sequence[Frame]) -> list[float | None]:
+    tracker = ToeLift()
+    return [tracker.push(f) for f in frames]
+
+
 def foot_lift_series(frames: Sequence[Frame]) -> list[float | None]:
     tracker = FootLift()
     return [tracker.push(f) for f in frames]

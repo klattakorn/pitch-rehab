@@ -91,7 +91,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": 12.0
+        "relative_to_rest_s": 12.0,
+        "min_top_hold_s": 3.0
       },
       "targets": [
         {
@@ -169,7 +170,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -238,7 +240,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -320,7 +323,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -402,7 +406,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -463,7 +468,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -491,6 +497,19 @@ export const FALLBACK_EXERCISES: Exercise[] = [
           "code": "knee_bend",
           "message_en": "Keep the knees straight.",
           "message_th": "เหยียดเข่าให้ตรง"
+        },
+        {
+          "metric": "toe_lift",
+          "aggregate": "peak",
+          "min": null,
+          "max": 22.0,
+          "tolerance": 4.0,
+          "weight": 1.0,
+          "critical": true,
+          "judge": "worst",
+          "code": "toes_left_floor",
+          "message_en": "Keep your toes on the floor. Rise onto them, don't jump.",
+          "message_th": "ปลายเท้าต้องติดพื้น เขย่งขึ้น อย่ากระโดด"
         }
       ],
       "required_landmarks": [
@@ -621,7 +640,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -743,7 +763,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -830,7 +851,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -912,7 +934,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -994,7 +1017,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -1197,7 +1221,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -1355,7 +1380,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": 0.4,
         "max_ground_contact_s": 0.36,
         "max_landing_sink": 25.0,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -1496,7 +1522,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -1578,7 +1605,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -1680,7 +1708,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {
@@ -1775,7 +1804,8 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit_fraction": null,
         "max_ground_contact_s": null,
         "max_landing_sink": null,
-        "relative_to_rest_s": null
+        "relative_to_rest_s": null,
+        "min_top_hold_s": null
       },
       "targets": [
         {

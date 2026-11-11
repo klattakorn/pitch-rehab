@@ -44,6 +44,8 @@ export interface RepDetection {
   max_landing_sink?: number | null;
   /** Count on the rise above the lowest value in the last N seconds. See rules.py. */
   relative_to_rest_s?: number | null;
+  /** Seconds to hold at or above `enter` within a rep. See rules.py. */
+  min_top_hold_s?: number | null;
 }
 
 export interface EmitMetric {

@@ -419,4 +419,32 @@ def test_glute_bridge_counts_from_either_phone_position(clip: str, bridges: int)
     rule = EXERCISES_BY_KEY["glute_bridge"].rule
     assert rule is not None
     result = analyze_set(_fixture_frames(clip), rule, Side.BILATERAL)
-    assert len(result.reps) == result.valid_reps == bridges
+    assert len(result.reps) == bridges
+    # Counted only when held 3 s at the top; the rest say why.
+    for rep in result.reps:
+        held = rep.metrics["top_hold_s"]
+        assert rep.is_valid == (held >= 3.0)
+        if not rep.is_valid:
+            assert "hold_at_top" in [v.code for v in rep.violations]
+
+
+def test_jumping_is_not_a_calf_raise() -> None:
+    """Jumps lift the heel too; the toes leaving the floor is what tells them apart."""
+    from app.data.exercises import EXERCISES_BY_KEY
+
+    rule = EXERCISES_BY_KEY["double_leg_calf_raise"].rule
+    assert rule is not None
+    rule = rule.model_copy(update={"enforce_view": False})  # the jump clips are front-on
+    for clip in ("pogo-front", "pogo-correct"):
+        result = analyze_set(_fixture_frames(clip), rule, Side.BILATERAL)
+        assert result.valid_reps == 0
+        assert all("toes_left_floor" in [v.code for v in r.violations] for r in result.reps)
+
+
+def test_honest_calf_raises_still_count_with_the_toe_check() -> None:
+    from app.data.exercises import EXERCISES_BY_KEY
+
+    rule = EXERCISES_BY_KEY["double_leg_calf_raise"].rule
+    assert rule is not None
+    result = analyze_set(_fixture_frames("calf-raise-real"), rule, Side.BILATERAL)
+    assert len(result.reps) == result.valid_reps == 5

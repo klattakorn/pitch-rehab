@@ -45,10 +45,17 @@ function replay() {
 }
 
 describe("glute bridge on real footage", () => {
-  it("counts every rep the person did", () => {
+  it("finds every rep, and counts only the ones held 3 s at the top", () => {
     const { outcome } = replay();
     expect(outcome.completedReps).toBe(REPS_IN_THE_VIDEO);
-    expect(outcome.validReps).toBe(REPS_IN_THE_VIDEO);
+    // This clip was filmed before the hold was asked for: three of the six
+    // happen to be held for 3 s or more (3.0-3.8 s), three are not (2.6-2.8 s).
+    expect(outcome.validReps).toBe(3);
+    for (const rep of outcome.reps) {
+      const held = rep.metrics.top_hold_s!;
+      expect(rep.isValid).toBe(held >= 3);
+      if (!rep.isValid) expect(rep.violations.map((v) => v.code)).toContain("hold_at_top");
+    }
   });
 
   it("does not quietly refuse any of them", () => {
@@ -91,8 +98,10 @@ describe("glute bridge on real footage", () => {
     const session = new LiveSession(rule, "bilateral");
     for (const f of frames2) session.push(f);
     const outcome = session.finish();
+    // All ten are found; none was held at the top for 3 s (about 2 s each), so
+    // none counts -- the up-and-down pumping the hold exists to stop.
     expect(outcome.completedReps).toBe(10);
-    expect(outcome.validReps).toBe(10);
+    expect(outcome.validReps).toBe(0);
   });
 
   it("keeps the amplitude gate from silently overriding `enter`", () => {

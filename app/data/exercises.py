@@ -197,6 +197,10 @@ EXERCISES: list[ExerciseDef] = [
                 exit=8.0,
                 min_amplitude=8.0,
                 relative_to_rest_s=12.0,
+                # Hold the top for 3 s: without it, tested on a phone, the
+                # bridge could be pumped up and down as fast as you like and
+                # every one counted. The squeeze at the top is the exercise.
+                min_top_hold_s=3.0,
             ),
             # Now measured too: the six reps ran 3.2-4.3s each, so the floor is
             # nowhere near them. Left at 0.8 rather than raised -- every tempo
@@ -460,6 +464,20 @@ EXERCISES: list[ExerciseDef] = [
                     code="knee_bend",
                     message_en="Keep the knees straight.",
                     message_th="เหยียดเข่าให้ตรง",
+                ),
+                # Toes stay on the floor. Tested on a phone, jumping on the spot
+                # counted as calf raises: the heel rises in a jump too. Honest
+                # raises lifted the toe point at most 17 (% of torso length),
+                # jumps 26-60; see ToeLift. Over this the rep is not counted.
+                MetricTarget(
+                    metric="toe_lift",
+                    aggregate="peak",
+                    max=22.0,
+                    tolerance=4.0,
+                    critical=True,
+                    code="toes_left_floor",
+                    message_en="Keep your toes on the floor. Rise onto them, don't jump.",
+                    message_th="ปลายเท้าต้องติดพื้น เขย่งขึ้น อย่ากระโดด",
                 ),
             ],
         ),

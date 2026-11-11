@@ -13,6 +13,7 @@ from app.services.pose.geometry import (
     detect_view,
     foot_lift_series,
     landing_sink_series,
+    toe_lift_series,
     implausible_frames,
 )
 from app.services.pose.landmarks import LM
@@ -212,12 +213,15 @@ def _series_for(frames: Sequence[Frame], side: Side, rule: ExerciseRule) -> Metr
     # compute_metrics. Same value for both legs: it is about the lower foot.
     lifts = foot_lift_series(frames)
     sinks = landing_sink_series(frames)
-    for f, lift, sink in zip(frames, lifts, sinks, strict=True):
+    toes = toe_lift_series(frames)
+    for f, lift, sink, toe in zip(frames, lifts, sinks, toes, strict=True):
         metrics = compute_metrics(f, side, use_z=bool(rule.use_z))
         if lift is not None:
             metrics["foot_lift"] = lift
         if sink is not None:
             metrics["landing_sink"] = sink
+        if toe is not None:
+            metrics["toe_lift"] = toe
         series.add(f.t, metrics)
     return series.smooth(rule.smoothing_window)
 
@@ -450,6 +454,29 @@ def analyze_set(
             rep_metrics["hold_seconds"] = round(hold_seconds, 2)
 
         duration = times[b] - times[a]
+        if rule.detection is not None and rule.detection.min_top_hold_s:
+            # Time at the top: frames at or above `enter`, as the browser counts.
+            need = rule.detection.min_top_hold_s
+            held = sum(
+                times[i] - times[i - 1]
+                for i in range(a + 1, b + 1)
+                if combined[i] is not None and combined[i] >= rule.detection.enter
+            )
+            rep_metrics["top_hold_s"] = round(held, 2)
+            if held < need:
+                violations.append(
+                    Violation(
+                        code="hold_at_top",
+                        metric="top_hold_s",
+                        observed=round(held, 2),
+                        limit=need,
+                        bound="min",
+                        severity=1.0,
+                        critical=True,
+                        message_en=f"Hold at the top for {need:g} seconds before lowering.",
+                        message_th=f"ค้างไว้ด้านบน {need:g} วินาทีก่อนลดลง",
+                    )
+                )
         tempo_ok = True
         if rule.tempo_min_s is not None and duration < rule.tempo_min_s:
             tempo_ok = False

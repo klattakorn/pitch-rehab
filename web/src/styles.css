@@ -3407,7 +3407,8 @@ main.with-tabs {
   background: linear-gradient(180deg, rgba(216, 255, 62, 0.16), rgba(216, 255, 62, 0.05));
   box-shadow: inset 0 0 0 1px rgba(216, 255, 62, 0.35);
   transform: translateX(calc(var(--tab-index, 0) * (100% + var(--s1))));
-  transition: transform 0.45s cubic-bezier(0.34, 1.4, 0.5, 1);
+  /* No overshoot: with a bounce the marker ran past the bar's end on Profile. */
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* --- Home hero: the scoreboard, the ball, the streak ------------------ */
@@ -3497,4 +3498,40 @@ main h3 {
   font-size: var(--t-small);
   letter-spacing: 0.14em;
   color: var(--ink-2);
+}
+
+/* The floating bar, held still: its own layer, so a repaint of the page under
+   it cannot make it shudder. */
+.tabbar {
+  transform: translateZ(0);
+}
+#app {
+  min-height: 100lvh;
+}
+
+/* --- wider screens: the floating bar, centred under the column ---------- */
+@media (min-width: 900px) {
+  .tabbar {
+    left: 50%;
+    right: auto;
+    width: min(620px, calc(100% - 24px));
+    transform: translateX(-50%);
+    border-radius: 22px;
+    border: 1px solid var(--edge);
+  }
+}
+
+/* The week strip: circles a thumb's size, not a fifth of a desktop column. */
+.weekstrip .day {
+  width: 100%;
+  max-width: 48px;
+  justify-self: center;
+}
+/* On a wide screen the top bar lines up with the column, rather than putting
+   the name at one edge of the monitor and the bell at the other. */
+@media (min-width: 900px) {
+  .topbar {
+    padding-left: max(var(--s4), calc((100% - 620px) / 2));
+    padding-right: max(var(--s4), calc((100% - 620px) / 2));
+  }
 }

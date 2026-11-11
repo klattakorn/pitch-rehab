@@ -325,6 +325,44 @@ export class LandingSink {
   }
 }
 
+/** Mirrors TOE_LIFT_WINDOW_S in app/services/pose/geometry.py. */
+export const TOE_LIFT_WINDOW_S = 2.0;
+
+/**
+ * How high the toes are off the floor, in % of torso length. Mirrors `ToeLift`
+ * on the server, where the reasoning lives: a calf raise keeps the toes down,
+ * a jump does not. Each visible toe is tracked alone; the lower one is reported.
+ */
+export class ToeLift {
+  private readonly history = new Map<number, { t: number; y: number }[]>([
+    [LM.LEFT_FOOT_INDEX, []],
+    [LM.RIGHT_FOOT_INDEX, []],
+  ]);
+
+  constructor(private readonly windowS = TOE_LIFT_WINDOW_S) {}
+
+  push(f: Frame): number | null {
+    const torso = norm(
+      sub(
+        midpoint(f, LM.LEFT_SHOULDER, LM.RIGHT_SHOULDER),
+        midpoint(f, LM.LEFT_HIP, LM.RIGHT_HIP),
+      ),
+    );
+    if (torso < EPS) return null;
+    const lifts: number[] = [];
+    for (const [toe, list] of this.history) {
+      if (f.confidence(toe) < 0.3) continue;
+      const y = f.point(toe)[1]!;
+      list.push({ t: f.t, y });
+      while (list.length && f.t - list[0]!.t > this.windowS) list.shift();
+      let floor = -Infinity;
+      for (const h of list) floor = Math.max(floor, h.y);
+      lifts.push(((floor - y) / torso) * 100);
+    }
+    return lifts.length ? Math.min(...lifts) : null;
+  }
+}
+
 // ---------------------------------------------------------- sanity measures
 export const SIDE_VIEW_BELOW = 0.35;
 export const FRONT_VIEW_ABOVE = 0.5;

@@ -22,6 +22,7 @@ import {
   Frame,
   FootLift,
   LandingSink,
+  ToeLift,
   type Metrics,
   aggregate,
   bodyScale,
@@ -107,6 +108,8 @@ export interface FrameResult {
    */
   signal: number | null;
   inRep: boolean;
+  /** Seconds held at the top of the current rep, for a rule that asks for a hold. */
+  topHold: number | null;
   repCount: number;
   validRepCount: number;
   /** Things wrong *right now*, for a live on-screen cue. */
@@ -137,6 +140,9 @@ interface RepBuffer {
   startT: number;
   /** Deepest landing before this rep began (hops only). */
   landingSink?: number | null;
+  /** Seconds at or above `enter` so far, and the last frame's time (holds at the top). */
+  topHold: number;
+  lastT: number;
   series: Map<string, number[]>;
   times: number[];
 }
@@ -153,6 +159,7 @@ export class LiveSession {
   private readonly recent = new Map<string, number[]>();
   private readonly footLift = new FootLift();
   private readonly landingSink = new LandingSink();
+  private readonly toeLift = new ToeLift();
   /** Deepest landing_sink since the last rep ended: the landing before the next hop. */
   private sinkSinceEnd: number | null = null;
 
@@ -274,6 +281,7 @@ export class LiveSession {
         metrics: null,
         signal: null,
         inRep: this.rep !== null,
+        topHold: null,
         repCount: this.repCount,
         validRepCount: this.validRepCount,
         activeCues: [],
@@ -291,6 +299,8 @@ export class LiveSession {
     if (lift !== null) for (const m of perSide) m.foot_lift = lift;
     const sink = this.landingSink.push(frame);
     if (sink !== null) for (const m of perSide) m.landing_sink = sink;
+    const toe = this.toeLift.push(frame);
+    if (toe !== null) for (const m of perSide) m.toe_lift = toe;
     const smoothed = this.smooth(perSide);
     const display = perSide[0] ?? {};
 
@@ -307,6 +317,7 @@ export class LiveSession {
       metrics: display,
       signal: this.signalOf(smoothed),
       inRep: this.rep !== null,
+      topHold: this.rule.detection?.min_top_hold_s && this.rep ? this.rep.topHold : null,
       repCount: this.repCount,
       validRepCount: this.validRepCount,
       activeCues,
@@ -499,6 +510,8 @@ export class LiveSession {
           series: new Map(),
           times: [],
           landingSink: this.sinkSinceEnd,
+          topHold: 0,
+          lastT: t,
         };
         this.peak = signal;
       }
@@ -509,6 +522,9 @@ export class LiveSession {
     // Up to this hop's highest point the landing before it is still being
     // measured (mirrors the server, which reads to the peak).
     if (signal >= this.peak) this.noteSink(perSide);
+    // Time at the top, counted the way the server counts it.
+    if (signal >= det.enter) this.rep.topHold += t - this.rep.lastT;
+    this.rep.lastT = t;
     this.peak = Math.max(this.peak, signal);
     this.record(t, perSide);
     const tooLong = t - this.rep.startT > det.max_duration_s;
@@ -603,6 +619,24 @@ export class LiveSession {
         weightedOk += target.weight * (1 - violation.severity);
       } else {
         weightedOk += target.weight;
+      }
+    }
+
+    const need = det?.min_top_hold_s;
+    if (need) {
+      metrics.top_hold_s = Math.round(rep.topHold * 100) / 100;
+      if (rep.topHold < need) {
+        violations.push({
+          code: "hold_at_top",
+          metric: "top_hold_s",
+          observed: metrics.top_hold_s,
+          limit: need,
+          bound: "min",
+          severity: 1,
+          critical: true,
+          message_en: `Hold at the top for ${need} seconds before lowering.`,
+          message_th: `ค้างไว้ด้านบน ${need} วินาทีก่อนลดลง`,
+        });
       }
     }
 

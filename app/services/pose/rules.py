@@ -79,6 +79,9 @@ class RepDetection(BaseModel):
     #: where the phone is (the glute bridge read -51 at rest on one clip and
     #: -41 on another), so fixed lines cannot fit every setup.
     relative_to_rest_s: float | None = None
+    #: Seconds the signal must stay at or above `enter` within one rep -- a
+    #: hold at the top. Shorter and the rep is not counted.
+    min_top_hold_s: float | None = None
 
     @model_validator(mode="after")
     def _exit_below_enter(self) -> RepDetection:

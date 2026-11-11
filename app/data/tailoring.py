@@ -338,10 +338,11 @@ DOSES: dict[str, dict[AgeGroup, Dose]] = {
         AgeGroup.ADULT: Dose(sets=3, reps=8, tempo="2-0-2-0"),
         AgeGroup.SENIOR: Dose(sets=3, reps=6, rest_seconds=90, tempo="3-0-3-0"),
     },
+    # The middle number is the 3 s hold at the top the camera now asks for.
     BRIDGE: {
-        AgeGroup.YOUTH: Dose(sets=2, reps=12, tempo="2-0-2-0"),
-        AgeGroup.ADULT: Dose(sets=3, reps=12, tempo="2-0-2-0"),
-        AgeGroup.SENIOR: Dose(sets=3, reps=10, rest_seconds=90, tempo="3-0-3-0"),
+        AgeGroup.YOUTH: Dose(sets=2, reps=12, tempo="2-3-2-0"),
+        AgeGroup.ADULT: Dose(sets=3, reps=12, tempo="2-3-2-0"),
+        AgeGroup.SENIOR: Dose(sets=3, reps=10, rest_seconds=90, tempo="3-3-3-0"),
     },
     POGO: {
         AgeGroup.YOUTH: Dose(sets=2, reps=10),
