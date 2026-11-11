@@ -1824,10 +1824,13 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
         if (need && result.topHold !== null && !blocker) {
           const left = need - result.topHold;
           setState("good", left > 0 ? "Hold" : "Lower slowly");
-          centre.innerHTML =
+          const html =
             left > 0
               ? `<div class="countdown">${Math.ceil(left)}</div>`
-              : `<div class="cue">Now lower slowly</div>`;
+              : `<div class="countdown go">Down</div>`;
+          // Only when the number changes. Rewritten every frame, the number's
+          // fade-in restarted every frame too, so on the phone it never showed.
+          if (centre.innerHTML !== html) centre.innerHTML = html;
           cueUntil = performance.now() + 400;
         }
 
