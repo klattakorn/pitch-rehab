@@ -1359,35 +1359,6 @@ ul.role-changes .v {
   justify-content: flex-start;
 }
 
-.camera-note {
-  display: flex;
-  gap: var(--s3);
-  align-items: flex-start;
-  margin-top: var(--s4);
-  padding: var(--s3);
-  border-radius: var(--r-md);
-  background: var(--inset);
-  border: 1px solid var(--edge);
-  color: var(--ink-2);
-  font-size: var(--t-small);
-  line-height: 1.45;
-}
-.camera-note .cam-icon {
-  width: 20px;
-  height: 20px;
-  flex: none;
-  margin-top: 1px;
-  color: var(--volt);
-}
-.camera-note b {
-  color: var(--ink);
-}
-.camera-note small {
-  display: block;
-  color: var(--ink-3);
-  font-size: var(--t-micro);
-  margin-top: 2px;
-}
 .cam-icon {
   width: 15px;
   height: 15px;

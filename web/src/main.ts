@@ -964,7 +964,6 @@ function homeScreen(): void {
   };
   const percent = gatePercent(gate);
   const injury = INJURY_SITES.find((i) => i.key === episode.injury_site)?.label ?? "";
-  const scored = phase.prescriptions.filter((rx) => rx.exercise.pose_rule).length;
   const progress = state.progress;
 
   const week =
@@ -1012,14 +1011,6 @@ function homeScreen(): void {
            </div>
            ${progressRing(percent, "phase", "sm")}
          </div>
-         ${
-           scored
-             ? `<div class="camera-note">${CAMERA_ICON}
-                  <span><b>${scored} of ${phase.prescriptions.length}</b> checked live by
-                  your camera<small>Form scored rep by rep as you move</small></span>
-                </div>`
-             : ""
-         }
          <button class="primary block" id="start">Start Session</button>
        </section>
 

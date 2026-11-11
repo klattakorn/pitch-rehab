@@ -6,12 +6,12 @@
 
 
 Position-specific football rehabilitation. A player logs an injury, gets a programme
-built for **their position and their injury site**, does the exercises in front of
+built for **their position, their injury site and their age group**, does the exercises in front of
 their phone camera while MediaPipe scores their form, and only leaves a phase when
 every **exit criterion** actually passes — measured, not felt.
 
 ```
-6 positions  ×  7 injury sites  =  42 protocols  ×  4 phases  ·  33 MediaPipe landmarks
+6 positions  ×  7 injury sites  ×  3 age groups  =  126 protocols  ×  4 phases  ·  33 MediaPipe landmarks
 ```
 
 Python/FastAPI backend plus a browser front end that runs MediaPipe live.
@@ -42,7 +42,9 @@ uvicorn app.main:app --reload
 cd web && npm run dev
 ```
 
-First boot creates the SQLite schema and seeds all 42 protocols.
+First boot creates the SQLite schema and seeds all 126 protocols. A database made by
+an older version is upgraded in place on start (`app/db/migrate.py`), keeping every
+player and their history.
 
 | | |
 |---|---|
@@ -144,18 +146,25 @@ Open <https://localhost:5173> with the backend running in another terminal.
 | **Plan** | All four phases as tabs — drills, doses, and which need the camera |
 | **Progress** | Overall percentage, accuracy over time, sessions per day, milestones |
 | **Test** | The exit-criteria gate: what still stands between you and the next phase |
-| **Profile** | Position, injury, and what this is not |
+| **Profile** | Position, age group, injury, and what this is not |
 
-Before that there is a short linear onboarding — welcome → **position** → **injury** —
-because a programme cannot exist until both are known.
+Before that there is a short linear onboarding — welcome → **position** → **age
+group** → **injury** → **phase** — because a programme cannot exist until all three are
+known.
+
+**Every word on screen is for a player, not a programmer.** Raw codes, metric keys and
+error text (`dropped_12_untrusted_frames`, `knee_valgus`, `request failed (422)`) are
+turned into plain sentences before they are shown. The codes still travel to the
+server unchanged; only what the player reads is translated.
 
 **No internet needed.** MediaPipe's wasm and the pose model are copied into
 `web/public`, so nothing is fetched from a CDN at run time. Presentation wifi fails;
 this removes that risk.
 
-A generated copy of the exercise library also sits in `web/src/fallback.ts` for the day
-the *backend* dies mid-demo — but nothing imports it yet, so the app still needs the
-API. Parked deliberately, not forgotten.
+A generated copy of the exercise library also sits in `web/src/fallback.ts`. The app
+itself fetches the real one; the tests read this copy, so a stale copy after a change to
+`app/data/exercises.py` fails a test instead of passing quietly. Regenerate it with
+`python scripts/make_fallback_exercises.py`.
 
 ### Pointing at the injury instead of naming it
 
@@ -285,6 +294,38 @@ Changing position later re-points any open episode onto the new programme
 (`realign_protocol`). The player keeps their phase, their clock and their history —
 only the targets move.
 
+### Age groups
+
+A 16-year-old and a 45-year-old should not get the same plan. After the position, the
+player picks one of three groups — **under 18**, **18–39**, **40+** — and phase one is
+built for that group, their injury and their position together
+(`app/data/tailoring.py`). Every player gets three or four of the five camera-checked
+moves, at a dose for their age, and the plan screen says why ("Built for you").
+
+Three rules, in this order — safety first, then relevance:
+
+1. **Injury** can rule one move out and names the key move. No pogo hops on a healing
+   ACL graft, a sprained ankle, a calf, an irritated patellar tendon or long-standing
+   groin pain; no long split stance on a strained adductor.
+2. **Age** sets the dose and can rule one move out.
+
+   | Group | Dose | Ruled out |
+   |---|---|---|
+   | Under 18 | one set fewer of each move, shorter holds | — |
+   | 18–39 | three sets, full reps | — |
+   | 40+ | fewer reps, slower tempo, 90 s rest | pogo hops |
+
+3. **Position** gives one move an extra set (a winger's pogo hops, a keeper's wall sit)
+   and, only when nothing above removed anything, drops the move that role needs least.
+   It can never bring back something an injury or an age ruled out.
+
+The phase-one tests follow the plan: a player is only tested on moves they were given,
+at their age group's numbers. Age reaches phase one only; phases two to four are the
+same for every age. Changing age group (Profile → Age group) rebuilds the plan the same
+way changing position does, and a birth date on the profile picks the group when none
+was chosen. These are sensible physio defaults for a demonstration, not a clinical
+guideline.
+
 ### How it looks, and why
 
 The full system is in **[docs/DESIGN.md](docs/DESIGN.md)**. Two ideas carry it.
@@ -323,6 +364,21 @@ Two rules keep it from getting in the way, both enforced in `web/src/motion.ts`:
 
 The one place with any overshoot is the rep counter on the camera screen, when a rep is
 accepted. That is the moment the whole project is selling.
+
+### Starting and ending a set
+
+Pressing *start camera* does not start the count — the player is still walking back
+from the phone, and the counter would read that as reps. Instead (`web/src/pose/ready.ts`):
+
+1. **Get set.** The camera waits until it can see the player properly and they are in
+   the exercise's start position.
+2. **Hold still for 3 seconds.** A bar fills; moving or stepping out of shot restarts
+   it. Holding still works lying down, which a hand gesture would not (the glute bridge
+   is done on the floor).
+3. **3, 2, 1, Go.** Only now does a fresh scoring session start.
+4. **The set ends itself** when the reps that *counted* reach the prescription (or a
+   hold reaches its time): "Set complete", then the results screen. Refused reps do not
+   finish a set.
 
 ### Showing the player what "correct" looks like
 
@@ -480,8 +536,38 @@ After the fixes, the same video reads 5 reps, 86–100° of knee bend, 12–19°
 lean — all plausible, with a `frequent_tracking_loss` warning telling the player to
 re-film. Reproduce with `scripts/check_video.py`.
 
-**Still unverified:** valgus detection has never been tested against a real body. It
-needs a front-on video of someone letting the knee collapse on purpose.
+**5. Filming finds what reasoning misses, every time.** The four camera-checked moves of
+phase one — calf raise, wall sit, split squat, glute bridge — each shipped with
+thresholds reasoned out from anatomy, and each refused honest reps when first filmed.
+They are now tuned on real footage and pinned by tests that replay it
+(`web/src/pose/glute-bridge-real.test.ts` and friends).
+
+### Pogo hops: counting jumps from the front
+
+The fifth move, and the hardest. From the front a stiff-kneed hop bends the knee
+2–10° in the image, so the original knee-bend rule merged hops into two-second blobs
+(6 found out of 10). What it counts on now, all checked on six real clips:
+
+- **`foot_lift`** — how high the *lower* foot is off the floor, as % of torso length.
+  The floor is wherever each foot was lowest in the last 1.2 s; using the lower foot
+  means a step (one foot up) reads zero. A hop also ends once the feet fall to 40% of
+  that hop's height, because a player who drifts on landing never reads as fully back
+  on the floor. The head may leave the top of the frame — only the shoulders down need
+  to be in shot.
+- **Ground contact** between hops: springy 0.13–0.33 s, heavy 0.40–0.67 s. Over
+  0.36 s the hop is scored down: *"Too long on the ground."*
+- **Landing depth** (`LandingSink`) — how far the hips sink toward the ankles, as % of
+  the player's own full leg. The knee angle is hidden from the front; what it does to
+  the body is not. Springy 9–22%, squat-and-jump 26–34%. Over 25% the hop still counts
+  but is flagged, scored down, and the camera says *"Counted — fix it"* at once.
+  Flagged rather than refused because the limit is tuned on one person, and refusing a
+  good hop in front of someone is the worse mistake.
+
+Each hop also reports its air time. Knees caving in on landing is **not** detected: on
+straight-legged hops it is too small for MediaPipe's knee points to show.
+
+**Still unverified:** every pogo limit, and the glute bridge, are tuned on one person
+with the phone on the floor. Re-check on other bodies before trusting the numbers.
 
 ### 2. Exit criteria — `app/services/criteria/`
 
@@ -531,7 +617,7 @@ so a clinician can always answer *"why was this player cleared?"*.
 
 ### Writing your own exit criteria
 
-The 42 protocols ship with a gate per phase. A player can add to it — *"do 20 single-leg
+The 126 protocols ship with a gate per phase. A player can add to it — *"do 20 single-leg
 calf raises in one set"*, *"run at 7.8 m/s"*, *"triple hop within 95% of the other leg"* —
 and those tests join the battery like any other, blocking the phase until they pass.
 
@@ -593,18 +679,20 @@ rejects mismatches, so a typo cannot silently create a gate that never fires.
 
 ## The protocol library
 
-42 protocols are **composed**, not hand-written:
+126 protocols are **composed**, not hand-written:
 
 ```
 injury template (what the tissue needs)  +  position profile (what the job needs)
+                                          +  age group (phase one only: which moves, how much)
 ```
 
 Edit these three files and re-seed — never the database by hand:
 
 | File | Holds |
 |---|---|
-| `app/data/exercises.py` | 27 exercises with their MediaPipe rules and Thai/English cues |
+| `app/data/exercises.py` | 30 exercises with their MediaPipe rules and Thai/English cues |
 | `app/data/protocols.py` | 7 injury templates × 4 phases, 6 position profiles, and the composer |
+| `app/data/tailoring.py` | Phase one per age group × injury × position: which moves, the dose, and why |
 | `app/data/position_norms.py` | Fallback reference values per position |
 
 The position profile is what makes the poster's claim real. Same hamstring tear:
@@ -634,10 +722,10 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 
 | Method | Path | |
 |---|---|---|
-| `POST` | `/auth/register` | Players must pick a position — it decides their protocol |
+| `POST` | `/auth/register` | Players must pick a position — it decides their protocol. `age_group` optional |
 | `POST` | `/auth/login` | Same 401 for unknown email and wrong password |
 | `GET` | `/auth/me` | |
-| `PATCH` | `/players/me/profile` | Changing position re-points open episodes at the new programme |
+| `PATCH` | `/players/me/profile` | Changing position, age group or birth date re-points open episodes at the new programme |
 | `GET` `PUT` | `/players/me/baselines` | Personal reference values for `percent_of_baseline` |
 | `GET` | `/players/me/reference-values` | What the engine would use with no baseline stored |
 
@@ -648,8 +736,8 @@ Everything is under `/api/v1`. Auth is a bearer JWT from `/auth/login`.
 | `GET` | `/catalog/positions` | The six roles and what each one changes — powers the role picker |
 | `GET` | `/injuries/{id}/progress` | The Progress tab, derived on read — never stored |
 | `GET` | `/catalog/exercises` | Includes each `pose_rule` for on-device scoring |
-| `GET` | `/catalog/protocols` | All 30, filterable by position / injury site |
-| `GET` | `/catalog/protocols/{position}/{injury_site}` | Full 4-phase programme |
+| `GET` | `/catalog/protocols` | All 126, filterable by position / injury site / age group |
+| `GET` | `/catalog/protocols/{position}/{injury_site}` | Full 4-phase programme. `?age_group=` (default adult) |
 | `GET` | `/catalog/phases` | |
 
 **Injury episode**
@@ -707,7 +795,7 @@ them, only derived numbers persist.
 
 ## Tests
 
-**91 on the server, 229 in the browser.** They cover what actually matters rather than
+**294 on the server, 329 in the browser.** They cover what actually matters rather than
 line count:
 
 - `test_pose.py` — angles match the pose they were built from; depth failures coach but
@@ -722,13 +810,22 @@ line count:
 - `test_api_flow.py` — the whole journey the app will make, plus authorisation edges
   (players cannot sign themselves off, cannot read another player's episode), and the
   role picker: the numbers it shows are the ones the protocol really enforces, and
-  changing position moves the targets without losing the player's progress.
+  changing position or age group moves the targets without losing the player's progress.
+- `test_tailoring.py` — every one of the 126 combinations gets three or four moves, a
+  position never brings back what an injury ruled out, nobody over 40 jumps in phase
+  one, and an old database is upgraded in place without losing a row or a link.
 
 In `web/`:
 
 - `crosscheck.test.ts` — the Python and TypeScript pose maths agree, pinned by a
   generated fixture.
 - `live.test.ts` — the streaming rep state machine and its rolling-window guards.
+- `glute-bridge-real.test.ts`, `pogo-real.test.ts` — replay real footage (as joint
+  coordinates, no images) and pin the rep counts, the hop timings and the landing flags.
+- `ready.test.ts` — the start gate never opens mid-set and opens once the player holds
+  still.
+- `standalone.test.ts` — the no-laptop demo replays real answers, refuses to invent
+  scores, and rebuilds phase one when the age group changes.
 - `demo.test.ts` — every exercise has a distinct "wrong" pose to demonstrate.
 - `roles.test.ts` — what a position changes, and the attribute hooks the animations
   find their work by. Motion that quietly stops working breaks nothing else, so the
@@ -771,8 +868,9 @@ without a camera.
 
 ## Not done yet
 
-- **Alembic.** `create_all` is fine while the schema moves; add migrations before the
-  first real deployment.
+- **Alembic.** `create_all` plus the small in-place upgrade in `app/db/migrate.py`
+  (SQLite only) is fine while the schema moves; add real migrations before the first
+  real deployment.
 - **Refresh tokens, rate limiting, password reset, email verification.** Auth is a
   single long-lived access token today.
 - **Postgres.** Everything is Postgres-ready (`RTP_DATABASE_URL`), but it has only been
@@ -783,15 +881,17 @@ without a camera.
   screen from the product poster with nothing behind it.
 - **A coach or medical-staff view.** Clinician sign-off exists as an endpoint; there is
   no screen listing a squad.
-- **The offline fallback.** `web/src/fallback.ts` is generated and tested but nothing
-  imports it, so the app still needs the API. Deliberately parked.
+- **More bodies on camera.** The pogo hop limits and the glute bridge are tuned on one
+  person; film others before trusting the numbers.
+- **Per-leg scoring in the browser.** Live, both legs of a two-legged move go into one
+  pool; the server judges the worse leg. They agree on every filmed clip, but can differ.
 
 ## Layout
 
 ```
 app/
   core/        config, enums, JWT + password hashing
-  db/          engine, session, base types, seeding
+  db/          engine, session, base types, seeding, in-place schema upgrade (migrate.py)
   models/      SQLAlchemy tables
   schemas/     Pydantic request/response models
   services/
@@ -800,6 +900,7 @@ app/
     progression.py
     progress.py  what the Progress tab draws, derived from completed sessions
   data/        exercises, protocols, position norms   ← edit the library here
+    tailoring.py  phase one by age group, injury and position
     authorable.py what a player may build their own tests from
   api/routers/ auth, players, catalog, injuries, sessions
 tests/
@@ -809,13 +910,13 @@ web/src/
   bodymap.ts   front/back silhouettes with a marker per injury site
   charts.ts    the accuracy line and the sessions bars, as plain SVG
   criteria.ts  building your own exit criterion: wording, units, the draft
-  styles.css   the design system — see docs/DESIGN.md for why
+  styles.css   the design system, one motion language, the phone rules — see docs/DESIGN.md
   mediapipe.ts model choice, camera (front/rear, mirroring), screen wake lock
   motion.ts    entrances, counters, bars and rings — all reduced-motion aware
-  ui.ts        the mark, the icon set, the ring and bar
-  pose/        the browser copy of the pose maths
+  ui.ts        the mark, the icon set, plain-English units and warnings
+  pose/        the browser copy of the pose maths, and ready.ts (the start gate)
   demo/        the animated how-to figure
-  styles.css   palette, components, one motion language, and the phone rules
+  fx/          the 3D welcome figure and the celebration burst
 web/scripts/
   make-cert.mjs     self-signed https, kept current as the laptop's address moves
   qr.mjs            a QR encoder, so nothing has to be installed to draw one
