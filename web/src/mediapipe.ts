@@ -21,21 +21,57 @@ export function isHandheld(): boolean {
   return coarse || navigator.maxTouchPoints > 1;
 }
 
+export type ModelVariant = "full" | "lite";
+
 /**
- * Which pose model to load.
+ * Which pose model to load: always `full`, on every device.
  *
- * `full` is the reference — the cross-check fixtures were generated from it and
- * the thresholds were tuned against it. `lite` trades some accuracy for roughly
- * three times the frame rate, which on a phone is the difference between live
- * coaching and a slideshow. Bad advice delivered smoothly is still bad advice,
- * so this only ever downgrades on a device that cannot run the full model well.
+ * `full` is the reference -- every threshold was tuned against it and every
+ * test replays footage it produced, so a phone running it counts the way the
+ * tests say it does. `lite` is several times faster but was never tuned on.
+ * Phones used to get `lite` up front; now they start on `full` and drop to
+ * `lite` only if this phone measurably cannot keep up (see `ModelSpeed`).
  */
-export function preferredModel(): "full" | "lite" {
-  return isHandheld() ? "lite" : "full";
+export function preferredModel(): ModelVariant {
+  return "full";
+}
+
+/** Frames ignored first: the GPU compiles its shaders on the first few. */
+export const SPEED_WARMUP_FRAMES = 15;
+/** Frames timed after the warm-up, before deciding. About a second. */
+export const SPEED_SAMPLE_FRAMES = 30;
+/**
+ * Slower than this per frame (median) and the phone cannot keep up: 55 ms is
+ * about 18 frames a second, below which a pogo hop (about 0.4 s in the air)
+ * is down to a handful of frames and starts being missed.
+ */
+export const SLOW_FRAME_MS = 55;
+
+/**
+ * Is this device fast enough for the model it is running?
+ *
+ * Judged on how long each detection takes, not on frames per second: a camera
+ * in a dim room drops its own frame rate, and that is not the model's fault --
+ * switching would lose accuracy and gain nothing. The median, so one hiccup
+ * (a notification, a garbage collection) cannot decide it.
+ */
+export class ModelSpeed {
+  private seen = 0;
+  private readonly times: number[] = [];
+
+  push(ms: number): "measuring" | "ok" | "slow" {
+    this.seen++;
+    if (this.seen <= SPEED_WARMUP_FRAMES) return "measuring";
+    this.times.push(ms);
+    if (this.times.length < SPEED_SAMPLE_FRAMES) return "measuring";
+    const sorted = [...this.times].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)]!;
+    return median > SLOW_FRAME_MS ? "slow" : "ok";
+  }
 }
 
 export async function createPoseLandmarker(
-  variant: "full" | "lite" = preferredModel(),
+  variant: ModelVariant = preferredModel(),
 ): Promise<PoseLandmarker> {
   const fileset = await FilesetResolver.forVisionTasks("/mediapipe/wasm");
   try {
@@ -51,11 +87,22 @@ export async function createPoseLandmarker(
       minTrackingConfidence: 0.5,
     });
   } catch (error) {
-    // The lite model is optional -- `vendor-assets.mjs` warns rather than fails
-    // when it is missing. Falling back keeps the demo alive on a phone whose
-    // copy never got vendored.
-    if (variant === "lite") return createPoseLandmarker("full");
-    throw error;
+    // Either model can fail to load on some phone (a missing file, a GPU the
+    // browser will not use for it). Try the other once rather than leave the
+    // player with no camera at all; if both fail, say so.
+    const other: ModelVariant = variant === "full" ? "lite" : "full";
+    try {
+      return await PoseLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: `/models/pose_landmarker_${other}.task`, delegate: "GPU" },
+        runningMode: "VIDEO",
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+    } catch {
+      throw error;
+    }
   }
 }
 

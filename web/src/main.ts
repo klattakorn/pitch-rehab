@@ -33,7 +33,9 @@ import { StartGate } from "./pose/ready";
 import { gsap } from "gsap";
 import type { Facing } from "./mediapipe";
 import {
+  ModelSpeed,
   createPoseLandmarker,
+  isHandheld,
   hasMultipleCameras,
   keepScreenAwake,
   startCamera,
@@ -1472,7 +1474,16 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   // The phone is propped up and the player is three metres away. Without this
   // the screen sleeps mid-set and the rep count simply stops.
   const releaseWakeLock = keepScreenAwake();
-  const landmarker = await createPoseLandmarker();
+  let landmarker = await createPoseLandmarker();
+  // Phones start on the full model too; if this one cannot keep up it drops
+  // to lite -- measured only before counting starts, never mid-set.
+  const speed = isHandheld() ? new ModelSpeed() : null;
+  let switchingModel = false;
+  let speedDone = false;
+  /** One decision per camera screen: stop measuring once it is made. */
+  const speedChecked = (): void => {
+    speedDone = true;
+  };
   canvas.width = camera.width;
   canvas.height = camera.height;
 
@@ -1596,11 +1607,44 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
     readout.textContent = `Get into position and hold still for ${HOLD_SECONDS} seconds`;
   };
 
+  /**
+   * Swap to the lite model. Only ever called before counting starts: the hold
+   * is restarted, so nothing measured by one model is mixed with the other.
+   * If lite will not load, the full model simply carries on.
+   */
+  const dropToLite = (): void => {
+    switchingModel = true;
+    void createPoseLandmarker("lite")
+      .then((lite) => {
+        if (!running || session) {
+          lite.close();
+          return;
+        }
+        landmarker.close();
+        landmarker = lite;
+        gate.reset();
+      })
+      .catch(() => {
+        /* keep the full model */
+      })
+      .finally(() => {
+        switchingModel = false;
+      });
+  };
+
   const loop = (): void => {
     if (!running) return;
-    if (!paused && video.currentTime !== lastTime && video.readyState >= 2) {
+    if (!paused && !switchingModel && video.currentTime !== lastTime && video.readyState >= 2) {
       lastTime = video.currentTime;
-      const points = landmarker.detectForVideo(video, performance.now()).landmarks?.[0];
+      const t0 = performance.now();
+      const points = landmarker.detectForVideo(video, t0).landmarks?.[0];
+      if (speed && !session && !speedDone) {
+        const verdict = speed.push(performance.now() - t0);
+        if (verdict === "slow") {
+          speedChecked();
+          dropToLite();
+        } else if (verdict === "ok") speedChecked();
+      }
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       if (finishing) {

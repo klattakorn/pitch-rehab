@@ -213,12 +213,15 @@ warning.
 Only the browser-facing origin has to be secure. The API stays on plain http and Vite
 proxies to it, a hop that never leaves the machine.
 
-**2. The big model is too slow.** `pose_landmarker_full` is what the laptop runs and
-what the cross-check fixtures were generated from. On a mid-range phone it is a
-slideshow. `pose_landmarker_lite` is a little over half the size and several times
-faster, and `mediapipe.ts` picks it on any device with a coarse pointer. This only ever
-downgrades on hardware that cannot run the full model well — smooth bad advice is still
-bad advice.
+**2. The big model can be too slow.** `pose_landmarker_full` is what every threshold
+was tuned on and every test replays, so phones run it too. But on a mid-range phone
+it can be a slideshow, and a pogo hop is in the air for about 0.4 s. So while the
+camera waits for the player to hold still — never mid-set — `ModelSpeed` times the
+detections. If the median is over 55 ms a frame (about 18 a second), the phone drops
+to `pose_landmarker_lite`, a little over half the size and several times faster, and
+the hold starts again so nothing measured by one model mixes with the other. The
+first frames are ignored (the GPU warms up on them), and a dim room that slows the
+camera itself does not trigger it. If either model fails to load, the other is tried.
 
 **3. Phones have two cameras.** The one you want depends on whether you can see the
 screen. A flip button appears when the device reports more than one.
