@@ -14,7 +14,7 @@ import "./styles.css";
 import * as api from "./api";
 import type { Episode, Gate, Phase, Prescription } from "./api";
 import { INJURY_SITES, bodyMapHtml } from "./bodymap";
-import { barChart, lineChart, meterRow } from "./charts";
+import { lineChart, meterRow } from "./charts";
 import {
   ABSOLUTE,
   TARGET_TYPE_LABELS,
@@ -1968,16 +1968,26 @@ async function progressScreen(): Promise<void> {
     ? Math.round(tracked.reduce((sum, e) => sum + e.mean_form_score * e.sets, 0) / trackedSets)
     : null;
 
-  // --- the two charts, with a one-line reading so nobody has to decode them --
-  const scoredDays = p.trend.filter((t) => t.mean_form_score !== null);
-  const recentSessions = p.trend.slice(-7).reduce((n, t) => n + t.sessions, 0);
-  const activeDays = p.trend.filter((t) => t.sessions > 0).length;
+  // --- form over time: one chart, with the reading written out -------------
   // Only the days that were scored. Days off would break the line into
   // dashes; on this chart a rest day is not a missing reading, it is a rest day.
+  const scoredDays = p.trend.filter((t) => t.mean_form_score !== null);
   const accuracyPoints = scoredDays.map((t) => ({ day: t.day, value: t.mean_form_score }));
-  const sessionPoints = p.trend.map((t) => ({ day: t.day, value: t.sessions }));
+  const firstForm = scoredDays[0]?.mean_form_score ?? null;
+  const lastForm = scoredDays.at(-1)?.mean_form_score ?? null;
+  const formReading =
+    firstForm === null || lastForm === null
+      ? "No camera-scored sets yet. Do one of the camera-tracked moves to start this chart."
+      : scoredDays.length < 2
+        ? `${Math.round(lastForm)} out of 100 on your first scored day.`
+        : Math.abs(lastForm - firstForm) < 3
+          ? `Steady at about ${Math.round(lastForm)} out of 100.`
+          : `${lastForm > firstForm ? "Up" : "Down"} from ${Math.round(firstForm)} to ${Math.round(
+              lastForm,
+            )} out of 100.`;
 
-  // --- achievements and what is left --------------------------------------
+  // --- achievements, and a pointer to what is left -------------------------
+  // What is left is the Test tab's whole job; here it is one line that goes there.
   const banked = p.milestones.filter((m) => m.reached);
   const remaining = (gate?.criteria ?? []).filter((c) => c.required && c.status !== "pass");
 
@@ -1996,37 +2006,41 @@ async function progressScreen(): Promise<void> {
        <ol class="roadmap">${steps.join("")}</ol>
      </section>
 
-     <div class="tiles">
-       <div class="tile"><div class="n">${tileValue(p.sessions_completed)}</div>
-         <div class="k">Sessions done</div></div>
-       <div class="tile"><div class="n">${tileValue(p.exercises_completed)}</div>
-         <div class="k">Exercises done</div></div>
-       <div class="tile"><div class="n">${
-         trackedForm === null ? "—" : tileValue(trackedForm, "%")
-       }</div><div class="k">Camera form</div></div>
-     </div>
-
      ${
        remaining.length
-         ? `<section class="panel">
-              <span class="label">Left to pass this phase</span>
-              <div class="stack tight">
-                ${remaining
-                  .map((c) =>
-                    meterRow(
-                      c.label_en,
-                      c.status === "no_data" ? "Not tested yet" : "In progress",
-                      Math.round(Math.max(0, Math.min(1, c.progress)) * 100),
-                    ),
-                  )
-                  .join("")}
-              </div>
-            </section>`
+         ? `<button class="rowcard" id="to-test">
+              <span class="rowbody"><b>${remaining.length} ${
+                remaining.length === 1 ? "test" : "tests"
+              } left to pass this phase</b><small>See them on the Test tab</small></span>
+              ${CHEVRON}
+            </button>`
          : gate?.passed
            ? `<div class="notice good">Every test for this phase is passed.
                 You are ready to move on.</div>`
            : ""
      }
+
+     <section class="panel">
+       <span class="label">Your form</span>
+       <div class="row-between">
+         <p class="caption">${formReading}</p>
+         ${trackedForm === null ? "" : progressRing(trackedForm, "average", "sm")}
+       </div>
+       ${lineChart(accuracyPoints)}
+       ${
+         tracked.length
+           ? `<div class="stack tight">${tracked
+               .map((e) =>
+                 meterRow(
+                   e.name_en,
+                   `${e.sets} ${e.sets === 1 ? "set" : "sets"}`,
+                   e.mean_form_score,
+                 ),
+               )
+               .join("")}</div>`
+           : ""
+       }
+     </section>
 
      ${
        p.symmetry
@@ -2043,42 +2057,6 @@ async function progressScreen(): Promise<void> {
             </section>`
          : ""
      }
-
-     <section class="panel">
-       <span class="label">Camera form score by day</span>
-       <p class="caption">${
-         scoredDays.length
-           ? `How cleanly your camera-scored sets were done, out of 100.`
-           : `No camera-scored sets yet. Do one of the 5 tracked moves to start this chart.`
-       }</p>
-       ${lineChart(accuracyPoints)}
-     </section>
-
-     <section class="panel">
-       <span class="label">Sessions per day</span>
-       <p class="caption">${recentSessions} ${
-         recentSessions === 1 ? "session" : "sessions"
-       } in the last 7 days · active on ${activeDays} of the last ${p.trend.length} days.</p>
-       ${barChart(sessionPoints)}
-     </section>
-
-     <section class="panel">
-       <span class="label">Camera-tracked moves</span>
-       ${
-         tracked.length
-           ? `<div class="stack tight">${tracked
-               .map((e) =>
-                 meterRow(
-                   e.name_en,
-                   `${e.sets} ${e.sets === 1 ? "set" : "sets"}`,
-                   e.mean_form_score,
-                 ),
-               )
-               .join("")}</div>`
-           : `<p class="caption">None yet. The camera tracks the calf raise, wall
-                sit, split squat, glute bridge and pogo hops.</p>`
-       }
-     </section>
 
      <h3>Achieved</h3>
      <div class="stack">
@@ -2103,6 +2081,8 @@ async function progressScreen(): Promise<void> {
      </div>`,
     { tab: "progress", title: "Progress", back: () => homeScreen() },
   );
+
+  on("#to-test", () => testScreen());
 
   // Every test for the phase passed: mark it, once per phase, not on every visit.
   if (gate?.passed) {

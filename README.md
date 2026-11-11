@@ -144,7 +144,7 @@ Open <https://localhost:5173> with the backend running in another terminal.
 |---|---|
 | **Home** | Current plan, today's session, the week at a glance |
 | **Plan** | All four phases as tabs — drills, doses, and which need the camera |
-| **Progress** | Overall percentage, accuracy over time, sessions per day, milestones |
+| **Progress** | Where you are on the road back, how your form is trending, and what you have achieved |
 | **Test** | The exit-criteria gate: what still stands between you and the next phase |
 | **Profile** | Position, age group, injury, and what this is not |
 
