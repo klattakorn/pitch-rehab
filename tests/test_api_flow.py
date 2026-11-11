@@ -239,7 +239,7 @@ def test_camera_scored_exercises_reject_an_empty_upload(
         json={"exercise_key": "prone_hamstring_curl", "side": "left", "frames": []},
     )
     assert response.status_code == 422
-    assert "landmark frames" in response.json()["detail"]
+    assert "didn't see enough" in response.json()["detail"]
 
 
 def test_drills_with_no_camera_rule_are_logged_manually(
@@ -697,3 +697,52 @@ def test_age_group_can_be_chosen_at_sign_up(client: TestClient) -> None:
     )
     assert registered.status_code == 201
     assert registered.json()["profile"]["age_group"] == "youth"
+
+
+def test_a_birth_date_puts_a_player_on_their_age_groups_plan(
+    client: TestClient, headers: dict[str, str], episode_id: int
+) -> None:
+    """No age picked, but a birth date that says 40+: the plan follows it,
+    and picking the band they are already in does not leave them stranded."""
+    client.patch(
+        f"{API}/players/me/profile", headers=headers, json={"date_of_birth": "1980-01-01"}
+    )
+    protocol = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
+    assert protocol["age_group"] == "senior"
+    client.patch(f"{API}/players/me/profile", headers=headers, json={"age_group": "senior"})
+    protocol = client.get(f"{API}/injuries/{episode_id}/protocol", headers=headers).json()
+    assert protocol["age_group"] == "senior"
+
+
+def test_a_tweaked_test_for_a_move_no_longer_given_does_not_block(db) -> None:  # noqa: ANN001
+    """Moving age group can drop a movement; a player's tweak of that
+    movement's test must not come back as a required test."""
+    from app.core.enums import AgeGroup, InjurySite, PhaseKey, Position
+    from app.models.injury import EpisodeCriterion
+    from app.services.criteria.engine import evaluate_phase
+    from app.services.progression import realign_protocol
+    from tests.conftest import make_episode, make_player
+
+    player = make_player(db, "tweak@rtpapp.com", Position.CENTRE_BACK)
+    player.age_group = AgeGroup.SENIOR
+    episode = make_episode(db, player, InjurySite.HAMSTRING)
+    phase = next(p for p in episode.protocol.phases if p.phase_key is PhaseKey.P1_PROTECT)
+    wall = next(c for c in phase.exit_criteria if c.key == "wall_sit_hold")
+    db.add(
+        EpisodeCriterion(
+            episode_id=episode.id,
+            phase_key=PhaseKey.P1_PROTECT,
+            key="wall_sit_hold",
+            label_en="Hold a wall sit for 25 seconds",
+            label_th="x",
+            required=True,
+            spec=wall.spec,
+        )
+    )
+    player.age_group = AgeGroup.YOUTH
+    db.flush()
+    assert realign_protocol(db, episode) is not None
+    db.flush()
+    db.refresh(episode)
+    gate = evaluate_phase(db, episode, PhaseKey.P1_PROTECT)
+    assert "wall_sit_hold" not in {c.key for c in gate.criteria}

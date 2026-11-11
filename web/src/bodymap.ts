@@ -31,7 +31,7 @@ export const INJURY_SITES: InjuryOption[] = [
   {
     key: "groin",
     label: "Groin pain",
-    note: "Long-standing, load-related",
+    note: "Ongoing pain that builds with training",
     view: "front",
     x: 44,
     y: 104,
@@ -39,15 +39,15 @@ export const INJURY_SITES: InjuryOption[] = [
   {
     key: "adductor",
     label: "Adductor strain",
-    note: "Acute groin muscle tear",
+    note: "Sudden pull in the inner thigh",
     view: "front",
     x: 42,
     y: 121,
   },
   {
     key: "acl",
-    label: "ACL reconstruction",
-    note: "Post-surgical knee ligament",
+    label: "ACL surgery",
+    note: "After an operation on a knee ligament",
     view: "front",
     x: 38,
     y: 156,
@@ -63,7 +63,7 @@ export const INJURY_SITES: InjuryOption[] = [
   {
     key: "ankle",
     label: "Ankle sprain",
-    note: "Lateral or medial ligament",
+    note: "Rolled or twisted ankle",
     view: "front",
     x: 37,
     y: 210,
@@ -71,7 +71,7 @@ export const INJURY_SITES: InjuryOption[] = [
   {
     key: "hamstring",
     label: "Hamstring strain",
-    note: "Biceps femoris, semitendinosus",
+    note: "Back of the thigh",
     view: "back",
     x: 38,
     y: 133,
@@ -79,7 +79,7 @@ export const INJURY_SITES: InjuryOption[] = [
   {
     key: "calf",
     label: "Calf strain",
-    note: "Gastrocnemius, soleus, achilles",
+    note: "Back of the lower leg",
     view: "back",
     x: 62,
     y: 188,

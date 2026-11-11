@@ -36,8 +36,23 @@ export class ApiError extends Error {
     readonly status: number,
     readonly detail: unknown,
   ) {
-    super(typeof detail === "string" ? detail : `request failed (${status})`);
+    super(friendlyDetail(status, detail));
   }
+}
+
+/** What a player reads when a request fails. Never a status code. */
+function friendlyDetail(status: number, detail: unknown): string {
+  if (typeof detail === "string" && detail) return detail;
+  if (detail && typeof detail === "object" && "message_en" in detail) {
+    return String((detail as { message_en: unknown }).message_en);
+  }
+  if (Array.isArray(detail)) {
+    return "Some of the details you entered aren't right. Please check and try again.";
+  }
+  if (status === 0) return "Can't reach the app right now. Check your connection and try again.";
+  if (status === 401) return "Please sign in again.";
+  if (status === 404) return "We couldn't find that.";
+  return "Something went wrong. Please try again in a moment.";
 }
 
 let token: string | null = localStorage.getItem(TOKEN_KEY);
@@ -65,9 +80,22 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Content-Type", "application/json");
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  const response = await fetch(`${BASE}${path}`, { ...init, headers });
+  let response: Response;
+  try {
+    response = await fetch(`${BASE}${path}`, { ...init, headers });
+  } catch {
+    // The browser's own words for this ("Failed to fetch", "Load failed")
+    // mean nothing to a player.
+    throw new ApiError(0, null);
+  }
   const text = await response.text();
-  const body = text ? JSON.parse(text) : null;
+  let body: any = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    // An error page instead of an answer: say so plainly, not "Unexpected token <".
+    if (!response.ok) throw new ApiError(response.status, null);
+  }
   if (!response.ok) throw new ApiError(response.status, body?.detail ?? body);
   return body as T;
 }

@@ -24,15 +24,15 @@ def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None,
 ) -> User:
     if credentials is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing bearer token")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Please sign in.")
     try:
         payload = decode_access_token(credentials.credentials)
     except jwt.PyJWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid or expired token") from exc
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "You've been signed out. Please sign in again.") from exc
 
     user = db.get(User, int(payload["sub"]))
     if user is None or not user.is_active:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found or disabled")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "We couldn't find your account. Please sign in again.")
     return user
 
 
@@ -46,7 +46,7 @@ def get_current_player(db: DbSession, user: CurrentUser) -> PlayerProfile:
     if profile is None:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            "this account has no player profile — create one first",
+            "Set up your player details first.",
         )
     return profile
 
@@ -56,7 +56,7 @@ CurrentPlayer = Annotated[PlayerProfile, Depends(get_current_player)]
 
 def require_clinician(user: CurrentUser) -> User:
     if user.role not in (Role.CLINICIAN, Role.ADMIN):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "clinician role required")
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a physio or coach can do this.")
     return user
 
 
@@ -74,13 +74,13 @@ def get_episode(
     """
     episode = db.get(InjuryEpisode, episode_id)
     if episode is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "injury episode not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "We couldn't find that injury.")
     if user.role is Role.PLAYER:
         profile = db.execute(
             select(PlayerProfile).where(PlayerProfile.user_id == user.id)
         ).scalar_one_or_none()
         if profile is None or episode.player_id != profile.id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "injury episode not found")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "We couldn't find that injury.")
     return episode
 
 

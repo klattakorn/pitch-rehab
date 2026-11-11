@@ -387,12 +387,22 @@ export function targetLines(rule: ExerciseRule): string[] {
     pelvic_drop: "Hip drop",
     ankle_dorsiflexion: "Ankle bend",
     heel_raise_ratio: "Heel height",
+    hip_extension: "Hip lift",
+    knee_extension: "Knee straightness",
+    foot_lift: "Feet off the floor",
   };
   return rule.targets.map((t) => {
-    const label = nice[t.metric] ?? t.metric;
-    const unit = t.metric.endsWith("_ratio") ? "" : "°";
+    const label = nice[t.metric] ?? "Form";
+    // Ratios are fractions of a body length: as a percentage, like the live readout.
+    const isRatio = t.metric.endsWith("_ratio");
+    const unit = isRatio ? "%" : "°";
+    const fmt = (v: number) => (isRatio ? Math.round(v * 100) : v);
     const bound =
-      t.min != null ? `at least ${t.min}${unit}` : t.max != null ? `no more than ${t.max}${unit}` : "";
+      t.min != null
+        ? `at least ${fmt(t.min)}${unit}`
+        : t.max != null
+          ? `no more than ${fmt(t.max)}${unit}`
+          : "";
     return `${label} — ${bound}`;
   });
 }

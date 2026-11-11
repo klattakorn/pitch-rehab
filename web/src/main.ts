@@ -28,10 +28,9 @@ import {
   windowText,
 } from "./criteria";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
-import { mountLab } from "./lab";
 import { celebrate, tilt } from "./fx/celebrate";
+import { StartGate } from "./pose/ready";
 import { gsap } from "gsap";
-import type { Exercise } from "./pose/rules";
 import type { Facing } from "./mediapipe";
 import {
   createPoseLandmarker,
@@ -45,6 +44,7 @@ import type { Side } from "./pose/landmarks";
 import { LiveSession } from "./pose/live";
 import { drawSkeleton, metricsToShow, renderReadout } from "./render";
 import { byDemand, roleCardHtml, roleDetailHtml } from "./roles";
+import { friendlyUnit, friendlyWarnings, sideLabel } from "./ui";
 import {
   BACK_ARROW,
   BELL,
@@ -100,10 +100,30 @@ function phaseName(phaseKey: string): string {
     return state.phase.title_en;
   }
   const fromProtocol = state.protocol?.phases.find((p) => p.phase_key === phaseKey);
-  return fromProtocol?.title_en ?? PHASE_NAMES[phaseKey]?.name ?? titleCase(phaseKey);
+  return fromProtocol?.title_en ?? PHASE_NAMES[phaseKey]?.name ?? phaseFallback(phaseKey);
 }
 
 const PHASE_ORDER = ["p1_protect", "p2_strength", "p3_running", "p4_return"];
+
+/** A phase with no title anywhere: its number, never its internal key. */
+function phaseFallback(phaseKey: string): string {
+  const n = PHASE_ORDER.indexOf(phaseKey);
+  return n >= 0 ? `Phase ${n + 1}` : "Your current phase";
+}
+
+/** Where to put the phone, in words -- not "Side camera", which sounds like a lens. */
+const CAMERA_WORDS: Record<string, string> = {
+  front: "Camera: face the phone",
+  side: "Camera: side on to the phone",
+};
+
+const CATEGORY_WORDS: Record<string, string> = {
+  plyo: "Jumping",
+  activation: "Warm-up",
+  mobility: "Mobility",
+  strength: "Strength",
+  running: "Running",
+};
 
 type Tab = "home" | "plan" | "progress" | "test" | "profile";
 
@@ -166,7 +186,7 @@ function header(chrome: Chrome): string {
           <span class="name">${state.user?.full_name ?? "Player"}</span>
         </div>
         <div class="spacer"></div>
-        ${state.online ? "" : `<span class="pill bad">offline</span>`}
+        ${state.online ? "" : `<span class="pill bad">Not connected</span>`}
         <button class="iconbtn ghosted" id="bell" aria-label="Notifications">
           ${BELL}<span class="dot-badge"></span></button>
       </header>`;
@@ -324,7 +344,10 @@ const on = (selector: string, handler: () => void): void => {
  * it does not have.
  */
 function fail(error: unknown, back?: () => void): void {
-  const message = error instanceof Error ? error.message : String(error);
+  // Our own messages are written for people; anything else (a bug, a
+  // browser error) is not, and is never shown as it is.
+  const message =
+    error instanceof api.ApiError ? error.message : "Something went wrong. Please try again.";
   const declined =
     api.standaloneActive() && error instanceof api.ApiError && error.status === 503;
   shell(
@@ -333,8 +356,8 @@ function fail(error: unknown, back?: () => void): void {
        <button class="primary" id="home">${back ? "Back" : "Back to start"}</button>
      </div>`,
     back
-      ? { title: declined ? "Needs the laptop" : "Something went wrong", back }
-      : { title: declined ? "Needs the laptop" : "Something went wrong" },
+      ? { title: declined ? "Not in the demo" : "Something went wrong", back }
+      : { title: declined ? "Not in the demo" : "Something went wrong" },
   );
   on("#home", () => (back ? back() : void boot()));
 }
@@ -376,8 +399,8 @@ function firstRunScreen(): void {
        <div class="stack">
          <button class="primary block" id="demo">Try the demo</button>
        </div>
-       <p class="sub tiny">The demo is a real player's programme, recorded from
-         the real system. <b>The camera is not a recording</b> — it counts your
+       <p class="sub tiny">The demo is a real player's programme, saved from
+         the full app. <b>The camera is not a recording</b> — it counts your
          reps and scores your form as you move, on this phone.</p>
      </div>`,
     { brand: true },
@@ -596,13 +619,13 @@ const AGE_GROUPS = [
     key: "youth",
     label: "Under 18",
     blurb: "Still growing",
-    changes: "Two sets instead of three, and shorter holds.",
+    changes: "One set fewer of each move, and shorter holds.",
   },
   {
     key: "adult",
     label: "18–39",
-    blurb: "The standard dose",
-    changes: "Three sets, full reps.",
+    blurb: "The standard amount",
+    changes: "The full workload: three sets, full reps.",
   },
   {
     key: "senior",
@@ -631,7 +654,12 @@ function ageScreen(intent: AgeIntent): void {
   const chrome: Chrome =
     intent.mode === "edit"
       ? { title: "Your age group", back: () => profileScreen() }
-      : { brand: true };
+      : {
+          brand: true,
+          // Nothing is saved until this screen, so going back loses nothing.
+          back: () =>
+            void roleScreen({ mode: "signup", email: intent.email, password: intent.password }),
+        };
 
   shell(
     `${
@@ -642,7 +670,7 @@ function ageScreen(intent: AgeIntent): void {
         : ""
     }
      <h2>How old are you?</h2>
-     <p class="sub">A 16-year-old and a 45-year-old should not get the same dose.
+     <p class="sub">A 16-year-old and a 45-year-old should not do the same amount of work.
        Your age group decides which exercises you start with, and how much of each.</p>
      <div class="role-grid">
        ${AGE_GROUPS.map(
@@ -695,10 +723,15 @@ function ageScreen(intent: AgeIntent): void {
         await api.updateProfile({ age_group: chosen! });
         // The plan underneath has been rebuilt for this age group. Nothing
         // logged is touched; show phase one, which is where the difference is.
+        // Reloaded here rather than through boot(), which handles its own
+        // errors -- so a failure would be painted over by the plan screen.
+        state.user = await api.me();
         state.protocol = null;
         state.progress = null;
-        await boot();
-        if (state.episode) void planScreen(PHASE_ORDER[0]);
+        if (!state.episode) return profileScreen();
+        await refresh();
+        state.protocol = await api.protocolFor(state.episode.id);
+        await planScreen(PHASE_ORDER[0]);
       } catch (error) {
         if (error instanceof api.ApiError && error.status === 409) {
           return signInScreen(
@@ -762,13 +795,13 @@ async function startingPhaseScreen(options: {
                <span class="phase-n">${index + 1}</span>
                <span class="rowbody"><b>${phase.title_en}</b>
                  <small>${phase.goal_en ?? ""}</small></span>
-               <span class="chip">${phase.min_days}d min</span>
+               <span class="chip">At least ${phase.min_days} days</span>
              </button>`,
            )
            .join("")}
        </div>
        <p class="sub tiny">Pick the first one if the injury is new. Choosing a
-         later phase dates your rehab back accordingly — it does not mark the
+         later phase moves your start date back to match — it does not mark the
          earlier phases as passed, because this app did not watch you do them.</p>
        <div class="controls">
          <button class="primary block" id="go">${options.cta}</button>
@@ -926,7 +959,7 @@ function homeScreen(): void {
 
   const info = PHASE_NAMES[episode.current_phase] ?? {
     n: 1,
-    name: titleCase(episode.current_phase),
+    name: phaseFallback(episode.current_phase),
     weeks: "",
   };
   const percent = gatePercent(gate);
@@ -961,7 +994,7 @@ function homeScreen(): void {
          <div class="hero-copy">
            <span class="label">Injury</span>
            <h2 class="hero-title">${injury}</h2>
-           <p class="hero-sub">${titleCase(episode.side)} side · Phase ${info.n} — ${phaseName(episode.current_phase)}</p>
+           <p class="hero-sub">${titleCase(sideLabel(episode.side))} · Phase ${info.n} — ${phaseName(episode.current_phase)}</p>
          </div>
          <div class="hero-progress">
            <div class="bar-row top"><span>Progress</span><b>${percent}%</b></div>
@@ -1118,7 +1151,7 @@ async function planScreen(shown?: string): Promise<void> {
   const phase = protocol.phases.find((p) => p.phase_key === active) ?? protocol.phases[0]!;
   const info = PHASE_NAMES[phase.phase_key] ?? {
     n: phase.order_index + 1,
-    name: titleCase(phase.phase_key),
+    name: phaseFallback(phase.phase_key),
     weeks: "",
   };
   const currentIndex = PHASE_ORDER.indexOf(current);
@@ -1172,7 +1205,7 @@ async function planScreen(shown?: string): Promise<void> {
              ? `${rx.sets} × ${rx.reps}`
              : `${rx.sets} × ${rx.hold_seconds}s`;
            const camera = rx.exercise.pose_rule
-             ? `${titleCase(rx.exercise.pose_rule.view)} camera`
+             ? CAMERA_WORDS[rx.exercise.pose_rule.view] ?? "Checked by camera"
              : "Logged by hand";
            const complete = isCurrent && index < doneCount;
            return `<button class="rowcard" data-key="${rx.exercise.key}"
@@ -1266,8 +1299,7 @@ function manualScreen(rx: Prescription): void {
   shell(
     `<div class="stack">
        <p class="sub">${rx.exercise.cue_en ?? ""}</p>
-       <div class="notice">This drill has no camera rule — run it, then log that it
-         is done.</div>
+       <div class="notice">The camera does not check this one. Do it, then tap below when you're done.</div>
        <button class="primary block" id="done">Mark complete</button>
      </div>`,
     { title: rx.exercise.name_en, back: () => sessionOrigin() },
@@ -1309,8 +1341,7 @@ async function startTargetSession(criterion: api.CriterionResult): Promise<void>
     const exercise = (await api.listExercises()).find((e) => e.key === exerciseKey);
     if (!exercise?.pose_rule) {
       return void shell(
-        `<div class="notice">This exercise has no camera rule, so it cannot be
-           scored. Log it by hand instead.</div>`,
+        `<div class="notice">The camera cannot check this exercise, so it cannot give you a score. Mark it done yourself instead.</div>`,
         { title: exercise?.name_en ?? "Session", back: () => testScreen() },
       );
     }
@@ -1375,6 +1406,8 @@ function howToScreen(rx: Prescription): void {
 }
 
 // ------------------------------------------------------------------ camera
+/** Seconds to hold the start position before the countdown. See pose/ready.ts. */
+const HOLD_SECONDS = 3;
 async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<void> {
   const exercise = rx.exercise;
   const rule = exercise.pose_rule!;
@@ -1390,7 +1423,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
            <!-- One word. At three metres a sentence is a wall, and a 12px badge
                 is invisible -- so the state is a word plus the band of colour
                 around the whole frame. -->
-           <div class="form-word" id="badge" role="status" aria-live="polite">Getting ready</div>
+           <div class="form-word" id="badge" role="status" aria-live="polite">Get set</div>
            ${
              twoCameras
                ? `<button class="iconbtn" id="flip" title="Switch camera"
@@ -1404,7 +1437,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
              <span class="now" id="count">0</span>
              <span class="of">${
                rule.mode === "hold"
-                 ? `s / ${rule.hold_target_s ?? rx.hold_seconds ?? 30}s`
+                 ? `s / ${rx.hold_seconds ?? rule.hold_target_s ?? 30}s`
                  : `/ ${rx.reps ?? "—"}`
              }</span>
            </div>
@@ -1452,12 +1485,20 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   canvas.width = camera.width;
   canvas.height = camera.height;
 
-  const session = new LiveSession(rule, side);
+  // Nothing counts until the player has held their start position still and
+  // the countdown has run (pose/ready.ts). Until then a throwaway session
+  // only answers "can the camera see you, and are you at rest?" -- the real
+  // one starts fresh on "Go", so walking back from the phone is never a rep.
+  const probe = new LiveSession(rule, side);
+  const gate = new StartGate();
+  let session: LiveSession | null = null;
+  let finishing = false;
   const show = metricsToShow(rule.targets.map((t) => t.metric));
   const aspect = camera.width / camera.height;
   // Reps for a rep exercise, seconds for a hold -- both fill the same bar.
   const isHold = rule.mode === "hold";
-  const holdTarget = rule.hold_target_s ?? rx.hold_seconds ?? 30;
+  // The prescription first: it is what this player was told to hold.
+  const holdTarget = rx.hold_seconds ?? rule.hold_target_s ?? 30;
   const target = isHold ? holdTarget : (rx.reps ?? 10);
   let shownHold = -1;
 
@@ -1484,13 +1525,17 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
     then();
   }
 
-  on("#nav-back", () => stop(() => sessionOrigin()));
-  on("#finish", () => {
+  /** The set is over: by the button, or by reaching the target. */
+  const finishSet = (): void => {
+    if (!session) return stop(() => sessionOrigin());
     const outcome = session.finish();
     stop(() =>
       summaryScreen(rx, outcome, camera.width, camera.height, side, camera.facing),
     );
-  });
+  };
+
+  on("#nav-back", () => stop(() => sessionOrigin()));
+  on("#finish", () => finishSet());
   on("#flip", () => {
     // Reopening is the only reliable way to change camera: swapping the track
     // in place leaves Safari showing the old one.
@@ -1504,7 +1549,61 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
     button.innerHTML = paused ? PLAY_ICON : PAUSE_ICON;
     button.setAttribute("aria-label", paused ? "Resume" : "Pause");
     stage.classList.toggle("paused", paused);
+    // A pause before counting starts means "not yet": hold still again after.
+    if (!paused && !session) gate.reset();
   });
+
+  /** Before counting: tell the player what the camera is waiting for. */
+  const showGate = (frame: Frame): void => {
+    const r = probe.push(frame);
+    drawSkeleton(ctx, frame, r.accepted, camera.mirrored);
+    const blocker = r.problems.find((p) => p.code !== "warming_up");
+    const det = rule.mode === "rep" ? rule.detection : null;
+    const atRest = !det || (r.signal !== null && r.signal <= det.exit);
+    const state = gate.push({ frame, ready: r.accepted && !blocker, atRest });
+
+    if (state.phase === "go") {
+      session = new LiveSession(rule, side);
+      setState("good", "Go");
+      centre.innerHTML = `<div class="countdown go">Go!</div>`;
+      cueUntil = performance.now() + 700;
+      readout.textContent = isHold ? "Hold it" : "Counting";
+      return;
+    }
+    if (state.phase === "countdown") {
+      setState("good", "Get ready");
+      const n = Math.max(1, Math.ceil(state.remaining));
+      if (centre.dataset["n"] !== String(n)) {
+        centre.dataset["n"] = String(n);
+        centre.innerHTML = `<div class="countdown">${n}</div>`;
+      }
+      readout.textContent = "Counting starts after the countdown";
+      return;
+    }
+    delete centre.dataset["n"];
+    if (state.phase === "holding") {
+      setState("fix", "Hold still");
+      const pct = Math.round(state.progress * 100);
+      centre.innerHTML = `<div class="gatehold"><span>Hold still</span>
+          <i style="--p:${pct}%"></i></div>`;
+      readout.textContent = `Stay in your start position for ${HOLD_SECONDS} seconds`;
+      return;
+    }
+    if (state.reason === "not_ready") {
+      setState("bad", "Move the phone");
+      centre.innerHTML = `<div class="blocker">${
+        blocker?.message_en ?? "Stand so your whole body is in shot"
+      }</div>`;
+    } else {
+      setState("fix", "Get set");
+      centre.innerHTML = `<div class="blocker">${
+        state.reason === "moving"
+          ? "Hold still in your start position"
+          : "Get into your start position"
+      }</div>`;
+    }
+    readout.textContent = `Get into position and hold still for ${HOLD_SECONDS} seconds`;
+  };
 
   const loop = (): void => {
     if (!running) return;
@@ -1513,7 +1612,11 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
       const points = landmarker.detectForVideo(video, performance.now()).landmarks?.[0];
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      if (points && points.length >= 33) {
+      if (finishing) {
+        // Set complete: the camera has stopped counting.
+      } else if (points && points.length >= 33 && !session) {
+        showGate(Frame.from((performance.now() - started) / 1000, points, aspect));
+      } else if (points && points.length >= 33 && session) {
         const frame = Frame.from((performance.now() - started) / 1000, points, aspect);
         const result = session.push(frame);
         drawSkeleton(ctx, frame, result.accepted, camera.mirrored);
@@ -1596,9 +1699,25 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
           setState("good", "Good form");
           centre.innerHTML = "";
         }
+
+        // Target reached: end the set by itself. Counted reps only -- a refused
+        // rep does not finish a set -- and for a hold, the prescribed time.
+        const done = isHold
+          ? (result.holdSeconds ?? 0) >= target
+          : result.validRepCount >= target;
+        if (done) {
+          finishing = true;
+          setState("good", "Set complete");
+          centre.innerHTML = `<div class="countdown go">Set complete</div>`;
+          setTimeout(() => {
+            if (running) finishSet();
+          }, 1300);
+        }
       } else {
+        // Out of shot breaks the hold: it has to be 3 unbroken seconds.
+        if (!session) gate.reset();
         setState("bad", "Step into frame");
-        readout.innerHTML = `<span class="warn">no reading</span>`;
+        readout.innerHTML = `<span class="warn">Can't see you</span>`;
         centre.innerHTML = `<div class="blocker">Stand so your whole body is in shot</div>`;
       }
     }
@@ -1625,7 +1744,7 @@ function summaryScreen(
         <span class="grow">${
           rep.violations.map((v) => v.message_en).join(" · ") || "Good form"
         }</span>
-        <span>${rep.formScore.toFixed(0)}</span>
+        <span>${rep.formScore.toFixed(0)}%</span>
       </div>`,
     )
     .join("");
@@ -1643,10 +1762,10 @@ function summaryScreen(
   const hopTiming =
     contact !== null || air !== null
       ? `<div class="tiles">
-           ${contact !== null ? `<div class="tile"><div class="n">${contact.toFixed(2)}s</div><div class="k">Avg ground contact</div></div>` : ""}
-           ${air !== null ? `<div class="tile"><div class="n">${air.toFixed(2)}s</div><div class="k">Avg air time</div></div>` : ""}
+           ${contact !== null ? `<div class="tile"><div class="n">${contact.toFixed(2)}s</div><div class="k">Average time on the ground</div></div>` : ""}
+           ${air !== null ? `<div class="tile"><div class="n">${air.toFixed(2)}s</div><div class="k">Average time in the air</div></div>` : ""}
          </div>
-         <p class="caption">Shorter ground contact means springier hops. Measured from the video, to about 0.03s.</p>`
+         <p class="caption">Less time on the ground means springier hops. Timed from the video, so it can be a few hundredths of a second out.</p>`
       : "";
 
   shell(
@@ -1663,7 +1782,10 @@ function summaryScreen(
          }</p>
        </div>
      </div>
-     ${outcome.warnings.length ? `<div class="notice">${outcome.warnings.join(", ")}</div>` : ""}
+     ${(() => {
+       const lines = friendlyWarnings(outcome.warnings, rx.exercise.pose_rule?.mode ?? "rep");
+       return lines.length ? `<div class="notice">${lines.join("<br>")}</div>` : "";
+     })()}
      ${hopTiming}
      <h3>Rep by rep</h3>
      <div class="reps">${rows || '<div class="row">No reps detected</div>'}</div>
@@ -1699,14 +1821,16 @@ function summaryScreen(
         await api.completeSession(session.id, { rpe: 5 });
         await refresh();
         note.textContent = api.standaloneActive()
-          ? "Stored on this phone. Your testing updates when the laptop is back."
+          ? "Saved on this phone. Your results will update next time you're connected."
           : "Saved. Your testing has been updated.";
         // A save is the end of a set: say so with something you can see.
         note.classList.add("saved");
         pulse(note, "pop-in");
       } catch (error) {
         note.textContent =
-          error instanceof api.ApiError ? String(error.detail) : String(error);
+          error instanceof api.ApiError
+            ? error.message
+            : "Couldn't save that set. Check your connection and try again.";
       }
     })();
   });
@@ -1952,7 +2076,7 @@ function testScreen(): void {
   /** "1.9 / 2 NPRS". A missing reading is an em dash, so the target still shows —
    *  the number you have to beat is worth knowing before you have a number. */
   const value = (c: api.CriterionResult) => {
-    const unit = c.unit && c.unit !== "score" ? ` ${c.unit}` : "";
+    const unit = friendlyUnit(c.unit) ? ` ${friendlyUnit(c.unit)}` : "";
     const observed = c.observed == null ? "—" : round(c.observed);
     const target = c.target == null ? "" : ` / ${round(c.target)}`;
     return `<b>${observed}</b><span>${target}${unit}</span>`;
@@ -2072,7 +2196,7 @@ function testScreen(): void {
               next phase.</div>`
          : ""
      }`,
-    { tab: "test", title: "Exit Criteria", back: () => homeScreen() },
+    { tab: "test", title: "Your tests", back: () => homeScreen() },
   );
 
   on("#add-test", () => void addTargetScreen());
@@ -2119,10 +2243,9 @@ function profileScreen(): void {
        ${row("edit-role", "Playing position", position)}
        ${row("edit-age", "Age group", ageLabel)}
        ${row("edit-injury", "Injury profile", `${injury}${
-         state.episode ? ` · ${state.episode.side} side` : ""
+         state.episode ? ` · ${sideLabel(state.episode.side)}` : ""
        }`)}
        ${row("about", "About RTP")}
-       ${row("lab", "Pose Lab", "Test and tune the pose detection")}
      </div>
 
      <div class="controls">
@@ -2135,7 +2258,6 @@ function profileScreen(): void {
   on("#edit-age", () => ageScreen({ mode: "edit" }));
   on("#edit-injury", () => injuryScreen());
   on("#about", () => aboutScreen());
-  on("#lab", () => void labScreen());
   on("#signout", () => {
     api.signOut();
     state.user = null;
@@ -2158,32 +2280,6 @@ function buildVersion(): string {
   return "Demo build - September 2026";
 }
 
-/**
- * Pose Lab: tune the detection against the live camera or a video file.
- * A testing bench for whoever owns the pose engine, not a player screen --
- * which is why it lives under Profile rather than in the plan.
- */
-async function labScreen(): Promise<void> {
-  shell(`<div class="loading">Loading exercises…</div>`, {
-    title: "Pose Lab",
-    back: () => profileScreen(),
-  });
-  let exercises: Exercise[];
-  try {
-    exercises = await api.listExercises();
-  } catch (error) {
-    return fail(error);
-  }
-  shell(`<div id="lab-root"></div>`, {
-    title: "Pose Lab",
-    back: () => {
-      cleanup();
-      profileScreen();
-    },
-  });
-  const cleanup = mountLab(app.querySelector<HTMLElement>("#lab-root")!, exercises);
-}
-
 function aboutScreen(): void {
   shell(
     `<div class="stack">
@@ -2193,26 +2289,26 @@ function aboutScreen(): void {
            MediaPipe pose detection checking every rep.</p>
        </section>
        <div class="notice">
-         <b>A training aid, not a medical device.</b> Nothing here diagnoses. The exit
-         criteria follow common return-to-sport practice, but a physio should review
-         every threshold before this is used with a real player. Phase 4 always
-         requires a human sign-off, deliberately.
+         <b>A training aid, not a medical device.</b> Nothing here diagnoses. The tests
+         follow common return-to-sport practice, but a physio should check every
+         target before a real player uses this. Phase 4 always needs a real person
+         to sign you off, on purpose.
        </div>
        <section class="panel">
-         <span class="label">Under the hood</span>
+         <span class="label">How it works</span>
          <ul class="facts">
-           <li><b>6 positions × 7 injury sites</b> = 42 programmes, 4 phases each</li>
-           <li><b>33 landmarks</b> per frame, scored in the browser and again on the server</li>
-           <li><b>Every angle recomputed</b> server-side — the phone is never trusted</li>
+           <li><b>6 positions × 7 injury sites × 3 age groups</b> = 126 programmes, 4 phases each</li>
+           <li><b>33 body points</b> tracked in every frame of video, and checked twice</li>
+           <li><b>Every angle worked out again</b> by the app, not just by your phone</li>
          </ul>
        </section>
        <section class="panel">
-         <span class="label">This build</span>
+         <span class="label">This version</span>
          <p class="sub"><code>${attr(buildVersion())}</code></p>
          <p class="sub">${
            api.standaloneActive()
-             ? "Running from the snapshot in this build — no server."
-             : "Talking to the API on this machine."
+             ? "Demo mode — using example data saved in the app."
+             : "Connected — your progress is being saved."
          }</p>
        </section>
      </div>`,
@@ -2235,7 +2331,7 @@ function notificationsScreen(): void {
   if (gate?.passed) {
     items.push({
       label: "You can move to the next phase",
-      detail: "All required tests passed — open the Test tab to advance",
+      detail: "You've passed all your tests — open Plan to move on",
       kind: "good",
     });
   } else if (gate && gate.required_total) {
@@ -2256,15 +2352,15 @@ function notificationsScreen(): void {
   }
   if (progress && progress.week_of > progress.weeks_total) {
     items.push({
-      label: "Past the programme's minimum length",
-      detail: `Week ${progress.week_of} of a ${progress.weeks_total}-week minimum`,
+      label: "Longer than the shortest time for this plan",
+      detail: `Week ${progress.week_of} — this plan takes at least ${progress.weeks_total} weeks. That's normal, keep going.`,
       kind: "warn",
     });
   }
 
   shell(
-    `<p class="sub">Generated from your plan and your testing — nothing here is a push
-       notification, so nothing can arrive at the wrong moment.</p>
+    `<p class="sub">Made from your plan and your tests. These only show up here, so
+       nothing will pop up on your phone at a bad moment.</p>
      <div class="stack">
        ${
          items.length
@@ -2304,7 +2400,7 @@ function pickTargetScreen(targets: api.CriterionResult[]): void {
                <small>${
                  c.observed == null
                    ? "Nothing recorded yet"
-                   : `Best so far ${round(c.observed)}${c.unit ? ` ${c.unit}` : ""}`
+                   : `Best so far ${round(c.observed)}${friendlyUnit(c.unit) ? ` ${friendlyUnit(c.unit)}` : ""}`
                }</small></span>
              ${CHEVRON}
            </button>`,
@@ -2364,7 +2460,7 @@ async function addTargetScreen(): Promise<void> {
          .map(
            (e) => `<button class="rowcard" data-ex="${e.key}">
              <span class="rowbody"><b>${e.name_en}</b>
-               <small>${titleCase(e.category)}</small></span>
+               <small>${CATEGORY_WORDS[e.category] ?? titleCase(e.category)}</small></span>
              <span class="chip">${e.measure === "seconds" ? "seconds" : "reps"}</span>
            </button>`,
          )
@@ -2594,7 +2690,9 @@ async function buildCriterionScreen(initial: BuilderState): Promise<void> {
         } catch (error) {
           button.disabled = false;
           note.textContent =
-            error instanceof api.ApiError ? String(error.detail) : String(error);
+            error instanceof api.ApiError
+              ? error.message
+              : "That couldn't be saved. Check the number and try again.";
         }
       })();
     });
@@ -2702,16 +2800,15 @@ async function boot(): Promise<void> {
 
     shell(
       `<div class="stack">
-         <div class="notice">The API is not running. Start it with
-           <code>start.bat</code>, or <code>uvicorn app.main:app --reload</code>,
-           then reload this page.</div>
+         <div class="notice">Can't reach the app right now. Wait a moment, then
+           reload this page.</div>
          ${
            api.standaloneAvailable()
-             ? `<button class="linkbtn" id="demo">Carry on without a backend</button>`
+             ? `<button class="linkbtn" id="demo">Try the demo instead</button>`
              : ""
          }
        </div>`,
-      { title: "Backend not running" },
+      { title: "Can't connect" },
     );
     on("#demo", () => {
       api.useStandalone(true);

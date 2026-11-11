@@ -133,7 +133,7 @@ class PhaseTemplate:
 def pain_at_rest(limit: float = 2.0, window: int = 3) -> CriterionDef:
     return crit(
         "pain_at_rest",
-        f"Pain at rest ≤ {limit:g}/10",
+        f"Pain at rest {limit:g}/10 or less",
         f"ปวดขณะพัก ≤ {limit:g}/10",
         metric="pro.pain_rest",
         source=CriterionSource.PRO,
@@ -150,7 +150,7 @@ def pain_at_rest(limit: float = 2.0, window: int = 3) -> CriterionDef:
 def pain_on_activity(limit: float, window: int = 7) -> CriterionDef:
     return crit(
         "pain_on_activity",
-        f"Pain during activity ≤ {limit:g}/10",
+        f"Pain while training {limit:g}/10 or less",
         f"ปวดขณะทำกิจกรรม ≤ {limit:g}/10",
         metric="pro.pain_activity",
         source=CriterionSource.PRO,
@@ -178,7 +178,7 @@ def pain_free_days(days: int) -> CriterionDef:
 def adherence(pct: float) -> CriterionDef:
     return crit(
         "adherence",
-        f"Completed ≥ {pct:g}% of prescribed sessions",
+        f"Done at least {pct:g}% of your planned sessions",
         f"ทำครบ ≥ {pct:g}% ของโปรแกรมที่กำหนด",
         metric="session.adherence_pct",
         source=CriterionSource.SESSION,
@@ -211,7 +211,7 @@ def change_of_direction(pct: float, required: bool = True) -> CriterionDef:
 def confidence(score: float) -> CriterionDef:
     return crit(
         "confidence",
-        f"Self-reported readiness ≥ {score:g}/100",
+        f"Feel ready to play: at least {score:g}/100",
         f"ความมั่นใจในการกลับลงสนาม ≥ {score:g}/100",
         metric="pro.confidence",
         source=CriterionSource.PRO,
@@ -240,7 +240,7 @@ def clinician_clearance() -> CriterionDef:
 def form_quality(score: float = 80.0) -> CriterionDef:
     return crit(
         "form_quality",
-        f"Mean movement quality ≥ {score:g}/100",
+        f"Average form score at least {score:g}/100",
         f"คะแนนคุณภาพท่าทางเฉลี่ย ≥ {score:g}/100",
         metric="session.mean_form_score",
         source=CriterionSource.SESSION,
@@ -318,7 +318,7 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_free_days(3),
             crit(
                 "knee_rom",
-                "Pain-free knee flexion ≥ 120°",
+                "Bend your knee to at least 120° without pain",
                 "งอเข่าได้ ≥ 120° โดยไม่ปวด",
                 metric="pose.knee_flexion_rom",
                 source=CriterionSource.POSE,
@@ -332,7 +332,7 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P2,
-        "Build eccentric hamstring strength at long muscle lengths.",
+        "Build hamstring strength by lowering slowly while the muscle is stretched.",
         "สร้างความแข็งแรงแบบยืดยาวของแฮมสตริง",
         min_days=10,
         sessions_per_week=4,
@@ -346,7 +346,7 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(2.0),
             crit(
                 "nordic_break_angle",
-                "Nordic break angle ≥ 55°",
+                "Nordic curl: lower to at least 55° before you drop",
                 "มุมนอร์ดิกก่อนหลุด ≥ 55°",
                 metric="pose.nordic_break_angle",
                 source=CriterionSource.POSE,
@@ -357,7 +357,7 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "hamstring_lsi",
-                "Hamstring strength symmetry ≥ 90%",
+                "Injured hamstring at least 90% as strong as the other",
                 "ความแข็งแรงแฮมสตริงสองข้างต่างกันไม่เกิน 10%",
                 metric="test.iso_hamstring",
                 source=CriterionSource.TEST,
@@ -388,7 +388,7 @@ HAMSTRING_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(1.0),
             crit(
                 "hop_lsi",
-                "Triple hop symmetry ≥ 90%",
+                "Triple hop: injured leg goes at least 90% as far as the other",
                 "กระโดดสามครั้งต่อเนื่อง ต่างกันไม่เกิน 10%",
                 metric="test.hop_triple",
                 source=CriterionSource.TEST,
@@ -434,7 +434,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_at_rest(2.0),
             crit(
                 "extension_lag",
-                "Full knee extension (lag ≤ 5°)",
+                "Knee straightens fully (within 5°)",
                 "เหยียดเข่าได้สุด (เหลือไม่เกิน 5°)",
                 metric="pose.knee_extension_lag",
                 source=CriterionSource.POSE,
@@ -446,7 +446,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "knee_rom",
-                "Knee flexion ≥ 120°",
+                "Bend your knee to at least 120°",
                 "งอเข่าได้ ≥ 120°",
                 metric="pose.knee_flexion_rom",
                 source=CriterionSource.POSE,
@@ -475,7 +475,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(2.0),
             crit(
                 "slsq_depth",
-                "Single-leg squat to ≥ 60° knee flexion",
+                "Single-leg squat with the knee bent at least 60°",
                 "สควอทขาเดียวงอเข่า ≥ 60°",
                 metric="pose.slsq_knee_flexion",
                 source=CriterionSource.POSE,
@@ -487,7 +487,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "slsq_valgus",
-                "Knee stays out of valgus (≤ 8°)",
+                "Knee doesn't cave inwards (8° at most)",
                 "เข่าไม่บิดเข้าด้านใน (≤ 8°)",
                 metric="pose.slsq_knee_valgus",
                 source=CriterionSource.POSE,
@@ -500,7 +500,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "quad_lsi",
-                "Quadriceps strength symmetry ≥ 80%",
+                "Injured thigh at least 80% as strong as the other",
                 "ความแข็งแรงต้นขาด้านหน้าต่างกันไม่เกิน 20%",
                 metric="test.iso_quadriceps",
                 source=CriterionSource.TEST,
@@ -530,7 +530,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(1.0),
             crit(
                 "landing_valgus",
-                "Landing knee valgus ≤ 8°",
+                "Knee doesn't cave inwards when you land (8° at most)",
                 "เข่าบิดเข้าด้านในตอนลงพื้น ≤ 8°",
                 metric="pose.landing_knee_valgus",
                 source=CriterionSource.POSE,
@@ -543,7 +543,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "hop_lsi",
-                "Single hop symmetry ≥ 90%",
+                "Single hop: injured leg goes at least 90% as far as the other",
                 "กระโดดขาเดียวต่างกันไม่เกิน 10%",
                 metric="test.hop_single",
                 source=CriterionSource.TEST,
@@ -557,7 +557,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P4,
-        "Full symmetry, full speed, and a head that trusts the knee.",
+        "Both legs equal, full speed, and a head that trusts the knee.",
         "สมมาตรเต็มที่ ความเร็วเต็มที่ และความมั่นใจในเข่า",
         min_days=14,
         sessions_per_week=4,
@@ -567,7 +567,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_free_days(7),
             crit(
                 "hop_triple_lsi",
-                "Triple hop symmetry ≥ 95%",
+                "Triple hop: injured leg goes at least 95% as far as the other",
                 "กระโดดสามครั้งต่อเนื่องต่างกันไม่เกิน 5%",
                 metric="test.hop_triple",
                 source=CriterionSource.TEST,
@@ -586,7 +586,7 @@ KNEE_TEMPLATE: tuple[PhaseTemplate, ...] = (
 ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
     _phase(
         _P1,
-        "Restore dorsiflexion range and single-leg balance.",
+        "Get the ankle bending fully again and balance on one leg.",
         "ฟื้นมุมกระดกข้อเท้าและการทรงตัวขาเดียว",
         min_days=4,
         sessions_per_week=6,
@@ -599,7 +599,7 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_at_rest(2.0),
             crit(
                 "dorsiflexion_lsi",
-                "Ankle dorsiflexion symmetry ≥ 90%",
+                "Injured ankle bends at least 90% as far as the other",
                 "มุมกระดกข้อเท้าสองข้างต่างกันไม่เกิน 10%",
                 metric="pose.ankle_dorsiflexion",
                 source=CriterionSource.POSE,
@@ -614,7 +614,7 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P2,
-        "Calf strength and proprioception under load.",
+        "Calf strength and balance control while taking weight.",
         "ความแข็งแรงน่องและการรับรู้ตำแหน่งข้อต่อขณะรับน้ำหนัก",
         min_days=10,
         sessions_per_week=5,
@@ -628,7 +628,7 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(2.0),
             crit(
                 "calf_raise_reps_lsi",
-                "Single-leg calf raise repetitions ≥ 90% of the other side",
+                "Single-leg calf raises: at least 90% as many as the other leg",
                 "จำนวนครั้งเขย่งขาเดียวต่างกันไม่เกิน 10%",
                 metric="test.heel_raise_reps",
                 source=CriterionSource.TEST,
@@ -639,7 +639,7 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "balance_control",
-                "Pelvis stays level in single-leg stance (drop ≤ 5°)",
+                "Hips stay level standing on one leg (5° drop at most)",
                 "ยืนขาเดียวโดยเชิงกรานตกไม่เกิน 5°",
                 metric="pose.balance_pelvic_drop",
                 source=CriterionSource.POSE,
@@ -670,7 +670,7 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(1.0),
             crit(
                 "hop_lsi",
-                "Single hop symmetry ≥ 90%",
+                "Single hop: injured leg goes at least 90% as far as the other",
                 "กระโดดขาเดียวต่างกันไม่เกิน 10%",
                 metric="test.hop_single",
                 source=CriterionSource.TEST,
@@ -684,7 +684,7 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P4,
-        "Full-speed multidirectional work with no swelling the next day.",
+        "Full-speed moves in every direction, with no swelling the next day.",
         "เคลื่อนไหวหลายทิศทางเต็มความเร็ว โดยวันรุ่งขึ้นไม่บวม",
         min_days=7,
         sessions_per_week=4,
@@ -701,7 +701,7 @@ ANKLE_TEMPLATE: tuple[PhaseTemplate, ...] = (
 GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
     _phase(
         _P1,
-        "Calm the adductors down and restore pain-free hip range.",
+        "Calm the inner-thigh muscles and get pain-free hip movement back.",
         "ลดอาการกล้ามเนื้อขาหนีบและฟื้นมุมสะโพกแบบไม่เจ็บ",
         min_days=5,
         sessions_per_week=6,
@@ -718,7 +718,7 @@ GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P2,
-        "Adductor strength — the Copenhagen plank is the workhorse here.",
+        "Inner-thigh strength — the Copenhagen plank is the main exercise here.",
         "สร้างความแข็งแรงกล้ามเนื้อขาหนีบ โดยมีโคเปนเฮเกนแพลงก์เป็นท่าหลัก",
         min_days=14,
         sessions_per_week=4,
@@ -732,7 +732,7 @@ GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(2.0),
             crit(
                 "copenhagen_hold",
-                "Copenhagen plank hold ≥ 20s each side",
+                "Hold a Copenhagen plank for at least 20 seconds each side",
                 "โคเปนเฮเกนแพลงก์ค้างได้ ≥ 20 วินาทีต่อข้าง",
                 metric="pose.copenhagen_hold",
                 source=CriterionSource.POSE,
@@ -743,7 +743,7 @@ GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "adductor_lsi",
-                "Adductor squeeze strength symmetry ≥ 90%",
+                "Inner-thigh squeeze at least 90% as strong as the other side",
                 "แรงบีบขาหนีบสองข้างต่างกันไม่เกิน 10%",
                 metric="test.iso_adductor",
                 source=CriterionSource.TEST,
@@ -772,7 +772,7 @@ GROIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(1.0),
             crit(
                 "copenhagen_hold_p3",
-                "Copenhagen plank hold ≥ 30s each side",
+                "Hold a Copenhagen plank for at least 30 seconds each side",
                 "โคเปนเฮเกนแพลงก์ค้างได้ ≥ 30 วินาทีต่อข้าง",
                 metric="pose.copenhagen_hold",
                 source=CriterionSource.POSE,
@@ -818,7 +818,7 @@ CALF_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_free_days(3),
             crit(
                 "dorsiflexion",
-                "Ankle dorsiflexion ≥ 25°",
+                "Ankle bends at least 25°",
                 "มุมกระดกข้อเท้า ≥ 25°",
                 metric="pose.ankle_dorsiflexion",
                 source=CriterionSource.POSE,
@@ -858,7 +858,7 @@ CALF_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "calf_raise_reps_lsi",
-                "Calf raise repetitions ≥ 90% of the other side",
+                "Calf raises: at least 90% as many as the other leg",
                 "จำนวนครั้งเขย่งต่างกันไม่เกิน 10%",
                 metric="test.heel_raise_reps",
                 source=CriterionSource.TEST,
@@ -886,7 +886,7 @@ CALF_TEMPLATE: tuple[PhaseTemplate, ...] = (
             pain_on_activity(1.0),
             crit(
                 "hop_lsi",
-                "Single hop symmetry ≥ 90%",
+                "Single hop: injured leg goes at least 90% as far as the other",
                 "กระโดดขาเดียวต่างกันไม่เกิน 10%",
                 metric="test.hop_single",
                 source=CriterionSource.TEST,
@@ -918,7 +918,7 @@ CALF_TEMPLATE: tuple[PhaseTemplate, ...] = (
 PATELLAR_TENDINOPATHY_TEMPLATE: tuple[PhaseTemplate, ...] = (
     _phase(
         _P1,
-        "Settle the tendon with heavy isometric holds - load it, do not rest it.",
+        "Calm the tendon with long, heavy holds — load it, don't rest it.",
         "ลดอาการเอ็นด้วยการเกร็งค้างรับน้ำหนัก ไม่ใช่การพัก",
         min_days=7,
         sessions_per_week=6,
@@ -978,7 +978,7 @@ PATELLAR_TENDINOPATHY_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P2,
-        "Slow heavy resistance through range - the load that rebuilds tendon capacity.",
+        "Slow, heavy lifts through the full movement — this rebuilds the tendon.",
         "ฝึกแรงต้านหนักช้าเต็มช่วง เพื่อสร้างความทนทานของเอ็น",
         min_days=21,
         sessions_per_week=3,
@@ -1017,7 +1017,7 @@ PATELLAR_TENDINOPATHY_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "quad_lsi_tendon",
-                "Quadriceps strength symmetry at least 90%",
+                "Injured thigh at least 90% as strong as the other",
                 "ความแข็งแรงต้นขาด้านหน้าต่างกันไม่เกิน 10%",
                 metric="test.iso_quadriceps",
                 source=CriterionSource.TEST,
@@ -1033,7 +1033,7 @@ PATELLAR_TENDINOPATHY_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P3,
-        "Energy storage and release - jumping and landing the tendon can now absorb.",
+        "Springy jumps and landings the tendon can now handle.",
         "ฝึกเก็บและปล่อยพลังงาน กระโดดและลงพื้นที่เอ็นรับได้แล้ว",
         min_days=14,
         sessions_per_week=4,
@@ -1059,7 +1059,7 @@ PATELLAR_TENDINOPATHY_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "cmj_lsi_tendon",
-                "Jump height symmetry at least 90%",
+                "Jump on the injured leg at least 90% as high as the other",
                 "ความสูงกระโดดต่างกันไม่เกิน 10%",
                 metric="test.cmj_height",
                 source=CriterionSource.TEST,
@@ -1136,7 +1136,7 @@ GROIN_PAIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
     ),
     _phase(
         _P2,
-        "Rebuild adductor strength through range.",
+        "Rebuild inner-thigh strength through the full movement.",
         "สร้างความแข็งแรงกล้ามเนื้อขาหนีบเต็มช่วงการเคลื่อนไหว",
         min_days=21,
         sessions_per_week=4,
@@ -1161,7 +1161,7 @@ GROIN_PAIN_TEMPLATE: tuple[PhaseTemplate, ...] = (
             ),
             crit(
                 "adductor_lsi",
-                "Adductor squeeze strength symmetry at least 90%",
+                "Inner-thigh squeeze at least 90% as strong as the other side",
                 "แรงบีบขาหนีบสองข้างต่างกันไม่เกิน 10%",
                 metric="test.iso_adductor",
                 source=CriterionSource.TEST,
@@ -1247,7 +1247,7 @@ class PositionProfile:
 def _cmj_lsi(value: float = 90.0) -> CriterionDef:
     return crit(
         "cmj_lsi",
-        f"Jump height symmetry ≥ {value:g}%",
+        f"Jump on the injured leg at least {value:g}% as high as the other",
         f"ความสูงกระโดดสองข้างต่างกันไม่เกิน {100 - value:g}%",
         metric="test.cmj_height",
         source=CriterionSource.TEST,
@@ -1271,7 +1271,7 @@ POSITION_PROFILES: dict[Position, PositionProfile] = {
             _P3: (
                 crit(
                     "lateral_landing_valgus",
-                    "Lateral landing stays controlled (valgus ≤ 8°)",
+                    "Knee doesn't cave inwards landing sideways (8° at most)",
                     "ลงพื้นด้านข้างควบคุมได้ (เข่าบิดเข้า ≤ 8°)",
                     metric="pose.landing_knee_valgus",
                     source=CriterionSource.POSE,
@@ -1319,7 +1319,7 @@ POSITION_PROFILES: dict[Position, PositionProfile] = {
             _P4: (
                 crit(
                     "repeated_sprint_decrement",
-                    "Repeated-sprint drop-off ≤ 5%",
+                    "Slow down by 5% or less over repeated sprints",
                     "ความเร็วลดลงระหว่างวิ่งซ้ำ ≤ 5%",
                     metric="test.sprint_decrement",
                     source=CriterionSource.TEST,

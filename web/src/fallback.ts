@@ -10,7 +10,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
   {
     "id": 1,
     "key": "isometric_quad_set",
-    "name_en": "Isometric quadriceps set",
+    "name_en": "Thigh squeeze (quad set)",
     "name_th": "เกร็งกล้ามเนื้อต้นขาด้านหน้าค้างไว้",
     "category": "activation",
     "cue_en": "Press the back of the knee down and hold. Keep the leg straight.",
@@ -133,7 +133,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
   {
     "id": 3,
     "key": "heel_slide",
-    "name_en": "Heel slide (knee ROM)",
+    "name_en": "Heel slide (knee bend)",
     "name_th": "ไถส้นเท้าเพื่อเพิ่มมุมงอเข่า",
     "category": "mobility",
     "cue_en": "Slide the heel towards the buttock as far as pain allows.",
@@ -276,7 +276,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
   {
     "id": 5,
     "key": "prone_hamstring_curl",
-    "name_en": "Prone hamstring curl",
+    "name_en": "Lying hamstring curl",
     "name_th": "งอเข่าท่านอนคว่ำ",
     "category": "strength",
     "cue_en": "Curl the heel up slowly, keep the hips on the floor.",
@@ -1000,7 +1000,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
   {
     "id": 14,
     "key": "copenhagen_plank",
-    "name_en": "Copenhagen adduction plank",
+    "name_en": "Copenhagen plank (inner thigh)",
     "name_th": "โคเปนเฮเกนแพลงก์ (กล้ามเนื้อขาหนีบ)",
     "category": "strength",
     "cue_en": "Top leg on the bench, lift the hips until the body is one straight line.",
@@ -1114,7 +1114,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
       "smoothing_window": 5,
       "tempo_min_s": null,
       "tempo_max_s": null,
-      "hold_target_s": 45.0,
+      "hold_target_s": 20.0,
       "emit": []
     }
   },

@@ -155,7 +155,7 @@ describe("a session logged with no laptop", () => {
     });
     expect(result.form_score).toBeNull();
     expect(result.valid_reps).toBeNull();
-    expect(result.warnings.join(" ")).toMatch(/not scored/i);
+    expect(result.warnings.join(" ")).toMatch(/final score when you connect/i);
   });
 
   it("never writes landmark frames to storage", () => {

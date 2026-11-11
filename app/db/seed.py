@@ -203,11 +203,32 @@ def retire_unknown_protocols(db: Session, live_keys: set[str]) -> int:
     return len(stale)
 
 
+def realign_everyone(db: Session) -> int:
+    """Put every active episode on the programme its player should be on now.
+
+    Age groups arrived after players did, and a birthday can move someone from
+    one band to the next with nobody touching their profile. Running this on
+    every seed catches both. Phase and history are untouched.
+    """
+    from app.core.enums import EpisodeStatus
+    from app.models.injury import InjuryEpisode
+    from app.services.progression import realign_protocol
+
+    episodes = db.execute(
+        select(InjuryEpisode).where(InjuryEpisode.status == EpisodeStatus.ACTIVE)
+    ).scalars()
+    return sum(1 for e in episodes if realign_protocol(db, e) is not None)
+
+
 def seed_all(db: Session) -> None:
     migrate_injury_sites(db)
     exercises = seed_exercises(db)
     protocols = seed_protocols(db, exercises)
     retired = retire_unknown_protocols(db, {b.key for b in build_protocols()})
+    db.flush()
+    realigned = realign_everyone(db)
+    if realigned:
+        log.info("moved %d active episodes onto the programme for their age group", realigned)
     db.commit()
     log.info(
         "seeded %d exercises and %d protocols (%d retired)",

@@ -281,16 +281,16 @@ AGE_RULES: dict[AgeGroup, AgeRule] = {
     AgeGroup.YOUTH: AgeRule(
         label=Text("Under 18", "ต่ำกว่า 18 ปี"),
         dose=Text(
-            "Two sets instead of three, and shorter holds: growing bones and "
+            "One set fewer of each move than an adult: growing bones and "
             "tendons recover best from small, frequent doses.",
-            "ทำ 2 เซ็ตแทน 3 เซ็ต และเกร็งค้างสั้นลง เพราะกระดูกและเอ็นที่กำลังโตฟื้นตัวได้ดีที่สุดจากปริมาณน้อยแต่บ่อย",
+            "ทำน้อยกว่าผู้ใหญ่ท่าละ 1 เซ็ต เพราะกระดูกและเอ็นที่กำลังโตฟื้นตัวได้ดีที่สุดจากปริมาณน้อยแต่บ่อย",
         ),
     ),
     AgeGroup.ADULT: AgeRule(
         label=Text("18–39", "18–39 ปี"),
         dose=Text(
-            "The standard dose: three sets, full reps.",
-            "ปริมาณมาตรฐาน: 3 เซ็ต ครบจำนวนครั้ง",
+            "The full adult dose: three sets of each move, full reps.",
+            "ปริมาณเต็มสำหรับผู้ใหญ่: ท่าละ 3 เซ็ต ครบจำนวนครั้ง",
         ),
     ),
     AgeGroup.SENIOR: AgeRule(
@@ -435,6 +435,18 @@ def tailor(position: Position, site: InjurySite, age: AgeGroup) -> Tailored:
         note = Text(" ".join(en), " ".join(th)) if en else None
         chosen.append(Chosen(move=move, dose=dose, note=note))
 
+    dose_text = years.dose
+    if age is AgeGroup.YOUTH and WALL in {c.move for c in chosen}:
+        dose_text = Text(
+            years.dose.en.replace(" than an adult:", " than an adult, and a shorter wall sit:"),
+            years.dose.th.replace("ท่าละ 1 เซ็ต", "ท่าละ 1 เซ็ต และนั่งพิงกำแพงสั้นลง"),
+        )
+    if focus:
+        dose_text = Text(
+            dose_text.en + " Your position's key move gets one extra set.",
+            dose_text.th + " ท่าหลักของตำแหน่งคุณได้เพิ่ม 1 เซ็ต",
+        )
+
     return Tailored(
         age_group=age,
         chosen=tuple(chosen),
@@ -442,5 +454,5 @@ def tailor(position: Position, site: InjurySite, age: AgeGroup) -> Tailored:
             LeftOut(move, Text(_sentence(why.en) + ".", why.th))
             for move, why in left_out.items()
         ),
-        dose=years.dose,
+        dose=dose_text,
     )

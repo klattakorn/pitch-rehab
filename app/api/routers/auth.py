@@ -22,7 +22,7 @@ def register(payload: RegisterIn, db: DbSession) -> User:
     if payload.role is Role.PLAYER and payload.position is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            "players must pick a position — it decides which protocol they get",
+            "Pick your position first — your plan is built around it.",
         )
 
     user = User(

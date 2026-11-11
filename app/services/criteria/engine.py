@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -184,9 +186,9 @@ def _describe(spec: CriterionSpec, target: float | None, unit: str | None) -> tu
     if spec.min_samples > 1:
         en += f", from at least {spec.min_samples} measurements"
     if target is None:
-        en = "Waiting for a baseline to compare against"
+        en = "Waiting for your first best score to compare against"
     elif spec.target.type is TargetType.PERCENT_OF_BASELINE:
-        en += f" — target is {spec.target.value:g}% of your own baseline"
+        en += f" — target is {spec.target.value:g}% of your own best"
     elif spec.target.type is TargetType.LSI:
         en = f"{how}{when} on each side, compared to each other"
 
@@ -323,12 +325,12 @@ def evaluate_criterion(
             baseline=baseline,
             baseline_origin=baseline_origin,
             detail_en=(
-                "No baseline to compare against yet"
+                "No best score to compare against yet"
                 if missing_baseline
                 else _needs_more(spec, samples.count)
             ),
             detail_th=(
-                "No baseline to compare against yet"
+                "No best score to compare against yet"
                 if missing_baseline
                 else _needs_more(spec, samples.count)
             ),
@@ -380,9 +382,27 @@ def merge_criteria(
     merged: list[ExitCriterion | EpisodeCriterion] = [
         overrides.pop(item.key, item) for item in library
     ]
-    # Whatever is left over introduced a key the library never had.
-    merged.extend(c for c in custom if c.key in overrides)
+    # Whatever is left over introduced a key the library does not have here --
+    # except a key the library uses for a test this phase *used* to carry. A
+    # player moved to another age group's programme can lose a movement (and
+    # its test); their tweak of that test must not come back as a new
+    # required test on a movement they were told not to do.
+    retired = _library_test_keys().get(phase_key, frozenset())
+    merged.extend(c for c in custom if c.key in overrides and c.key not in retired)
     return merged
+
+
+@functools.cache
+def _library_test_keys() -> dict[PhaseKey, frozenset[str]]:
+    """Every key the library uses for a test in each phase, across all programmes."""
+    from app.data.protocols import build_protocols  # here: protocols imports this package
+
+    keys: dict[PhaseKey, set[str]] = {}
+    for built in build_protocols():
+        for phase in built.phases:
+            keys.setdefault(phase.phase_key, set()).update(c.key for c in phase.criteria)
+    return {k: frozenset(v) for k, v in keys.items()}
+
 
 
 def evaluate_phase(

@@ -141,7 +141,7 @@ describe("the live readout", () => {
   it("says so when there is no reading rather than showing a stale one", () => {
     const el = { innerHTML: "" } as HTMLElement;
     renderReadout(el, result(null), ["knee_flexion"]);
-    expect(el.innerHTML).toContain("no reading");
+    expect(el.innerHTML).toContain("Can't see you clearly");
   });
 
   it("every friendly name has both languages, so neither column can go missing", () => {

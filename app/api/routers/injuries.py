@@ -52,7 +52,7 @@ def create_episode(
     now = datetime.now(UTC)
     if payload.phase_started_at and payload.phase_started_at > now:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_CONTENT, "phase_started_at cannot be in the future"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "The phase start date can't be in the future."
         )
     episode = InjuryEpisode(
         player_id=player.id,
@@ -71,7 +71,7 @@ def create_episode(
     if assign_protocol(db, episode) is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"no protocol exists for {player.position} + {payload.injury_site}",
+            "We don't have a plan for that position and injury yet.",
         )
     db.commit()
     db.refresh(episode)
@@ -111,7 +111,7 @@ def set_starting_phase(
     if payload.phase_key not in phases:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"this programme has no {payload.phase_key} phase",
+            "Your plan doesn't have that phase.",
         )
 
     index = PHASE_ORDER.index(payload.phase_key)
@@ -171,7 +171,7 @@ def get_episode_detail(episode: Episode) -> InjuryEpisode:
 @router.get("/{episode_id}/protocol", response_model=ProtocolOut)
 def get_episode_protocol(episode: Episode, db: DbSession) -> Protocol:
     if episode.protocol_id is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "no protocol assigned")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "You don't have a plan yet. Add your injury to get one.")
     protocol = db.execute(
         select(Protocol)
         .where(Protocol.id == episode.protocol_id)
@@ -191,7 +191,7 @@ def get_current_phase_plan(episode: Episode, db: DbSession) -> ProtocolPhase:
         # Better to re-attach the right programme than to strand the player.
         db.commit()
     if episode.protocol_id is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "no protocol assigned")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "You don't have a plan yet. Add your injury to get one.")
     phase = db.execute(
         select(ProtocolPhase)
         .where(ProtocolPhase.protocol_id == episode.protocol_id)
@@ -202,7 +202,7 @@ def get_current_phase_plan(episode: Episode, db: DbSession) -> ProtocolPhase:
         )
     ).scalar_one_or_none()
     if phase is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "phase not found in protocol")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That phase isn't part of your plan.")
     return phase
 
 
@@ -363,16 +363,25 @@ def delete_custom_criterion(
         .where(EpisodeCriterion.key == key)
     ).scalar_one_or_none()
     if row is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "no such custom criterion")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That target was already removed.")
     db.delete(row)
     db.commit()
+
+
+def _not_active(status: EpisodeStatus) -> str:
+    """Why an injury that is not active cannot do this, in words."""
+    return {
+        EpisodeStatus.CLEARED: "You've already finished this plan.",
+        EpisodeStatus.PAUSED: "This injury is on pause right now.",
+        EpisodeStatus.ABANDONED: "This plan was stopped.",
+    }.get(status, "This plan isn't active right now.")
 
 
 @router.post("/{episode_id}/advance", response_model=AdvanceOut)
 def advance_phase(episode: Episode, db: DbSession) -> AdvanceOut:
     """Re-evaluate and move to the next phase if — and only if — every gate passed."""
     if episode.status is not EpisodeStatus.ACTIVE:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"episode is {episode.status}")
+        raise HTTPException(status.HTTP_409_CONFLICT, _not_active(episode.status))
     gate, advanced = advance_if_ready(db, episode)
     db.commit()
     db.refresh(episode)

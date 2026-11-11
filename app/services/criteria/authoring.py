@@ -42,7 +42,7 @@ def resolve(metric: str) -> Authorable:
     item = BY_KEY.get(metric)
     if item is None:
         raise AuthoringError(
-            f"{metric!r} is not something you can build a test from. "
+            "That can't be turned into a test. "
             "Pick one from the list."
         )
     return item
@@ -52,7 +52,7 @@ def check_exercise(db: Session, item: Authorable, exercise_key: str | None) -> E
     """Per-exercise metrics need a camera-scored exercise behind them."""
     if not item.needs_exercise:
         if exercise_key:
-            raise AuthoringError(f"{item.label_en} is not measured per exercise.")
+            raise AuthoringError("Something went wrong picking the exercise. Go back and try again.")
         return None
     if not exercise_key:
         raise AuthoringError(f"{item.label_en} needs an exercise to measure.")
@@ -61,7 +61,7 @@ def check_exercise(db: Session, item: Authorable, exercise_key: str | None) -> E
         select(Exercise).where(Exercise.key == exercise_key)
     ).scalar_one_or_none()
     if exercise is None:
-        raise AuthoringError(f"There is no exercise called {exercise_key!r}.")
+        raise AuthoringError("We couldn't find that exercise. Pick one from the list.")
     if exercise.pose_rule is None:
         # Nothing writes reps or a form score for a hand-logged drill, so a test
         # on one would sit at "not measured" forever.
@@ -79,7 +79,7 @@ def check_value(item: Authorable, target_type: TargetType, value: float) -> floa
         raise AuthoringError("That number is too large to be a real target.")
     if target_type not in item.target_types:
         raise AuthoringError(
-            f"{item.label_en} cannot be compared that way."
+            f"{item.label_en} can't be compared that way. Pick another option."
         )
     if target_type is TargetType.ABSOLUTE and item.unit == "%" and value > 100:
         raise AuthoringError("A percentage cannot be above 100.")

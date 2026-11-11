@@ -69,7 +69,7 @@ CATALOGUE: tuple[Authorable, ...] = (
         label_en="Reps in one set",
         unit="reps",
         help_en=(
-            "Your best single set in the window — twenty in a row, not two sets "
+            "Your best single set — twenty in a row, not two sets "
             "of ten. Counted from reps the camera accepted, so sloppy ones do "
             "not help you."
         ),
@@ -86,8 +86,8 @@ CATALOGUE: tuple[Authorable, ...] = (
         unit="seconds",
         help_en=(
             "For the movements that are timed rather than counted — planks, a "
-            "wall sit, standing on one leg. Your longest clean hold in the "
-            "window, not the total across several attempts."
+            "wall sit, standing on one leg. Your longest clean hold, "
+            "not the total across several attempts."
         ),
         phrase_en="Hold for at least … seconds",
         default_target=30,
@@ -148,8 +148,8 @@ CATALOGUE: tuple[Authorable, ...] = (
         label_en="Knee stays out — single-leg squat",
         unit="deg",
         help_en=(
-            "How far the knee falls inward. This is the movement behind ACL "
-            "injuries, so lower is better and it has to be filmed front-on."
+            "How far the knee falls inward. This is the movement behind knee "
+            "ligament injuries, so lower is better. Film it from the front."
         ),
         phrase_en="Knee falls inward no more than … degrees",
         default_target=8,
@@ -193,7 +193,7 @@ CATALOGUE: tuple[Authorable, ...] = (
         group="Movement",
         label_en="Calf raise height",
         unit="ratio",
-        help_en="Heel lift as a share of foot length. 0.45 is a full raise.",
+        help_en="How high your heel lifts compared with your foot length. 0.45 is a full raise.",
         phrase_en="Raise the heel to at least … of full height",
         default_target=0.45,
         step=0.05,
@@ -205,7 +205,7 @@ CATALOGUE: tuple[Authorable, ...] = (
         group="Strength tests",
         label_en="Quadriceps strength",
         unit="N/kg",
-        help_en="Isometric strength test, entered by hand.",
+        help_en="Push as hard as you can without moving. Entered by hand.",
         phrase_en="Reach at least … N/kg",
         default_target=3.0,
         target_types=WITH_LSI,
@@ -218,7 +218,7 @@ CATALOGUE: tuple[Authorable, ...] = (
         group="Strength tests",
         label_en="Hamstring strength",
         unit="N/kg",
-        help_en="Isometric strength test, entered by hand.",
+        help_en="Push as hard as you can without moving. Entered by hand.",
         phrase_en="Reach at least … N/kg",
         default_target=3.0,
         target_types=WITH_LSI,
@@ -229,9 +229,9 @@ CATALOGUE: tuple[Authorable, ...] = (
         key="test.iso_adductor",
         source=CriterionSource.TEST,
         group="Strength tests",
-        label_en="Adductor squeeze strength",
+        label_en="Inner-thigh squeeze strength",
         unit="N/kg",
-        help_en="Isometric squeeze test, entered by hand.",
+        help_en="Squeeze your knees together as hard as you can. Entered by hand.",
         phrase_en="Reach at least … N/kg",
         default_target=2.6,
         target_types=WITH_LSI,
@@ -270,7 +270,7 @@ CATALOGUE: tuple[Authorable, ...] = (
         group="Strength tests",
         label_en="Jump height",
         unit="m",
-        help_en="Countermovement jump.",
+        help_en="Dip down quickly, then jump straight up as high as you can.",
         phrase_en="Jump at least … metres",
         default_target=0.34,
         target_types=WITH_LSI,
@@ -283,7 +283,7 @@ CATALOGUE: tuple[Authorable, ...] = (
         group="Strength tests",
         label_en="Single-leg calf raises",
         unit="reps",
-        help_en="Counted by hand, to failure.",
+        help_en="Counted by hand, until you can't do another.",
         phrase_en="Complete at least … raises",
         default_target=25,
         target_types=WITH_LSI,
@@ -308,7 +308,7 @@ CATALOGUE: tuple[Authorable, ...] = (
         group="Strength tests",
         label_en="Change of direction",
         unit="%",
-        help_en="Cutting drill, as a share of your best.",
+        help_en="Sharp-turn drill, as a % of your best.",
         phrase_en="Reach at least …% of your best",
         default_target=90,
     ),
@@ -316,9 +316,9 @@ CATALOGUE: tuple[Authorable, ...] = (
         key="test.yo_yo_ir1",
         source=CriterionSource.TEST,
         group="Strength tests",
-        label_en="Yo-Yo intermittent recovery",
+        label_en="Yo-Yo running test",
         unit="m",
-        help_en="Distance covered in the Yo-Yo IR1 test.",
+        help_en="Total distance in the Yo-Yo shuttle run (a beep-style test).",
         phrase_en="Cover at least … metres",
         default_target=1200,
         step=40,
@@ -391,9 +391,9 @@ CATALOGUE: tuple[Authorable, ...] = (
         key="session.adherence_pct",
         source=CriterionSource.SESSION,
         group="Consistency",
-        label_en="Adherence",
+        label_en="Sessions done (%)",
         unit="%",
-        help_en="Sessions done against sessions prescribed.",
+        help_en="Sessions you did out of the sessions in your plan.",
         phrase_en="Complete at least …% of your sessions",
         default_target=80,
         default_aggregate=Aggregate.LATEST,

@@ -153,7 +153,7 @@ function episodeId(): number {
  * nothing on screen contradicts it.
  *
  * Six positions times seven injury sites is the whole claim this project makes,
- * so a demo that cannot show it is demonstrating the wrong thing. All 42 are
+ * so a demo that cannot show it is demonstrating the wrong thing. All 126 are
  * recorded, kept out of the bundle at 1.6 MB, and fetched the first time
  * somebody actually changes something. Most visitors never ask for it.
  */
@@ -200,8 +200,17 @@ function fromLibrary(): (Body & { phases: Body[] }) | undefined {
   const adult = library[key.base];
   if (!adult || key.age === "adult") return adult;
   const variant = library[`${key.base}|${key.age}`] as Body | undefined;
-  const phaseOne = variant?.["phase_one"] as Body | undefined;
-  if (!variant || !phaseOne) return adult;
+  const stored = variant?.["phase_one"] as Body | undefined;
+  if (!variant || !stored) return adult;
+  // Stored with exercise keys only; the full exercises are in the catalogue.
+  const catalogue = (RESPONSES["/catalog/exercises"] as Body[] | undefined) ?? [];
+  const phaseOne: Body = {
+    ...stored,
+    prescriptions: (stored["prescriptions"] as Body[]).map(({ exercise_key, ...rx }) => ({
+      ...rx,
+      exercise: catalogue.find((e) => e["key"] === exercise_key) ?? { key: exercise_key },
+    })),
+  };
   return {
     ...adult,
     id: variant["id"],
@@ -326,7 +335,7 @@ function unmeasuredGate(id: number, phaseKey: string): Body | null {
     samples: 0,
     baseline: null,
     baseline_origin: null,
-    detail_en: "Tissue heals on its own schedule. This is a floor, not a target.",
+    detail_en: "Your body heals at its own pace. This is the shortest time, not a goal.",
     detail_th: "Tissue heals on its own schedule. This is a floor, not a target.",
   });
 
@@ -356,8 +365,8 @@ const no = (status: number, detail: string): Reply => ({ ok: false, status, deta
 
 /** Everything the phone cannot decide on its own, refused in the same words. */
 const NEEDS_LAPTOP =
-  "This needs the laptop. The app is running from a snapshot on the phone, " +
-  "so nothing new can be worked out until it can reach the server again.";
+  "This needs the laptop. Right now the app is using a saved copy on your phone, " +
+  "so it can't work anything new out until it's connected to the laptop again.";
 
 /**
  * Answer one request from the snapshot and whatever has happened since.
@@ -373,6 +382,16 @@ export function handle(path: string, init: RequestInit = {}): Reply {
 
   if (method === "GET") return get(path, id);
   if (method === "PATCH" && path === "/players/me/profile") {
+    // An age group changes the plan, and with no library loaded there is no
+    // other plan to serve. Saying "rebuilt" while serving the old one is the
+    // one thing worse than refusing -- the same rule as choosing an injury.
+    if (body["age_group"] && !library) {
+      return no(
+        503,
+        "The plans for other age groups did not load on this phone. Connect to " +
+          "the internet once, or use the laptop.",
+      );
+    }
     local.profile = { ...(local.profile ?? {}), ...body };
     // The server reports the band the plan is built for alongside the one
     // picked; a pick made on the phone is both.
@@ -395,7 +414,7 @@ export function handle(path: string, init: RequestInit = {}): Reply {
     return ok(null);
   }
   if (method === "POST") return post(path, body, id);
-  return no(404, `${method} ${path} is not part of the offline snapshot.`);
+  return no(404, "This part of the app doesn't work on the phone on its own. Connect to the laptop to use it.");
 }
 
 /** The episode list, with the phase the player chose applied over it. */
@@ -549,7 +568,7 @@ function authored(draft: Body): {
 
 function labelFor(draft: Body): string {
   const { item, exercise } = authored(draft);
-  if (!item) return String(draft["metric"] ?? "Your target");
+  if (!item) return "Your target";
   return preview(
     item,
     String(draft["target_type"] ?? ABSOLUTE),
@@ -709,8 +728,8 @@ function post(path: string, body: Body, id: number): Reply {
       local.injury = null;
       return no(
         503,
-        "That programme is not in the demo. It exists -- there are 42 of them -- " +
-          "but this copy only carries the ones recorded into it.",
+        "That plan isn't in the demo. The full app has 126 plans, " +
+          "but this demo only has a few of them.",
       );
     }
     // A new injury starts at the beginning, the way the real one does.
@@ -754,7 +773,7 @@ function post(path: string, body: Body, id: number): Reply {
       completed_reps: null,
       valid_reps: null,
       form_score: null,
-      warnings: ["Stored on this phone. The server has not scored it yet."],
+      warnings: ["Saved on this phone. It gets its final score when you connect to the laptop."],
       emitted: [],
     });
   }
@@ -783,9 +802,9 @@ function post(path: string, body: Body, id: number): Reply {
     if (!gate.ok || !(gate.body as Body)["passed"]) {
       return no(
         503,
-        "Moving to the next phase means re-running the exit criteria, and that " +
-          "happens on the laptop. The gate you can see is the one from when this " +
-          "snapshot was taken.",
+        "To move to the next phase, your tests need checking again, and that " +
+          "happens on the laptop. The results you can see are from when this " +
+          "copy was saved.",
       );
     }
 

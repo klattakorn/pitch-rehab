@@ -24,12 +24,15 @@ def update_profile(
     payload: ProfileUpdateIn, db: DbSession, player: CurrentPlayer
 ) -> PlayerProfile:
     changes = payload.model_dump(exclude_unset=True)
-    before = (player.position, player.effective_age_group)
 
     for field, value in changes.items():
         setattr(player, field, value)
 
-    if (player.position, player.effective_age_group) != before:
+    # Not "did the band change": a player whose band comes from a birth date
+    # may already be on the wrong programme (a birthday crossed 18 or 40), and
+    # picking the band they are in has to fix that. realign_protocol is a no-op
+    # when the episode is already on the right one.
+    if changes.keys() & {"position", "age_group", "date_of_birth"}:
         # Position sets a player's drills and role-specific testing, and age
         # group sets which movements they are given and how much. A change to
         # either has to reach the rehab they are actually doing. Their phase

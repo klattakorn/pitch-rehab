@@ -193,3 +193,59 @@ export function initials(name: string): string {
   if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase();
 }
+
+/**
+ * Units as a player would say them. The data stores short codes (NPRS, deg,
+ * N/kg); those are fine for a physio and meaningless to everyone else.
+ */
+const UNIT_WORDS: Record<string, string> = {
+  NPRS: "out of 10",
+  deg: "°",
+  s: "sec",
+  seconds: "sec",
+  ratio: "",
+  "N/kg": "N per kg",
+  count: "",
+  score: "",
+  reps: "reps",
+  days: "days",
+  m: "m",
+  "%": "%",
+};
+
+export function friendlyUnit(unit: string | null | undefined): string {
+  if (!unit) return "";
+  return UNIT_WORDS[unit] ?? unit;
+}
+
+/** "left side", "right side", or "both sides" -- never "bilateral". */
+export function sideLabel(side: string): string {
+  return side === "bilateral" ? "both sides" : `${side} side`;
+}
+
+/**
+ * Words for the codes a finished set carries. The codes still go to the
+ * server unchanged; this is only what the player reads. Unknown codes are
+ * left out rather than shown raw.
+ */
+export function friendlyWarnings(codes: readonly string[], mode: "rep" | "hold"): string[] {
+  const out: string[] = [];
+  for (const code of codes) {
+    if (code === "frequent_tracking_loss") {
+      out.push(
+        "The camera kept losing sight of you. Try more light, or step back so your whole body is in shot.",
+      );
+    } else if (code === "no_reps_detected" && mode === "rep") {
+      out.push("No reps were picked up.");
+    } else {
+      const m = /^discarded_(too_shallow|too_quick)_x(\d+)$/.exec(code);
+      if (!m) continue;
+      const n = Number(m[2]);
+      const reps = n === 1 ? "1 rep was" : `${n} reps were`;
+      out.push(
+        m[1] === "too_shallow" ? `${reps} not deep enough to count.` : `${reps} too quick to count.`,
+      );
+    }
+  }
+  return out;
+}

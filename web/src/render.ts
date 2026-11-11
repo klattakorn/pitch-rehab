@@ -13,8 +13,8 @@ export const FRIENDLY: Record<string, { en: string; th: string }> = {
   trunk_lean: { en: "lean", th: "เอนตัว" },
   knee_valgus: { en: "knee in", th: "เข่าเข้าใน" },
   pelvic_drop: { en: "hip drop", th: "สะโพกตก" },
-  ankle_dorsiflexion: { en: "ankle", th: "ข้อเท้า" },
-  heel_raise_ratio: { en: "heel", th: "ส้นเท้า" },
+  ankle_dorsiflexion: { en: "ankle bend", th: "ข้อเท้า" },
+  heel_raise_ratio: { en: "heel height", th: "ส้นเท้า" },
 };
 
 /** Which readings to surface, given what this exercise actually checks. */
@@ -69,7 +69,7 @@ export function drawSkeleton(
 
 export function renderReadout(el: HTMLElement, result: FrameResult, keys: string[]): void {
   if (!result.metrics) {
-    el.innerHTML = `<span style="color:${CORAL}">— no reading —</span>`;
+    el.innerHTML = `<span style="color:${CORAL}">Can't see you clearly</span>`;
     return;
   }
   const rows = keys

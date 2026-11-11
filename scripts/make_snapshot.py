@@ -98,7 +98,7 @@ def _write_protocols() -> None:
         # Age group only changes phase one (app/data/tailoring.py), so the
         # youth and senior variants are stored as that one phase rather than
         # as two more full copies: three times the programmes for about a
-        # sixth more bytes. The app puts them back together -- see
+        # third more bytes. The app puts them back together -- see
         # `protocol()` in web/src/standalone.ts.
         protocols: dict[str, Any] = {}
         for row in rows:
@@ -107,11 +107,17 @@ def _write_protocols() -> None:
             if row.age_group is AgeGroup.ADULT:
                 protocols[base] = dumped
             else:
+                phase_one = dumped["phases"][0]
+                # The exercise objects are the bulk of a phase, and every one
+                # is already in /catalog/exercises in the snapshot. Keep the
+                # key; standalone.ts looks the rest up.
+                for rx in phase_one["prescriptions"]:
+                    rx["exercise_key"] = rx.pop("exercise")["key"]
                 protocols[f"{base}|{row.age_group}"] = {
                     "id": dumped["id"],
                     "key": dumped["key"],
                     "age_group": dumped["age_group"],
-                    "phase_one": dumped["phases"][0],
+                    "phase_one": phase_one,
                 }
 
     PROTOCOLS.parent.mkdir(parents=True, exist_ok=True)

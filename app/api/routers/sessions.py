@@ -32,15 +32,24 @@ FRAME_KEEP_STRIDE = 5
 def _load_session(db: DbSession, user: CurrentUser, session_id: int) -> RehabSession:
     session = db.get(RehabSession, session_id)
     if session is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "session not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "We couldn't find that workout. Please start a new one.")
     if user.role is Role.PLAYER:
         profile = db.execute(
             select(PlayerProfile).where(PlayerProfile.user_id == user.id)
         ).scalar_one_or_none()
         episode = db.get(InjuryEpisode, session.episode_id)
         if profile is None or episode is None or episode.player_id != profile.id:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "session not found")
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "We couldn't find that workout. Please start a new one.")
     return session
+
+
+def _not_active(status: EpisodeStatus) -> str:
+    """Why an injury that is not active cannot do this, in words."""
+    return {
+        EpisodeStatus.CLEARED: "You've already finished this plan.",
+        EpisodeStatus.PAUSED: "This injury is on pause right now.",
+        EpisodeStatus.ABANDONED: "This plan was stopped.",
+    }.get(status, "This plan isn't active right now.")
 
 
 @router.post(
@@ -52,7 +61,7 @@ def start_session(
     payload: SessionStartIn, episode: Episode, db: DbSession
 ) -> RehabSession:
     if episode.status is not EpisodeStatus.ACTIVE:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"episode is {episode.status}")
+        raise HTTPException(status.HTTP_409_CONFLICT, _not_active(episode.status))
     session = RehabSession(
         episode_id=episode.id,
         phase_key=episode.current_phase,
@@ -90,13 +99,13 @@ def upload_set(
     """
     session = _load_session(db, user, session_id)
     if session.status is not SessionStatus.IN_PROGRESS:
-        raise HTTPException(status.HTTP_409_CONFLICT, "session already closed")
+        raise HTTPException(status.HTTP_409_CONFLICT, "This workout is already finished. Start a new one to add more.")
 
     exercise = db.execute(
         select(Exercise).where(Exercise.key == payload.exercise_key)
     ).scalar_one_or_none()
     if exercise is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"unknown exercise {payload.exercise_key}")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "We don't know that exercise.")
 
     episode = db.get(InjuryEpisode, session.episode_id)
     assert episode is not None
@@ -117,7 +126,7 @@ def upload_set(
         if payload.completed_reps is None:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_CONTENT,
-                f"{exercise.key} has no camera rule — send `completed_reps` instead of frames",
+                f"The camera doesn't check {exercise.name_en}. Enter how many reps you did instead.",
             )
         exercise_set.completed_reps = payload.completed_reps
         exercise_set.valid_reps = payload.completed_reps
@@ -138,7 +147,7 @@ def upload_set(
     if len(payload.frames) < 2:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            f"{exercise.key} is camera-scored — send at least 2 landmark frames",
+            f"The camera didn't see enough of {exercise.name_en}. Stand in shot and do the set again.",
         )
 
     rule = ExerciseRule.model_validate(exercise.pose_rule)
@@ -279,7 +288,7 @@ def complete_session(
 ) -> RehabSession:
     session = _load_session(db, user, session_id)
     if session.status is not SessionStatus.IN_PROGRESS:
-        raise HTTPException(status.HTTP_409_CONFLICT, "session already closed")
+        raise HTTPException(status.HTTP_409_CONFLICT, "This workout is already finished. Start a new one to add more.")
 
     session.ended_at = payload.ended_at or datetime.now(UTC)
     session.status = SessionStatus.COMPLETED

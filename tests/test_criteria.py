@@ -634,7 +634,7 @@ def test_a_custom_criterion_can_block_a_phase_that_would_otherwise_pass(db, epis
 def test_the_builder_refuses_a_metric_nothing_ever_writes(db, episode) -> None:
     """A free-text metric field would let someone create a test that can never
     pass, because no part of the system produces that key."""
-    with pytest.raises(authoring.AuthoringError, match="not something you can build"):
+    with pytest.raises(authoring.AuthoringError, match="can't be turned into a test"):
         authoring.resolve("test.yoyo")
 
 
@@ -647,7 +647,7 @@ def test_the_builder_refuses_reps_on_a_hand_logged_drill(db, episode) -> None:
 def test_the_builder_refuses_a_comparison_the_metric_cannot_make(db) -> None:
     # Limb symmetry needs two limbs. A shuttle test is one number for the player.
     item = authoring.resolve("test.yo_yo_ir1")
-    with pytest.raises(authoring.AuthoringError, match="cannot be compared"):
+    with pytest.raises(authoring.AuthoringError, match="can't be compared"):
         authoring.check_value(item, TargetType.LSI, 90)
 
 

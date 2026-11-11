@@ -70,7 +70,7 @@ def get_protocol(
         .first()
     )
     if protocol is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "no protocol for that combination")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "We don't have a plan for that position and injury yet.")
     return protocol
 
 

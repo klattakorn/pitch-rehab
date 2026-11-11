@@ -74,7 +74,7 @@ EXERCISES: list[ExerciseDef] = [
     # ---------------------------------------------------------------- phase 1
     ExerciseDef(
         key="isometric_quad_set",
-        name_en="Isometric quadriceps set",
+        name_en="Thigh squeeze (quad set)",
         name_th="เกร็งกล้ามเนื้อต้นขาด้านหน้าค้างไว้",
         category="activation",
         cue_en="Press the back of the knee down and hold. Keep the leg straight.",
@@ -231,7 +231,7 @@ EXERCISES: list[ExerciseDef] = [
     ),
     ExerciseDef(
         key="heel_slide",
-        name_en="Heel slide (knee ROM)",
+        name_en="Heel slide (knee bend)",
         name_th="ไถส้นเท้าเพื่อเพิ่มมุมงอเข่า",
         category="mobility",
         cue_en="Slide the heel towards the buttock as far as pain allows.",
@@ -307,7 +307,7 @@ EXERCISES: list[ExerciseDef] = [
     ),
     ExerciseDef(
         key="prone_hamstring_curl",
-        name_en="Prone hamstring curl",
+        name_en="Lying hamstring curl",
         name_th="งอเข่าท่านอนคว่ำ",
         category="strength",
         cue_en="Curl the heel up slowly, keep the hips on the floor.",
@@ -673,7 +673,7 @@ EXERCISES: list[ExerciseDef] = [
     ),
     ExerciseDef(
         key="copenhagen_plank",
-        name_en="Copenhagen adduction plank",
+        name_en="Copenhagen plank (inner thigh)",
         name_th="โคเปนเฮเกนแพลงก์ (กล้ามเนื้อขาหนีบ)",
         category="strength",
         cue_en="Top leg on the bench, lift the hips until the body is one straight line.",
@@ -726,7 +726,12 @@ EXERCISES: list[ExerciseDef] = [
         rule=ExerciseRule(
             mode="hold",
             view="side",
-            hold_target_s=45.0,
+            # The shortest hold anyone is prescribed (youth and 40+ get 30 s,
+            # tested at 20 s -- app/data/tailoring.py). Was 45, the adult dose,
+            # which marked a perfect 30 s hold invalid, so those players could
+            # never pass their own test. How long *this* player should hold is
+            # the prescription's job, and the camera screen counts to it.
+            hold_target_s=20.0,
             targets=[
                 MetricTarget(
                     metric="knee_flexion",

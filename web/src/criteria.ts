@@ -13,6 +13,7 @@
  * wording and the draft-assembly can be tested without booting the app.
  */
 import type { Authorable, AuthorableCatalogue, CriterionDraft, CustomCriterion } from "./api";
+import { friendlyUnit } from "./ui";
 
 export const ABSOLUTE = "absolute";
 export const LSI = "lsi";
@@ -56,7 +57,7 @@ export function grouped(catalogue: AuthorableCatalogue): [string, Authorable[]][
 
 /** The unit shown beside the number, which changes with the comparison. */
 export function unitFor(item: Authorable, targetType: string): string {
-  return targetType === ABSOLUTE ? item.unit : "%";
+  return targetType === ABSOLUTE ? friendlyUnit(item.unit) : "%";
 }
 
 /**
@@ -155,7 +156,7 @@ export function metricPickerHtml(catalogue: AuthorableCatalogue): string {
               (item) => `<button class="rowcard" data-metric="${item.key}">
                 <span class="rowbody"><b>${item.label_en}</b>
                   <small>${item.help_en}</small></span>
-                <span class="chip">${item.unit}</span>
+                ${friendlyUnit(item.unit) ? `<span class="chip">${friendlyUnit(item.unit)}</span>` : ""}
               </button>`,
             )
             .join("")}
