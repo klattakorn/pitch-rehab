@@ -21,6 +21,7 @@ import {
   type CameraView,
   Frame,
   FootLift,
+  LandingSink,
   type Metrics,
   aggregate,
   bodyScale,
@@ -47,6 +48,14 @@ const WARMUP_FRAMES = 15;
 const SMOOTHING = 5;
 /** Mirrors MAX_GROUND_CONTACT_S on the server: longer is a pause, not a contact. */
 const MAX_GROUND_CONTACT_S = 1.0;
+/** Mirrors MIN_GROUND_CONTACT_S on the server: shorter is not a landing that was seen. */
+const MIN_GROUND_CONTACT_S = 0.05;
+/** Mirrors CONTACT_WEIGHT / CONTACT_TOLERANCE_S on the server. */
+const CONTACT_WEIGHT = 2;
+const CONTACT_TOLERANCE_S = 0.2;
+/** Mirrors LANDING_WEIGHT / LANDING_TOLERANCE on the server. */
+const LANDING_WEIGHT = 3;
+const LANDING_TOLERANCE = 10;
 
 export interface ReadinessProblem {
   code:
@@ -126,6 +135,8 @@ export interface SetResult {
 
 interface RepBuffer {
   startT: number;
+  /** Deepest landing before this rep began (hops only). */
+  landingSink?: number | null;
   series: Map<string, number[]>;
   times: number[];
 }
@@ -141,9 +152,14 @@ export class LiveSession {
   private readonly opennessScores: number[] = [];
   private readonly recent = new Map<string, number[]>();
   private readonly footLift = new FootLift();
+  private readonly landingSink = new LandingSink();
+  /** Deepest landing_sink since the last rep ended: the landing before the next hop. */
+  private sinkSinceEnd: number | null = null;
 
   private rep: RepBuffer | null = null;
   private lastBelowExitT = 0;
+  /** Lowest signal since the last rep ended. See segment_reps on the server. */
+  private lowSinceEnd = Infinity;
   private peak = -Infinity;
   private lastDiscard: DiscardedRep | null = null;
   private discardCounts: Record<string, number> = {};
@@ -273,6 +289,8 @@ export class LiveSession {
     // as on the server (analyzer._series_for).
     const lift = this.footLift.push(frame);
     if (lift !== null) for (const m of perSide) m.foot_lift = lift;
+    const sink = this.landingSink.push(frame);
+    if (sink !== null) for (const m of perSide) m.landing_sink = sink;
     const smoothed = this.smooth(perSide);
     const display = perSide[0] ?? {};
 
@@ -427,6 +445,14 @@ export class LiveSession {
     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
   }
 
+  /** The deepest landing since the last hop (none before the first). */
+  private noteSink(perSide: Metrics[]): void {
+    const now = perSide[0]?.landing_sink;
+    if (!this.reps.length || typeof now !== "number") return;
+    this.sinkSinceEnd = Math.max(this.sinkSinceEnd ?? -Infinity, now);
+    if (this.rep) this.rep.landingSink = this.sinkSinceEnd;
+  }
+
   private advanceReps(t: number, perSide: Metrics[]): RepResult | null {
     if (this.rule.mode !== "rep" || !this.rule.detection) {
       this.record(t, perSide);
@@ -440,21 +466,38 @@ export class LiveSession {
     const signal = signalValues.reduce((a, b) => a + b, 0) / signalValues.length;
 
     if (!this.rep) {
+      // Only after a rep: the first hop has no landing before it, as on the server.
+      this.noteSink(perSide);
+      this.lowSinceEnd = Math.min(this.lowSinceEnd, signal);
+      const climbed = !det.exit_fraction || signal - this.lowSinceEnd >= det.min_amplitude;
       if (signal <= det.exit) this.lastBelowExitT = t;
-      else if (signal >= det.enter) {
-        this.rep = { startT: this.lastBelowExitT, series: new Map(), times: [] };
+      else if (signal >= det.enter && climbed) {
+        this.rep = {
+          startT: this.lastBelowExitT,
+          series: new Map(),
+          times: [],
+          landingSink: this.sinkSinceEnd,
+        };
         this.peak = signal;
       }
       if (this.rep) this.record(t, perSide);
       return null;
     }
 
+    // Up to this hop's highest point the landing before it is still being
+    // measured (mirrors the server, which reads to the peak).
+    if (signal >= this.peak) this.noteSink(perSide);
     this.peak = Math.max(this.peak, signal);
     this.record(t, perSide);
     const tooLong = t - this.rep.startT > det.max_duration_s;
-    if (signal <= det.exit || tooLong) {
+    const endAt = det.exit_fraction ? Math.max(det.exit, this.peak * det.exit_fraction) : det.exit;
+    if (signal <= endAt || tooLong) {
       const closed = this.closeRep(t);
       this.lastBelowExitT = t;
+      this.sinkSinceEnd = null;
+      // Ended part-way down (exit_fraction), maybe still above `enter`: the
+      // next rep has to climb from here, or the next frame would be a phantom.
+      this.lowSinceEnd = signal;
       this.peak = -Infinity;
       return closed;
     }
@@ -569,8 +612,53 @@ export class LiveSession {
       metrics.flight_time_s = Math.round(duration * 1000) / 1000;
       const prev = this.reps[this.reps.length - 1];
       const contact = prev ? rep.startT - prev.endT : null;
-      if (contact !== null && contact >= 0 && contact <= MAX_GROUND_CONTACT_S)
+      if (contact !== null && contact >= MIN_GROUND_CONTACT_S && contact <= MAX_GROUND_CONTACT_S)
         metrics.ground_contact_s = Math.round(contact * 1000) / 1000;
+      const deepest = det.max_landing_sink;
+      if (deepest != null && rep.landingSink != null && this.reps.length) {
+        const sunk = Math.round(rep.landingSink * 10) / 10;
+        metrics.landing_sink = sunk;
+        // Scored, not refused -- see the server (analyzer.py).
+        totalWeight += LANDING_WEIGHT;
+        if (sunk <= deepest) weightedOk += LANDING_WEIGHT;
+        else {
+          const severity = Math.min(1, (sunk - deepest) / LANDING_TOLERANCE);
+          weightedOk += LANDING_WEIGHT * (1 - severity);
+          violations.push({
+            code: "landing_too_deep",
+            metric: "landing_sink",
+            observed: sunk,
+            limit: deepest,
+            bound: "max",
+            severity,
+            critical: false,
+            message_en: "Landed too deep. Keep your knees almost straight and spring off your ankles.",
+            message_th: "ลงพื้นย่อลึกเกินไป เข่าเกือบตรงแล้วสปริงด้วยข้อเท้า",
+          });
+        }
+      }
+      const limit = det.max_ground_contact_s;
+      const seen = metrics.ground_contact_s;
+      if (limit != null && seen !== undefined) {
+        totalWeight += CONTACT_WEIGHT;
+        if (seen > limit) {
+          const severity = Math.min(1, (seen - limit) / CONTACT_TOLERANCE_S);
+          weightedOk += CONTACT_WEIGHT * (1 - severity);
+          violations.push({
+            code: "slow_ground_contact",
+            metric: "ground_contact_s",
+            observed: seen,
+            limit,
+            bound: "max",
+            severity,
+            critical: false,
+            message_en: "Too long on the ground. Bounce straight back up off the balls of your feet.",
+            message_th: "อยู่บนพื้นนานเกินไป เด้งขึ้นทันทีด้วยปลายเท้า",
+          });
+        } else {
+          weightedOk += CONTACT_WEIGHT;
+        }
+      }
     }
 
     const result: RepResult = {

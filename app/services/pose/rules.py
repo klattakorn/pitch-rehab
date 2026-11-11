@@ -62,6 +62,17 @@ class RepDetection(BaseModel):
     #: Peak must exceed the rep's starting value by at least this much, so a
     #: shuffle of the feet is not counted as a repetition.
     min_amplitude: float = 8.0
+    #: End a rep once the signal falls this far back from its own peak (as a
+    #: fraction of the peak), as well as at ``exit``. For movements where the
+    #: body does not always return all the way to rest between reps -- a hop
+    #: that lands a little forward never reads as fully back on the floor.
+    exit_fraction: float | None = None
+    #: Hops only: the longest ground contact between two hops that still counts
+    #: as springy. Longer is scored down (not refused). See pogo_hops.
+    max_ground_contact_s: float | None = None
+    #: Hops only: deepest the hips may sink toward the ankles on landing,
+    #: as % of the player's full leg length. Deeper is flagged and scored down.
+    max_landing_sink: float | None = None
 
     @model_validator(mode="after")
     def _exit_below_enter(self) -> RepDetection:

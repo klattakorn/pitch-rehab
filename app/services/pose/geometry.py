@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import bisect
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -309,6 +310,61 @@ class FootLift:
         floor_l = max(h[1] for h in self._history)
         floor_r = max(h[2] for h in self._history)
         return min(floor_l - feet[0], floor_r - feet[1]) / torso * 100.0
+
+
+_LEG_SMOOTHING = 5
+#: The player's "full leg" is this percentile of every leg length seen so far
+#: in the set -- high enough to be a straight leg, low enough that one stretched
+#: frame (toes pointed in the air, a tracking slip) does not set it.
+LANDING_REFERENCE_PERCENTILE = 0.95
+
+
+class LandingSink:
+    """How far the hips have sunk toward the ankles, as % of the player's full leg.
+
+    From the front the knee angle is hidden (it bends toward the camera), but
+    what it does to the body is not: the hips drop toward the feet. Each frame
+    is compared with the player's full leg length so far in the set (see
+    LANDING_REFERENCE_PERCENTILE), so it reads about 0 on a straight leg and
+    grows as the knees bend. Plain image height, hip to ankle: the player is a
+    fixed distance from the phone, so no body measure is needed to scale it.
+
+    Other ways were tried on the same clips and overlapped: dividing by torso
+    length (a forward lean on landing shortens the torso in 2D and inflates
+    the reading), the longest leg in the last 2 s (a toe-pointed leg in the air
+    reads longer than standing), and the tallest standing height on the floor.
+
+    On real footage, one person: springy pogo landings sank 9-22%, heavy
+    squatting ones 20-34% (9 of 10 at 26 or more).
+    Causal, like FootLift, so the browser computes the same number live.
+    """
+
+    def __init__(self) -> None:
+        self._recent: list[float] = []
+        self._seen: list[float] = []  # kept sorted
+
+    def push(self, frame: Frame) -> float | None:
+        if frame.space != "image":
+            return None
+        if not frame.visible(
+            LM.LEFT_HIP, LM.RIGHT_HIP, LM.LEFT_ANKLE, LM.RIGHT_ANKLE, threshold=0.3
+        ):
+            return None
+        hip = midpoint(frame, LM.LEFT_HIP, LM.RIGHT_HIP)
+        ankle = midpoint(frame, LM.LEFT_ANKLE, LM.RIGHT_ANKLE)
+        self._recent.append(float(ankle[1] - hip[1]))
+        self._recent = self._recent[-_LEG_SMOOTHING:]
+        leg = float(np.median(self._recent))
+        bisect.insort(self._seen, leg)
+        full = self._seen[int(LANDING_REFERENCE_PERCENTILE * (len(self._seen) - 1))]
+        if full < _EPS:
+            return None
+        return (full - leg) / full * 100.0
+
+
+def landing_sink_series(frames: Sequence[Frame]) -> list[float | None]:
+    tracker = LandingSink()
+    return [tracker.push(f) for f in frames]
 
 
 def foot_lift_series(frames: Sequence[Frame]) -> list[float | None]:

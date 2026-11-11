@@ -87,7 +87,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": -44.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 6.0
+        "min_amplitude": 6.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -152,7 +155,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 15.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 20.0
+        "min_amplitude": 20.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -217,7 +223,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 3.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 6.0
+        "min_amplitude": 6.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -295,7 +304,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 15.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 30.0
+        "min_amplitude": 30.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -373,7 +385,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 7.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 12.0
+        "min_amplitude": 12.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -430,7 +445,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 0.12,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 0.05
+        "min_amplitude": 0.05,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -584,7 +602,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 15.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 20.0
+        "min_amplitude": 20.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -702,7 +723,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 40.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 10.0
+        "min_amplitude": 10.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -785,7 +809,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 8.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 20.0
+        "min_amplitude": 20.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -863,7 +890,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 15.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 25.0
+        "min_amplitude": 25.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -941,7 +971,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 0.12,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 0.05
+        "min_amplitude": 0.05,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -1140,7 +1173,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 12.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 18.0
+        "min_amplitude": 18.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -1294,7 +1330,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 4.0,
         "min_duration_s": 0.15,
         "max_duration_s": 1.0,
-        "min_amplitude": 6.0
+        "min_amplitude": 6.0,
+        "exit_fraction": 0.4,
+        "max_ground_contact_s": 0.36,
+        "max_landing_sink": 25.0
       },
       "targets": [
         {
@@ -1444,7 +1483,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 12.0,
         "min_duration_s": 0.35,
         "max_duration_s": 20.0,
-        "min_amplitude": 18.0
+        "min_amplitude": 18.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -1522,7 +1564,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 10.0,
         "min_duration_s": 0.2,
         "max_duration_s": 20.0,
-        "min_amplitude": 12.0
+        "min_amplitude": 12.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -1620,7 +1665,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 10.0,
         "min_duration_s": 0.2,
         "max_duration_s": 20.0,
-        "min_amplitude": 12.0
+        "min_amplitude": 12.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {
@@ -1711,7 +1759,10 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "exit": 12.0,
         "min_duration_s": 0.25,
         "max_duration_s": 20.0,
-        "min_amplitude": 15.0
+        "min_amplitude": 15.0,
+        "exit_fraction": null,
+        "max_ground_contact_s": null,
+        "max_landing_sink": null
       },
       "targets": [
         {

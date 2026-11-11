@@ -36,6 +36,12 @@ export interface RepDetection {
   min_duration_s: number;
   max_duration_s: number;
   min_amplitude: number;
+  /** End a rep at this fraction of its own peak as well as at `exit`. See rules.py. */
+  exit_fraction?: number | null;
+  /** Hops only: longest springy ground contact, in seconds. See rules.py. */
+  max_ground_contact_s?: number | null;
+  /** Hops only: deepest landing, % of full leg. Deeper is scored down. See rules.py. */
+  max_landing_sink?: number | null;
 }
 
 export interface EmitMetric {

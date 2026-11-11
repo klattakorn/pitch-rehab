@@ -290,6 +290,41 @@ export class FootLift {
   }
 }
 
+const LEG_SMOOTHING = 5;
+/** Mirrors LANDING_REFERENCE_PERCENTILE in app/services/pose/geometry.py. */
+export const LANDING_REFERENCE_PERCENTILE = 0.95;
+
+/**
+ * How far the hips have sunk toward the ankles, as % of the full leg. Mirrors
+ * `LandingSink` on the server, where the reasoning lives. Feed frames in order.
+ */
+export class LandingSink {
+  private recent: number[] = [];
+  private seen: number[] = []; // kept sorted
+
+  push(f: Frame): number | null {
+    const joints = [LM.LEFT_HIP, LM.RIGHT_HIP, LM.LEFT_ANKLE, LM.RIGHT_ANKLE];
+    if (joints.some((i) => f.confidence(i) < 0.3)) return null;
+    const hip = midpoint(f, LM.LEFT_HIP, LM.RIGHT_HIP);
+    const ankle = midpoint(f, LM.LEFT_ANKLE, LM.RIGHT_ANKLE);
+    this.recent.push(ankle[1]! - hip[1]!);
+    if (this.recent.length > LEG_SMOOTHING) this.recent.shift();
+    const leg = median(this.recent);
+    // Sorted insert, same as bisect.insort on the server.
+    let lo = 0;
+    let hi = this.seen.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.seen[mid]! <= leg) lo = mid + 1;
+      else hi = mid;
+    }
+    this.seen.splice(lo, 0, leg);
+    const full = this.seen[Math.floor(LANDING_REFERENCE_PERCENTILE * (this.seen.length - 1))]!;
+    if (full < EPS) return null;
+    return ((full - leg) / full) * 100;
+  }
+}
+
 // ---------------------------------------------------------- sanity measures
 export const SIDE_VIEW_BELOW = 0.35;
 export const FRONT_VIEW_ABOVE = 0.5;

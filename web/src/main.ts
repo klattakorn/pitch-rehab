@@ -1671,6 +1671,16 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
         // reported. Tempo is the common one: it can only be judged once the
         // rep is over, so it never appears as a live cue.
         const refused = result.justCompleted;
+        // Counted but done badly (a hop landed too deep): say so at once, in
+        // the same place, so the player can fix the next one.
+        const flagged = refused?.isValid
+          ? refused.violations.find((v) => v.code === "landing_too_deep" || v.code === "slow_ground_contact")
+          : undefined;
+        if (flagged) {
+          cueUntil = performance.now() + 1400;
+          setState("fix", "Counted — fix it");
+          centre.innerHTML = `<div class="cue">${flagged.message_en}</div>`;
+        }
         if (refused && !refused.isValid) {
           cueUntil = performance.now() + 1400;
           setState("fix", "Not counted");

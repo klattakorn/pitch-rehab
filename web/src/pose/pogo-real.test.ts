@@ -20,7 +20,9 @@ import { describe, expect, it } from "vitest";
 
 import { FALLBACK_EXERCISES } from "../fallback";
 import front from "./__fixtures__/pogo-front.json";
+import correct from "./__fixtures__/pogo-correct.json";
 import valgus from "./__fixtures__/pogo-valgus.json";
+import wrong from "./__fixtures__/pogo-wrong.json";
 import { FootLift, Frame } from "./geometry";
 import { LiveSession } from "./live";
 import type { ExerciseRule } from "./rules";
@@ -45,6 +47,10 @@ describe("pogo hops on real footage", () => {
   it.each([
     ["front, 10 good hops", front, 10],
     ["front, 6 hops with the knees in", valgus as Fixture, 6],
+    // Both drift a little on each landing, so the feet never read as fully
+    // back on the floor: hops end at 40% of their own height (exit_fraction).
+    ["front, 11 heavy jumps", wrong as Fixture, 11],
+    ["front, 15 springy hops", correct as Fixture, 15],
   ])("counts every hop live: %s", (_name, fx, hops) => {
     const outcome = replay(fx);
     expect(outcome.completedReps).toBe(hops);
@@ -84,5 +90,19 @@ describe("pogo hops on real footage", () => {
       .map((r) => r.v!);
     expect(values.length).toBeGreaterThan(30);
     expect(Math.max(...values)).toBeLessThan(rule.detection!.exit + rule.detection!.min_amplitude);
+  });
+
+  it("flags squat-and-jump landings and scores them down, refusing none", () => {
+    const good = replay(correct as Fixture);
+    const heavy = replay(wrong as Fixture);
+    // Every springy hop counts...
+    expect(good.validReps).toBe(15);
+    expect(replay(front).validReps).toBe(10);
+    expect(good.formScore).toBeGreaterThanOrEqual(95);
+    // ...and so does a squat-and-jump, but flagged, said why, and scored down.
+    expect(heavy.validReps).toBe(11);
+    const deep = heavy.reps.filter((r) => r.violations.some((v) => v.code === "landing_too_deep"));
+    expect(deep.length).toBeGreaterThanOrEqual(8);
+    expect(heavy.formScore).toBeLessThanOrEqual(75);
   });
 });

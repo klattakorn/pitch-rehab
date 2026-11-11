@@ -853,6 +853,26 @@ EXERCISES: list[ExerciseDef] = [
                 min_amplitude=6.0,
                 min_duration_s=0.15,
                 max_duration_s=1.0,
+                # A hop also ends once the feet fall to 40% of its own height.
+                # Two more clips (11 heavy jumps, 15 springy hops) drifted a
+                # little on each landing, so the feet never read as fully back
+                # on the floor and hops merged: 10 and 13 found. With this, all
+                # four clips count exactly, for anything from 35% to 50%. The
+                # next hop then has to climb min_amplitude from the lowest point
+                # since, so a hop that ends part-way down is not counted twice.
+                exit_fraction=0.4,
+                # Ground contact between hops, measured on those four clips:
+                # springy 0.13-0.33 s, heavy or sinking 0.40-0.67 s. Over this
+                # the hop is scored down and the player told to bounce. One
+                # person, phone on the floor: re-check on others.
+                max_ground_contact_s=0.36,
+                # How far the hips sink toward the ankles on landing, as % of
+                # the player's full leg (LandingSink): springy 9-22%, heavy
+                # squatting landings 20-34% (9 of 10 over this). Deeper is
+                # flagged and scored down, but still counted: tuned on one
+                # person, and refusing a good hop is the worse mistake.
+                # Phone low on the floor: re-check on others.
+                max_landing_sink=25.0,
             ),
             targets=[
                 MetricTarget(

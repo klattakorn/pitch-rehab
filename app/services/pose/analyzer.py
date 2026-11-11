@@ -12,6 +12,7 @@ from app.services.pose.geometry import (
     compute_metrics,
     detect_view,
     foot_lift_series,
+    landing_sink_series,
     implausible_frames,
 )
 from app.services.pose.landmarks import LM
@@ -135,6 +136,7 @@ def segment_reps(
     min_duration_s: float,
     max_duration_s: float,
     min_amplitude: float,
+    exit_fraction: float | None = None,
 ) -> list[tuple[int, int]]:
     """Turn a continuous angle trace into (start, end) frame-index pairs.
 
@@ -146,28 +148,36 @@ def segment_reps(
     start = 0
     peak = -math.inf
     last_below = 0
+    # With exit_fraction a rep can end part-way down, still above `enter`. The
+    # next one then has to climb min_amplitude from the lowest point since --
+    # otherwise the frame after the end would start a phantom rep.
+    low_since_end = math.inf
 
     for i, raw in enumerate(signal):
         if raw is None:
             continue
         v = float(raw)
         if not active:
+            low_since_end = min(low_since_end, v)
+            climbed = not exit_fraction or v - low_since_end >= min_amplitude
             if v <= exit_:
                 last_below = i
-            elif v >= enter:
+            elif v >= enter and climbed:
                 active = True
                 start = last_below
                 peak = v
         else:
             peak = max(peak, v)
             too_long = times[i] - times[start] > max_duration_s
-            if v <= exit_ or too_long:
+            end_at = max(exit_, peak * exit_fraction) if exit_fraction else exit_
+            if v <= end_at or too_long:
                 duration = times[i] - times[start]
                 if duration >= min_duration_s and (peak - exit_) >= min_amplitude:
                     windows.append((start, i))
                 active = False
                 last_below = i
                 peak = -math.inf
+                low_since_end = v
 
     if active:
         i = len(times) - 1
@@ -182,16 +192,29 @@ def _series_for(frames: Sequence[Frame], side: Side, rule: ExerciseRule) -> Metr
     # foot_lift needs the frames before this one, so it cannot live in
     # compute_metrics. Same value for both legs: it is about the lower foot.
     lifts = foot_lift_series(frames)
-    for f, lift in zip(frames, lifts, strict=True):
+    sinks = landing_sink_series(frames)
+    for f, lift, sink in zip(frames, lifts, sinks, strict=True):
         metrics = compute_metrics(f, side, use_z=bool(rule.use_z))
         if lift is not None:
             metrics["foot_lift"] = lift
+        if sink is not None:
+            metrics["landing_sink"] = sink
         series.add(f.t, metrics)
     return series.smooth(rule.smoothing_window)
 
 
 #: Longer than this between two hops is a pause, not a ground contact.
 MAX_GROUND_CONTACT_S = 1.0
+#: Shorter than this is not a contact that was seen. See _hop_timing.
+MIN_GROUND_CONTACT_S = 0.05
+#: How much a slow ground contact counts against a hop's score: as much as
+#: the knee check, and fully failed 0.2 s past the limit (a heavy landing).
+CONTACT_WEIGHT = 2.0
+#: A too-deep landing counts against the score more than anything else on a
+#: hop, and fully 10 points (% of leg) past the limit.
+LANDING_WEIGHT = 3.0
+LANDING_TOLERANCE = 10.0
+CONTACT_TOLERANCE_S = 0.2
 
 
 def _hop_timing(
@@ -209,7 +232,9 @@ def _hop_timing(
     out = {"flight_time_s": round(times[b] - times[a], 3)}
     if idx > 0:
         contact = times[a] - times[windows[idx - 1][1]]
-        if 0 <= contact <= MAX_GROUND_CONTACT_S:
+        # Under about two frames there was no landing the camera could see:
+        # the previous hop ended on its fall from the peak, not on the floor.
+        if MIN_GROUND_CONTACT_S <= contact <= MAX_GROUND_CONTACT_S:
             out["ground_contact_s"] = round(contact, 3)
     return out
 
@@ -295,6 +320,7 @@ def analyze_set(
             det.min_duration_s,
             det.max_duration_s,
             det.min_amplitude,
+            det.exit_fraction,
         )
         if not windows:
             warnings.append("no_reps_detected")
@@ -331,6 +357,69 @@ def analyze_set(
                 violations.append(violation)
                 weighted_ok += target.weight * (1.0 - violation.severity)
 
+        det = rule.detection
+        if det is not None and det.signal == "foot_lift":
+            timing = _hop_timing(times, windows, idx)
+            rep_metrics.update(timing)
+            # The landing before this hop: from the last hop coming down to
+            # this one's highest point. The first hop has no landing before it.
+            if idx > 0 and det.max_landing_sink is not None:
+                lift = [v if v is not None else -math.inf for v in combined[a : b + 1]]
+                top = a + max(range(len(lift)), key=lift.__getitem__)
+                landed = [
+                    v
+                    for s in series_by_side.values()
+                    for v in s.column("landing_sink")[windows[idx - 1][1] : top + 1]
+                    if v is not None
+                ]
+                if landed:
+                    sink = round(max(landed), 1)
+                    rep_metrics["landing_sink"] = sink
+                    # Scored, not refused: the limit is tuned on one person, and
+                    # refusing a good hop is worse than under-scoring a bad one.
+                    total_weight += LANDING_WEIGHT
+                    if sink <= det.max_landing_sink:
+                        weighted_ok += LANDING_WEIGHT
+                    else:
+                        severity = min(1.0, (sink - det.max_landing_sink) / LANDING_TOLERANCE)
+                        weighted_ok += LANDING_WEIGHT * (1.0 - severity)
+                        violations.append(
+                            Violation(
+                                code="landing_too_deep",
+                                metric="landing_sink",
+                                observed=sink,
+                                limit=det.max_landing_sink,
+                                bound="max",
+                                severity=severity,
+                                critical=False,
+                                message_en="Landed too deep. Keep your knees almost straight and spring off your ankles.",
+                                message_th="ลงพื้นย่อลึกเกินไป เข่าเกือบตรงแล้วสปริงด้วยข้อเท้า",
+                            )
+                        )
+            contact = timing.get("ground_contact_s")
+            if det.max_ground_contact_s is not None and contact is not None:
+                # Scored like a target: springy contact is what the drill trains.
+                total_weight += CONTACT_WEIGHT
+                limit = det.max_ground_contact_s
+                if contact > limit:
+                    severity = min(1.0, (contact - limit) / CONTACT_TOLERANCE_S)
+                    weighted_ok += CONTACT_WEIGHT * (1.0 - severity)
+                    violations.append(
+                        Violation(
+                            code="slow_ground_contact",
+                            metric="ground_contact_s",
+                            observed=contact,
+                            limit=limit,
+                            bound="max",
+                            severity=severity,
+                            critical=False,
+                            message_en="Too long on the ground. Bounce straight back up off the balls of your feet.",
+                            message_th="อยู่บนพื้นนานเกินไป เด้งขึ้นทันทีด้วยปลายเท้า",
+                        )
+                    )
+                else:
+                    weighted_ok += CONTACT_WEIGHT
+
         rep_quality = sum(per_frame_quality[a : b + 1]) / max(1, b + 1 - a)
         form_score = round(100.0 * (weighted_ok / total_weight), 1) if total_weight else 100.0
 
@@ -340,8 +429,6 @@ def analyze_set(
             rep_metrics["hold_seconds"] = round(hold_seconds, 2)
 
         duration = times[b] - times[a]
-        if rule.detection is not None and rule.detection.signal == "foot_lift":
-            rep_metrics.update(_hop_timing(times, windows, idx))
         tempo_ok = True
         if rule.tempo_min_s is not None and duration < rule.tempo_min_s:
             tempo_ok = False

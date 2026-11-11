@@ -333,7 +333,10 @@ def _fixture_frames(name: str) -> list[Frame]:
     return [Frame.from_payload(f["t"], f["landmarks"], aspect=data["aspect"]) for f in data["frames"]]
 
 
-@pytest.mark.parametrize(("clip", "hops"), [("pogo-front", 10), ("pogo-valgus", 6)])
+@pytest.mark.parametrize(
+    ("clip", "hops"),
+    [("pogo-front", 10), ("pogo-valgus", 6), ("pogo-wrong", 11), ("pogo-correct", 15)],
+)
 def test_pogo_hops_counts_real_hops(clip: str, hops: int) -> None:
     from app.data.exercises import EXERCISES_BY_KEY
 
@@ -387,3 +390,22 @@ def test_pogo_hops_refuses_world_space_out_loud() -> None:
     result = analyze_set(frames, rule, Side.BILATERAL)
     assert len(result.reps) == 0
     assert "foot_lift_needs_image_space" in result.warnings
+
+
+def test_pogo_hops_flags_squat_landings_without_refusing_any() -> None:
+    from app.data.exercises import EXERCISES_BY_KEY
+
+    rule = EXERCISES_BY_KEY["pogo_hops"].rule
+    assert rule is not None
+    good = analyze_set(_fixture_frames("pogo-correct"), rule, Side.BILATERAL)
+    heavy = analyze_set(_fixture_frames("pogo-wrong"), rule, Side.BILATERAL)
+    front = analyze_set(_fixture_frames("pogo-front"), rule, Side.BILATERAL)
+    # Every springy hop counts...
+    assert good.valid_reps == 15 and front.valid_reps == 10
+    assert good.form_score >= 95
+    # ...and so does a squat-and-jump, but flagged and scored well down: 9 of
+    # the 10 that follow a landing (the first hop has none before it).
+    assert heavy.valid_reps == len(heavy.reps) == 11
+    deep = [r for r in heavy.reps if any(v.code == "landing_too_deep" for v in r.violations)]
+    assert len(deep) >= 8
+    assert heavy.form_score <= 75
