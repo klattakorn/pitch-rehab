@@ -223,6 +223,12 @@ the hold starts again so nothing measured by one model mixes with the other. The
 first frames are ignored (the GPU warms up on them), and a dim room that slows the
 camera itself does not trigger it. If either model fails to load, the other is tried.
 
+Only for fast movements (pogo hops). Every filmed clip was run through both models:
+lite counts hops exactly as full does, but misreads a body lying down (glute bridge)
+and invents knee angles in a split squat, so slow, controlled exercises keep the full
+model on any phone — they lose nothing at a lower frame rate. The camera is also asked
+for 30 frames a second: at 15, a third of the too-deep pogo landings were missed.
+
 **3. Phones have two cameras.** The one you want depends on whether you can see the
 screen. A flip button appears when the device reports more than one.
 

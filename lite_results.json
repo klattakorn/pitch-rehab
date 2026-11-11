@@ -1,0 +1,340 @@
+[
+ {
+  "clip": "pogo-front",
+  "model": "full",
+  "fps": 30,
+  "found": "297/297",
+  "reps": 10,
+  "valid": 10,
+  "score": 100.0,
+  "flags": {},
+  "true": 10
+ },
+ {
+  "clip": "pogo-front",
+  "model": "full",
+  "fps": 15,
+  "found": "297/297",
+  "reps": 10,
+  "valid": 10,
+  "score": 100.0,
+  "flags": {},
+  "true": 10
+ },
+ {
+  "clip": "pogo-front",
+  "model": "lite",
+  "fps": 30,
+  "found": "297/297",
+  "reps": 10,
+  "valid": 10,
+  "score": 100.0,
+  "flags": {},
+  "true": 10
+ },
+ {
+  "clip": "pogo-front",
+  "model": "lite",
+  "fps": 15,
+  "found": "297/297",
+  "reps": 10,
+  "valid": 10,
+  "score": 100.0,
+  "flags": {},
+  "true": 10
+ },
+ {
+  "clip": "pogo-valgus",
+  "model": "full",
+  "fps": 30,
+  "found": "236/236",
+  "reps": 6,
+  "valid": 6,
+  "score": 76.2,
+  "flags": {
+   "slow_ground_contact": 5
+  },
+  "true": 6
+ },
+ {
+  "clip": "pogo-valgus",
+  "model": "full",
+  "fps": 15,
+  "found": "236/236",
+  "reps": 6,
+  "valid": 6,
+  "score": 76.2,
+  "flags": {
+   "slow_ground_contact": 5
+  },
+  "true": 6
+ },
+ {
+  "clip": "pogo-valgus",
+  "model": "lite",
+  "fps": 30,
+  "found": "236/236",
+  "reps": 6,
+  "valid": 6,
+  "score": 76.2,
+  "flags": {
+   "slow_ground_contact": 5
+  },
+  "true": 6
+ },
+ {
+  "clip": "pogo-valgus",
+  "model": "lite",
+  "fps": 15,
+  "found": "236/236",
+  "reps": 6,
+  "valid": 6,
+  "score": 76.2,
+  "flags": {
+   "slow_ground_contact": 5
+  },
+  "true": 6
+ },
+ {
+  "clip": "pogo_wrong",
+  "model": "full",
+  "fps": 30,
+  "found": "369/369",
+  "reps": 11,
+  "valid": 11,
+  "score": 63.9,
+  "flags": {
+   "landing_too_deep": 9,
+   "slow_ground_contact": 7
+  },
+  "true": 11
+ },
+ {
+  "clip": "pogo_wrong",
+  "model": "full",
+  "fps": 15,
+  "found": "369/369",
+  "reps": 11,
+  "valid": 11,
+  "score": 83.0,
+  "flags": {
+   "landing_too_deep": 6,
+   "slow_ground_contact": 7
+  },
+  "true": 11
+ },
+ {
+  "clip": "pogo_wrong",
+  "model": "lite",
+  "fps": 30,
+  "found": "369/369",
+  "reps": 11,
+  "valid": 11,
+  "score": 57.3,
+  "flags": {
+   "landing_too_deep": 10,
+   "slow_ground_contact": 8
+  },
+  "true": 11
+ },
+ {
+  "clip": "pogo_wrong",
+  "model": "lite",
+  "fps": 15,
+  "found": "369/369",
+  "reps": 11,
+  "valid": 11,
+  "score": 79.3,
+  "flags": {
+   "landing_too_deep": 8,
+   "slow_ground_contact": 5
+  },
+  "true": 11
+ },
+ {
+  "clip": "pogo_corect",
+  "model": "full",
+  "fps": 30,
+  "found": "567/567",
+  "reps": 15,
+  "valid": 15,
+  "score": 99.9,
+  "flags": {
+   "slow_ground_contact": 1
+  },
+  "true": 15
+ },
+ {
+  "clip": "pogo_corect",
+  "model": "full",
+  "fps": 15,
+  "found": "567/567",
+  "reps": 15,
+  "valid": 15,
+  "score": 100.0,
+  "flags": {},
+  "true": 15
+ },
+ {
+  "clip": "pogo_corect",
+  "model": "lite",
+  "fps": 30,
+  "found": "567/567",
+  "reps": 15,
+  "valid": 15,
+  "score": 100.0,
+  "flags": {},
+  "true": 15
+ },
+ {
+  "clip": "pogo_corect",
+  "model": "lite",
+  "fps": 15,
+  "found": "567/567",
+  "reps": 15,
+  "valid": 15,
+  "score": 100.0,
+  "flags": {},
+  "true": 15
+ },
+ {
+  "clip": "double_leg_calf_raise",
+  "model": "full",
+  "fps": 30,
+  "found": "418/418",
+  "reps": 5,
+  "valid": 5,
+  "score": 100.0,
+  "flags": {},
+  "true": 5
+ },
+ {
+  "clip": "double_leg_calf_raise",
+  "model": "full",
+  "fps": 15,
+  "found": "418/418",
+  "reps": 5,
+  "valid": 5,
+  "score": 100.0,
+  "flags": {},
+  "true": 5
+ },
+ {
+  "clip": "double_leg_calf_raise",
+  "model": "lite",
+  "fps": 30,
+  "found": "418/418",
+  "reps": 5,
+  "valid": 5,
+  "score": 100.0,
+  "flags": {},
+  "true": 5
+ },
+ {
+  "clip": "double_leg_calf_raise",
+  "model": "lite",
+  "fps": 15,
+  "found": "418/418",
+  "reps": 5,
+  "valid": 5,
+  "score": 100.0,
+  "flags": {},
+  "true": 5
+ },
+ {
+  "clip": "glute_bridge",
+  "model": "full",
+  "fps": 30,
+  "found": "331/335",
+  "reps": 2,
+  "valid": 2,
+  "score": 100.0,
+  "flags": {},
+  "true": null
+ },
+ {
+  "clip": "glute_bridge",
+  "model": "full",
+  "fps": 15,
+  "found": "331/335",
+  "reps": 2,
+  "valid": 2,
+  "score": 100.0,
+  "flags": {},
+  "true": null
+ },
+ {
+  "clip": "glute_bridge",
+  "model": "lite",
+  "fps": 30,
+  "found": "333/335",
+  "reps": 1,
+  "valid": 0,
+  "score": 0.0,
+  "flags": {
+   "tempo_too_fast": 1
+  },
+  "true": null
+ },
+ {
+  "clip": "glute_bridge",
+  "model": "lite",
+  "fps": 15,
+  "found": "333/335",
+  "reps": 1,
+  "valid": 0,
+  "score": 0.0,
+  "flags": {
+   "tempo_too_fast": 1
+  },
+  "true": null
+ },
+ {
+  "clip": "split_squat",
+  "model": "full",
+  "fps": 30,
+  "found": "654/654",
+  "reps": 2,
+  "valid": 2,
+  "score": 100.0,
+  "flags": {},
+  "true": null
+ },
+ {
+  "clip": "split_squat",
+  "model": "full",
+  "fps": 15,
+  "found": "654/654",
+  "reps": 2,
+  "valid": 2,
+  "score": 100.0,
+  "flags": {},
+  "true": null
+ },
+ {
+  "clip": "split_squat",
+  "model": "lite",
+  "fps": 30,
+  "found": "654/654",
+  "reps": 2,
+  "valid": 1,
+  "score": 100.0,
+  "flags": {
+   "knee_valgus": 1
+  },
+  "true": null
+ },
+ {
+  "clip": "split_squat",
+  "model": "lite",
+  "fps": 15,
+  "found": "654/654",
+  "reps": 2,
+  "valid": 1,
+  "score": 100.0,
+  "flags": {
+   "knee_valgus": 1
+  },
+  "true": null
+ }
+]

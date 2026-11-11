@@ -2,6 +2,7 @@
 import { HEAD_RADIUS, type FigurePose, bones, joints, project } from "./figure";
 import { buildDemoSpec, targetLines } from "./spec";
 import type { Exercise } from "../pose/rules";
+import { placementFor } from "./placement";
 
 const GREEN = "#7ac943";
 const CORAL = "#ff5f52";
@@ -77,10 +78,7 @@ export function demoPanelHtml(exercise: Exercise): string {
              the first person to try it did. It is not a detail: the angles are
              measured off the picture, so a bad view is bad numbers, and the
              screen has no way to tell the player that after the fact. -->
-        <p class="framing">Prop the phone up at about <strong>hip height</strong>,
-           two to three steps away, and stand back until your <strong>head and
-           feet are both in the picture</strong>. Filming from the floor, or
-           standing too close, bends the angles it measures.</p>
+        <p class="framing">${placementFor(exercise).detail}</p>
         <h4>What gets measured</h4>
         <ul class="targets">${targets}</ul>
       </div>

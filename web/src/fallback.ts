@@ -454,12 +454,12 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         {
           "metric": "heel_raise_ratio",
           "aggregate": "peak",
-          "min": 0.42,
+          "min": 0.35,
           "max": null,
           "tolerance": 0.05,
           "weight": 1.0,
           "critical": false,
-          "judge": "worst",
+          "judge": "best",
           "code": "raise_too_low",
           "message_en": "Get up higher onto the toes.",
           "message_th": "เขย่งให้สูงกว่านี้"
@@ -1336,19 +1336,6 @@ export const FALLBACK_EXERCISES: Exercise[] = [
         "max_landing_sink": 25.0
       },
       "targets": [
-        {
-          "metric": "knee_flexion",
-          "aggregate": "peak",
-          "min": null,
-          "max": 45.0,
-          "tolerance": 8.0,
-          "weight": 1.0,
-          "critical": false,
-          "judge": "worst",
-          "code": "too_much_knee",
-          "message_en": "Bounce off the ankles, not the knees.",
-          "message_th": "ใช้ข้อเท้าสปริง ไม่ใช่ย่อเข่า"
-        },
         {
           "metric": "knee_valgus",
           "aggregate": "peak",

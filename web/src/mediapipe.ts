@@ -152,11 +152,16 @@ export async function startCamera(
   const size = isHandheld()
     ? { width: { ideal: 960 }, height: { ideal: 720 } }
     : { width: { ideal: 1280 }, height: { ideal: 720 } };
+  // 30 frames a second, asked for explicitly. Some phones open the camera at 15
+  // or 24 unless told; a pogo hop is about 0.4 s in the air, and on real clips
+  // halving the frame rate missed a third of the too-deep landings. "ideal",
+  // not "min": a camera that cannot do 30 still opens rather than failing.
+  const rate = { frameRate: { ideal: 30 } };
 
   let stream: MediaStream;
   try {
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: facing }, ...size },
+      video: { facingMode: { ideal: facing }, ...size, ...rate },
       audio: false,
     });
   } catch (error) {

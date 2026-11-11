@@ -404,11 +404,18 @@ EXERCISES: list[ExerciseDef] = [
             # than a rep, so it belongs well under the slowest honest rep.
             tempo_min_s=0.6,
             targets=[
+                # Side-on, the far foot is half hidden behind the near one and
+                # its heel reads low: on the demo clip the near heel peaked at
+                # 0.40-0.48 and the far one at 0.31-0.35 (full model), 0.18-0.25
+                # (the phone's lite model), on the same raises. So the higher
+                # heel is judged, and the line sits where a full raise clears it
+                # on either model (near heel, lite: 0.38-0.44).
                 MetricTarget(
                     metric="heel_raise_ratio",
                     aggregate="peak",
-                    min=0.42,
+                    min=0.35,
                     tolerance=0.05,
+                    judge="best",
                     code="raise_too_low",
                     message_en="Get up higher onto the toes.",
                     message_th="เขย่งให้สูงกว่านี้",
@@ -875,15 +882,12 @@ EXERCISES: list[ExerciseDef] = [
                 max_landing_sink=25.0,
             ),
             targets=[
-                MetricTarget(
-                    metric="knee_flexion",
-                    aggregate="peak",
-                    max=45.0,
-                    tolerance=8.0,
-                    code="too_much_knee",
-                    message_en="Bounce off the ankles, not the knees.",
-                    message_th="ใช้ข้อเท้าสปริง ไม่ใช่ย่อเข่า",
-                ),
+                # No knee-angle target. From the front the knee angle comes from
+                # MediaPipe's depth guess, and the phone's lite model guesses
+                # differently: it flagged good hops "too much knee" that the
+                # full model passed. Landing depth (max_landing_sink, above)
+                # measures the same fault from what the camera can see.
+                #
                 # Knees caving on landing is NOT caught. On the knees-in clip
                 # they visibly touch on every landing, yet MediaPipe's knee
                 # points read the same as on the good clip (knee-to-ankle

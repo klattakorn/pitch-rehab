@@ -28,6 +28,7 @@ import {
   windowText,
 } from "./criteria";
 import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
+import { placementFor } from "./demo/placement";
 import { celebrate, tilt } from "./fx/celebrate";
 import { StartGate } from "./pose/ready";
 import { gsap } from "gsap";
@@ -1477,7 +1478,14 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   let landmarker = await createPoseLandmarker();
   // Phones start on the full model too; if this one cannot keep up it drops
   // to lite -- measured only before counting starts, never mid-set.
-  const speed = isHandheld() ? new ModelSpeed() : null;
+  //
+  // Only for a fast movement, though. Checked on every filmed clip: lite
+  // counts pogo hops exactly as full does, but misreads a body lying down
+  // (glute bridge) and invents knee angles in a split squat. A slow,
+  // controlled rep loses nothing at a lower frame rate, so a slow phone
+  // keeps the accurate model for those.
+  const fast = rule.mode === "rep" && (rule.detection?.max_duration_s ?? 99) <= 1.5;
+  const speed = isHandheld() && fast ? new ModelSpeed() : null;
   let switchingModel = false;
   let speedDone = false;
   /** One decision per camera screen: stop measuring once it is made. */
@@ -1604,7 +1612,10 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
           : "Get into your start position"
       }</div>`;
     }
-    readout.textContent = `Get into position and hold still for ${HOLD_SECONDS} seconds`;
+    // The moment the phone's position matters most is now, while the
+    // player is setting up -- so the reminder is here, not only on the
+    // screen before.
+    readout.textContent = `${placementFor(exercise).short}. Then hold still for ${HOLD_SECONDS} seconds.`;
   };
 
   /**
