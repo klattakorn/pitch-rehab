@@ -243,7 +243,6 @@ export class LiveSession {
 
     const view = classifyView(
       this.opennessScores.length >= WARMUP_FRAMES ? median(this.opennessScores) : null,
-      this.rule.side_view_below ?? undefined,
     );
 
     // --- can this frame be trusted? --------------------------------------

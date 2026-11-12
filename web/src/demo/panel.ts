@@ -3,7 +3,6 @@ import { HEAD_RADIUS, type FigurePose, bones, joints, project } from "./figure";
 import { buildDemoSpec, targetLines } from "./spec";
 import type { Exercise } from "../pose/rules";
 import { placementFor } from "./placement";
-import { getSpot, setSpot } from "../pose/camera-spot";
 
 const GREEN = "#7ac943";
 const CORAL = "#ff5f52";
@@ -79,11 +78,7 @@ export function demoPanelHtml(exercise: Exercise): string {
              the first person to try it did. It is not a detail: the angles are
              measured off the picture, so a bad view is bad numbers, and the
              screen has no way to tell the player that after the fact. -->
-        <div class="demo-toggle spot-toggle" role="group" aria-label="Where is the camera?">
-          <button class="chip${getSpot(exercise.key) === "floor" ? " on" : ""}" id="spot-floor">Camera on the floor</button>
-          <button class="chip${getSpot(exercise.key) === "hip" ? " on" : ""}" id="spot-hip">Camera at hip height</button>
-        </div>
-        <p class="framing">${placementFor(exercise, getSpot(exercise.key)).detail}</p>
+        <p class="framing">${placementFor(exercise).detail}</p>
         <h4>What gets measured</h4>
         <ul class="targets">${targets}</ul>
       </div>
@@ -97,17 +92,6 @@ export function runDemoAnimation(exercise: Exercise): DemoHandle {
   const ctx = canvas.getContext("2d")!;
   const rule = exercise.pose_rule!;
   const spec = buildDemoSpec(exercise.key, rule);
-
-  // Where the camera is: remembered for the next set, and the advice follows.
-  for (const spot of ["floor", "hip"] as const) {
-    document.querySelector(`#spot-${spot}`)?.addEventListener("click", () => {
-      setSpot(spot);
-      document.querySelector("#spot-floor")?.classList.toggle("on", spot === "floor");
-      document.querySelector("#spot-hip")?.classList.toggle("on", spot === "hip");
-      const framing = document.querySelector(".framing");
-      if (framing) framing.innerHTML = placementFor(exercise, spot).detail;
-    });
-  }
 
   let wrong = false;
   let running = true;

@@ -32,7 +32,6 @@ import { demoPanelHtml, runDemoAnimation } from "./demo/panel";
 import { placementFor } from "./demo/placement";
 import { celebrate, tilt } from "./fx/celebrate";
 import { StartGate } from "./pose/ready";
-import { adjustRule, getSpot, setSpot } from "./pose/camera-spot";
 import { gsap } from "gsap";
 import type { Facing } from "./mediapipe";
 import {
@@ -1467,10 +1466,7 @@ function howToScreen(rx: Prescription): void {
 const HOLD_SECONDS = 3;
 async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<void> {
   const exercise = rx.exercise;
-  // Where the camera is changes what three floor-tuned moves need to count:
-  // see pose/camera-spot.ts. The toggle in the corner switches it.
-  const spot = getSpot(exercise.key);
-  const rule = adjustRule(exercise.pose_rule!, exercise.key, spot);
+  const rule = exercise.pose_rule!;
   const side: Side = rx.side_mode === "bilateral" ? "bilateral" : (rx.side_mode as Side);
   const twoCameras = await hasMultipleCameras();
 
@@ -1484,9 +1480,6 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
                 is invisible -- so the state is a word plus the band of colour
                 around the whole frame. -->
            <div class="form-word" id="badge" role="status" aria-live="polite">Get set</div>
-           <button class="spotbtn" id="spot" aria-label="Camera position: ${
-             spot === "floor" ? "on the floor" : "at hip height"
-           }. Tap to change." title="Where is the camera?">${spot === "floor" ? "Floor" : "Hip"}</button>
            ${
              twoCameras
                ? `<button class="iconbtn" id="flip" title="Switch camera"
@@ -1622,12 +1615,6 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
       void cameraScreen(rx, camera.facing === "user" ? "environment" : "user").catch(fail),
     );
   });
-  on("#spot", () => {
-    // A different rule from here on, so start the screen again: nothing
-    // measured with one setting is mixed into a count with the other.
-    setSpot(spot === "floor" ? "hip" : "floor");
-    stop(() => void cameraScreen(rx, camera.facing).catch(fail));
-  });
   on("#pause", () => {
     paused = !paused;
     const button = app.querySelector<HTMLButtonElement>("#pause")!;
@@ -1701,7 +1688,7 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
     // The moment the phone's position matters most is now, while the
     // player is setting up -- so the reminder is here, not only on the
     // screen before.
-    readout.textContent = `${placementFor(exercise, spot).short}. Then hold still for ${HOLD_SECONDS} seconds.`;
+    readout.textContent = `${placementFor(exercise).short}. Then hold still for ${HOLD_SECONDS} seconds.`;
   };
 
   /**

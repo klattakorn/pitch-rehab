@@ -382,9 +382,9 @@ export function openness(f: Frame): number | null {
 
 export type CameraView = "front" | "side" | "unknown";
 
-export function classifyView(score: number | null, sideBelow = SIDE_VIEW_BELOW): CameraView {
+export function classifyView(score: number | null): CameraView {
   if (score === null) return "unknown";
-  if (score < sideBelow) return "side";
+  if (score < SIDE_VIEW_BELOW) return "side";
   if (score > FRONT_VIEW_ABOVE) return "front";
   return "unknown";
 }

@@ -1830,34 +1830,6 @@ ul.criteria .src {
   justify-content: space-between;
   gap: var(--s3);
 }
-/* Where the camera is: a word, not an icon, because "floor or hip" is what
-   the player is being asked. Sits before the flip button, right of the badge. */
-.hud .spotbtn {
-  pointer-events: auto;
-  margin-left: auto;
-  height: 44px;
-  padding: 0 var(--s3);
-  flex: none;
-  border-radius: var(--r-sm);
-  border: 1px solid rgba(233, 237, 242, 0.28);
-  background: rgba(7, 8, 10, 0.6);
-  backdrop-filter: blur(6px);
-  color: var(--ink);
-  font: inherit;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  cursor: pointer;
-}
-.hud .spotbtn::before {
-  content: "Camera: ";
-  font-weight: 400;
-  opacity: 0.7;
-}
-.spot-toggle {
-  padding-left: 0;
-  padding-right: 0;
-}
 .hud .iconbtn {
   pointer-events: auto;
   background: rgba(7, 8, 10, 0.6);

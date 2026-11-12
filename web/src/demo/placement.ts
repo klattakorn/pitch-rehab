@@ -13,7 +13,6 @@
  * Everything else asks for hip height, the other setup the app is shown with.
  */
 import type { Exercise } from "../pose/rules";
-import { type CameraSpot, tunedSpot } from "../pose/camera-spot";
 
 export interface Placement {
   /** One line, for the camera screen while the player gets into position. */
@@ -65,51 +64,8 @@ const FRONT: Placement = {
     the angles it measures.`,
 };
 
-/**
- * The same three with the camera at hip height -- a laptop on a table, say.
- * Further back than on the floor: from up high the feet sit at the bottom of
- * the picture, and a landscape laptop camera crops them first.
- */
-const AT_HIP: Record<string, Placement> = {
-  glute_bridge: {
-    short: "Camera at hip height, side on, about 2.5 m away",
-    detail: `Lie on your back side-on to the camera, with the camera at about
-      <strong>hip height</strong> (a laptop on a table is fine), roughly
-      <strong>2.5 m away</strong> and tilted down a little, so your
-      <strong>shoulders, hips and feet</strong> are all in the picture. Closer
-      than 2 m, the camera looks down on you too steeply.`,
-  },
-  pogo_hops: {
-    short: "Camera at hip height, facing you, about 3 m away",
-    detail: `Stand <strong>facing the camera</strong>, at about <strong>hip
-      height</strong> and <strong>3 m away</strong>. Keep your <strong>shoulders to
-      feet</strong> in the picture with space under your feet. Step back if your
-      feet leave the bottom of the picture.`,
-  },
-  double_leg_calf_raise: {
-    short: "Camera at hip height, side on, about 2.5 m away",
-    detail: `Stand <strong>side-on</strong> to the camera, at about <strong>hip
-      height</strong> and roughly <strong>2.5 m away</strong>, tilted down a little
-      so your <strong>feet and heels</strong> are clear at the bottom of the
-      picture. The heel nearest the camera is the one measured.`,
-  },
-};
-
-/** Note for a hip-height exercise filmed from the floor. */
-const FROM_FLOOR = `<br><br>This one works best with the camera at <strong>hip
-  height</strong>. Raise it if reps are missed.`;
-
-/**
- * Where to put the camera for `exercise`, with it at `spot` (default: where the
- * exercise was tuned). See pose/camera-spot.ts.
- */
-export function placementFor(
-  exercise: Pick<Exercise, "key" | "pose_rule">,
-  spot: CameraSpot = tunedSpot(exercise.key),
-): Placement {
-  if (spot === "hip" && AT_HIP[exercise.key]) return AT_HIP[exercise.key]!;
+export function placementFor(exercise: Pick<Exercise, "key" | "pose_rule">): Placement {
   const special = BY_EXERCISE[exercise.key];
   if (special) return special;
-  const base = exercise.pose_rule?.view === "side" ? SIDE : FRONT;
-  return spot === "floor" ? { short: base.short, detail: base.detail + FROM_FLOOR } : base;
+  return exercise.pose_rule?.view === "side" ? SIDE : FRONT;
 }
