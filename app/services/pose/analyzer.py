@@ -238,6 +238,11 @@ CONTACT_WEIGHT = 2.0
 LANDING_WEIGHT = 3.0
 LANDING_TOLERANCE = 10.0
 CONTACT_TOLERANCE_S = 0.2
+#: "At the top" for min_top_hold_s: this fraction of the way from `exit` up to
+#: the rep's peak. Every frame above `enter` used to count, but `enter` is low on
+#: the way up, so a slow rise and lowering passed for a hold (unheld filmed
+#: bridges measured 2.6-3.8 s). Mirrors TOP_HOLD_FRACTION in web/src/pose/live.ts.
+TOP_HOLD_FRACTION = 0.8
 
 
 def _hop_timing(
@@ -455,12 +460,16 @@ def analyze_set(
 
         duration = times[b] - times[a]
         if rule.detection is not None and rule.detection.min_top_hold_s:
-            # Time at the top: frames at or above `enter`, as the browser counts.
+            # Time at the top: frames near this rep's peak, as the browser counts.
             need = rule.detection.min_top_hold_s
+            det = rule.detection
+            in_rep = [v for v in combined[a : b + 1] if v is not None]
+            peak = max(in_rep) if in_rep else det.enter
+            line = max(det.enter, det.exit + TOP_HOLD_FRACTION * (peak - det.exit))
             held = sum(
                 times[i] - times[i - 1]
                 for i in range(a + 1, b + 1)
-                if combined[i] is not None and combined[i] >= rule.detection.enter
+                if combined[i] is not None and combined[i] >= line
             )
             rep_metrics["top_hold_s"] = round(held, 2)
             if held < need:

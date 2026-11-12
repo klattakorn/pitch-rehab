@@ -67,6 +67,11 @@ export interface ExerciseRule {
   required_landmarks: string[];
   /** Joints that must stay in the picture; null = whole body. See rules.py. */
   in_frame_landmarks?: string[] | null;
+  /**
+   * Openness below this reads as side-on (default SIDE_VIEW_BELOW). Set only
+   * in the browser, for a camera at hip height: see pose/camera-spot.ts.
+   */
+  side_view_below?: number | null;
   min_visibility: number;
   min_tracking_quality: number;
   smoothing_window: number;

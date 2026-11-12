@@ -28,7 +28,7 @@ import { FALLBACK_EXERCISES } from "../fallback";
 import fixture from "./__fixtures__/glute-bridge-real.json";
 import second from "./__fixtures__/glute-bridge-second.json";
 import { Frame } from "./geometry";
-import { LiveSession } from "./live";
+import { heldAtTop, LiveSession } from "./live";
 import type { ExerciseRule } from "./rules";
 
 /** Counted by eye off the frames, not off the signal being tested. */
@@ -38,28 +38,60 @@ const exercise = FALLBACK_EXERCISES.find((e) => e.key === "glute_bridge")!;
 const rule = exercise.pose_rule as unknown as ExerciseRule;
 const frames = fixture.frames.map((f) => Frame.from(f.t, f.landmarks, fixture.aspect));
 
-function replay() {
-  const session = new LiveSession(rule, "bilateral");
+/** The same rule without the 3 s hold, to check everything else on its own. */
+const withoutHold: ExerciseRule = {
+  ...rule,
+  detection: { ...rule.detection!, min_top_hold_s: null },
+};
+
+function replay(r: ExerciseRule = rule) {
+  const session = new LiveSession(r, "bilateral");
   const results = frames.map((f) => session.push(f));
   return { results, outcome: session.finish() };
 }
 
+describe("time at the top", () => {
+  // A rep as the signal sees it: rise over `up` s to 30, stay `top` s, lower over `down` s.
+  function rep(up: number, top: number, down: number) {
+    const ts: number[] = [];
+    const vs: number[] = [];
+    const total = up + top + down;
+    for (let t = 0; t <= total + 1e-9; t += 1 / 30) {
+      const v = t < up ? 8 + (22 * t) / up : t < up + top ? 30 : 30 - (22 * (t - up - top)) / down;
+      ts.push(t);
+      vs.push(v);
+    }
+    return heldAtTop(ts, vs, 16, 8, 30);
+  }
+
+  it("does not count a slow rise and lowering as holding", () => {
+    // 1 s at the top, 3 s each way: well over 3 s above `enter`, not a hold.
+    expect(rep(3, 1, 3)).toBeLessThan(3);
+  });
+
+  it("counts a real 3 s hold", () => {
+    expect(rep(2, 3, 2)).toBeGreaterThanOrEqual(3);
+  });
+});
+
 describe("glute bridge on real footage", () => {
-  it("finds every rep, and counts only the ones held 3 s at the top", () => {
+  it("finds every rep, and refuses them all for not holding the top", () => {
     const { outcome } = replay();
     expect(outcome.completedReps).toBe(REPS_IN_THE_VIDEO);
-    // This clip was filmed before the hold was asked for: three of the six
-    // happen to be held for 3 s or more (3.0-3.8 s), three are not (2.6-2.8 s).
-    expect(outcome.validReps).toBe(3);
+    // Filmed before the hold was asked for, at a slow tempo with no pause at
+    // the top. Counting every frame above `enter` called three of these "held
+    // 3 s" (3.0-3.8 s) -- the bug a phone test found: the slow rise and lowering
+    // counted as holding. Near the peak they are 0.5-2.1 s, and none counts.
+    expect(outcome.validReps).toBe(0);
     for (const rep of outcome.reps) {
-      const held = rep.metrics.top_hold_s!;
-      expect(rep.isValid).toBe(held >= 3);
-      if (!rep.isValid) expect(rep.violations.map((v) => v.code)).toContain("hold_at_top");
+      expect(rep.metrics.top_hold_s!).toBeLessThan(2.5);
+      expect(rep.violations.map((v) => v.code)).toContain("hold_at_top");
     }
   });
 
   it("does not quietly refuse any of them", () => {
-    const { outcome } = replay();
+    // Without the hold, which the test above covers: this is about the count.
+    const { outcome } = replay(withoutHold);
     // A rep that is found but not counted is the failure this movement had for
     // its whole life before it was filmed, so it is worth its own assertion:
     // "6 found, 0 counted" and "0 found" are different bugs with different fixes.

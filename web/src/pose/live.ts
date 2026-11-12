@@ -136,13 +136,42 @@ export interface SetResult {
   holdSeconds: number | null;
 }
 
+/**
+ * How close to the rep's highest point still counts as "at the top": this
+ * fraction of the way from `exit` up to the peak. Mirrors TOP_HOLD_FRACTION in
+ * app/services/pose/analyzer.py.
+ *
+ * It used to be every frame at or above `enter`, but `enter` is only where a
+ * rep starts, low on the way up. A slow rise and a slow lowering spent seconds
+ * above it, so on the filmed bridges reps nobody held measured 2.6-3.8 s, and on
+ * a phone a one-second hold passed the 3 s test.
+ */
+export const TOP_HOLD_FRACTION = 0.8;
+
+/** Seconds spent near the top: frames at or above the line TOP_HOLD_FRACTION sets. */
+export function heldAtTop(
+  ts: readonly number[],
+  vs: readonly number[],
+  enter: number,
+  exit: number,
+  peak: number,
+): number {
+  const line = Math.max(enter, exit + TOP_HOLD_FRACTION * (peak - exit));
+  let held = 0;
+  for (let i = 1; i < ts.length; i++) if (vs[i]! >= line) held += ts[i]! - ts[i - 1]!;
+  return held;
+}
+
 interface RepBuffer {
   startT: number;
   /** Deepest landing before this rep began (hops only). */
   landingSink?: number | null;
-  /** Seconds at or above `enter` so far, and the last frame's time (holds at the top). */
+  /** Seconds held near the top so far (see `heldAtTop`), and the last frame's time. */
   topHold: number;
   lastT: number;
+  /** The counted signal and its times, from this rep's first frame. */
+  sigT: number[];
+  sigV: number[];
   series: Map<string, number[]>;
   times: number[];
 }
@@ -214,6 +243,7 @@ export class LiveSession {
 
     const view = classifyView(
       this.opennessScores.length >= WARMUP_FRAMES ? median(this.opennessScores) : null,
+      this.rule.side_view_below ?? undefined,
     );
 
     // --- can this frame be trusted? --------------------------------------
@@ -512,6 +542,8 @@ export class LiveSession {
           landingSink: this.sinkSinceEnd,
           topHold: 0,
           lastT: t,
+          sigT: [t],
+          sigV: [signal],
         };
         this.peak = signal;
       }
@@ -522,10 +554,14 @@ export class LiveSession {
     // Up to this hop's highest point the landing before it is still being
     // measured (mirrors the server, which reads to the peak).
     if (signal >= this.peak) this.noteSink(perSide);
-    // Time at the top, counted the way the server counts it.
-    if (signal >= det.enter) this.rep.topHold += t - this.rep.lastT;
     this.rep.lastT = t;
     this.peak = Math.max(this.peak, signal);
+    // Time at the top, counted the way the server counts it.
+    if (det.min_top_hold_s) {
+      this.rep.sigT.push(t);
+      this.rep.sigV.push(signal);
+      this.rep.topHold = heldAtTop(this.rep.sigT, this.rep.sigV, det.enter, det.exit, this.peak);
+    }
     this.record(t, perSide);
     const tooLong = t - this.rep.startT > det.max_duration_s;
     const endAt = det.exit_fraction ? Math.max(det.exit, this.peak * det.exit_fraction) : det.exit;
