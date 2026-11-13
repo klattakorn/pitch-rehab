@@ -408,6 +408,20 @@ function mountWelcome3D(): void {
     .catch(() => {});
 }
 
+/**
+ * The three of us in the kit, at the foot of the welcome screen. Decorative:
+ * if a photo fails to load it simply drops out rather than leaving a broken
+ * image behind.
+ */
+const TEAM_STRIP = `<figure class="team-strip" aria-label="The RTP team">
+       <div class="team-row">
+         <img class="mate side" src="/mate-kneel.png" alt="" loading="lazy" onerror="this.remove()" />
+         <img class="mate lead" src="/player.png" alt="" loading="lazy" onerror="this.remove()" />
+         <img class="mate side" src="/mate-fists.png" alt="" loading="lazy" onerror="this.remove()" />
+       </div>
+       <figcaption>Built by players, for players</figcaption>
+     </figure>`;
+
 function firstRunScreen(): void {
   shell(
     `<div class="welcome">
@@ -424,6 +438,7 @@ function firstRunScreen(): void {
        <p class="sub tiny">The demo is a real player's programme, saved from
          the full app. <b>The camera is not a recording</b> — it counts your
          reps and scores your form as you move, on this phone.</p>
+       ${TEAM_STRIP}
      </div>`,
     { brand: true },
   );
@@ -448,6 +463,7 @@ function welcomeScreen(): void {
          <button class="primary block" id="start">Get Started</button>
          <button class="linkbtn" id="signin">I already have an account</button>
        </div>
+       ${TEAM_STRIP}
      </div>`,
     { brand: true },
   );

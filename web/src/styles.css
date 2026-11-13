@@ -812,6 +812,57 @@ button,
   background: radial-gradient(circle, var(--volt-glow) 0%, transparent 68%);
 }
 
+/* The team, standing together at the foot of the welcome screen. Bottom-aligned
+   on one floor line; the middle figure is the lead and stands tallest. The
+   bottom fades out because the photographs are cut at different heights. */
+.team-strip {
+  margin: var(--s7, 48px) auto 0;
+  max-width: 420px;
+}
+.team-row {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 230px;
+  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+}
+.team-row::before {
+  content: "";
+  position: absolute;
+  inset: auto 10% 0;
+  height: 70%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--volt-glow) 0%, transparent 100%);
+  z-index: 0;
+}
+.mate {
+  position: relative;
+  z-index: 1;
+  height: 70%;
+  width: auto;
+  max-width: 32%;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 0 14px rgba(216, 255, 62, 0.16));
+}
+.mate.lead {
+  z-index: 2;
+  height: 100%;
+  max-width: 40%;
+  margin-inline: -4%;
+}
+.team-strip figcaption {
+  margin-top: var(--s3);
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: var(--t-lead);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--volt);
+}
+
 .steps {
   display: flex;
   gap: var(--s2);
