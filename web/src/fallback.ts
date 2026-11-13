@@ -1363,7 +1363,7 @@ export const FALLBACK_EXERCISES: Exercise[] = [
     "cue_en": "Fast, springy hops off the ankles. Knees stay fairly stiff.",
     "cue_th": "กระโดดถี่ๆ ใช้ข้อเท้าสปริง เข่าเกือบตรง",
     "equipment": null,
-    "demo_url": null,
+    "demo_url": "/demos/pogo_hops.mp4",
     "pose_rule": {
       "mode": "rep",
       "view": "front",

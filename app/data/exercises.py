@@ -867,6 +867,8 @@ EXERCISES: list[ExerciseDef] = [
         category="plyo",
         cue_en="Fast, springy hops off the ankles. Knees stay fairly stiff.",
         cue_th="กระโดดถี่ๆ ใช้ข้อเท้าสปริง เข่าเกือบตรง",
+        # Correct-form demonstration only; no threshold below was read off it.
+        demo_url="/demos/pogo_hops.mp4",
         rule=ExerciseRule(
             mode="rep",
             view="front",
