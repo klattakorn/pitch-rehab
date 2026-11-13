@@ -394,41 +394,27 @@ function fail(error: unknown, back?: () => void): void {
  * because a demo presented as the real thing is worse than no demo.
  */
 /**
- * Put the 3D skeleton into the welcome artwork. three.js is fetched only here,
- * so it never weighs down the camera screen; until it arrives (or if the phone
- * has no WebGL) the logo stays where it was.
+ * The three of us in the kit, standing where the welcome artwork goes. They
+ * rise in one after another, then breathe gently on a lit floor ring. Purely
+ * decorative: a photo that fails to load drops out instead of showing a broken
+ * image.
  */
-function mountWelcome3D(): void {
-  const host = app.querySelector<HTMLElement>("#welcome-3d");
-  if (!host) return;
-  void import("./fx/skeleton3d")
-    .then(({ mountSkeleton3D }) => {
-      if (host.isConnected) mountSkeleton3D(host);
-    })
-    .catch(() => {});
-}
-
-/**
- * The three of us in the kit, at the foot of the welcome screen. Decorative:
- * if a photo fails to load it simply drops out rather than leaving a broken
- * image behind.
- */
-const TEAM_STRIP = `<figure class="team-strip" aria-label="The RTP team">
-       <div class="team-row">
-         <img class="mate side" src="/mate-kneel.png" alt="" loading="lazy" onerror="this.remove()" />
-         <img class="mate lead" src="/player.png" alt="" loading="lazy" onerror="this.remove()" />
-         <img class="mate side" src="/mate-fists.png" alt="" loading="lazy" onerror="this.remove()" />
-       </div>
-       <figcaption>Built by players, for players</figcaption>
-     </figure>`;
+const TEAM_HERO = `<figure class="team-hero" aria-label="The RTP team">
+         <span class="team-glow"></span>
+         <span class="team-ring"></span>
+         <span class="team-ring r2"></span>
+         <div class="team-row">
+           <img class="mate side left" src="/mate-kneel.png" alt="" onerror="this.remove()" />
+           <img class="mate lead" src="/player.png" alt="" onerror="this.remove()" />
+           <img class="mate side right" src="/mate-fists.png" alt="" onerror="this.remove()" />
+         </div>
+         <figcaption class="team-chip">BUILT BY <b>PLAYERS</b> · FOR <b>PLAYERS</b></figcaption>
+       </figure>`;
 
 function firstRunScreen(): void {
   shell(
     `<div class="welcome">
-       <div class="welcome-art" id="welcome-3d" aria-hidden="true">
-         <span class="glow"></span>
-         ${BRAND_MARK}
-       </div>
+       ${TEAM_HERO}
        <h2>Smarter Rehab<br><em>Stronger Comeback</em></h2>
        <p class="sub">Rehab plans built around your position and your injury —
          with your camera checking every rep.</p>
@@ -438,7 +424,6 @@ function firstRunScreen(): void {
        <p class="sub tiny">The demo is a real player's programme, saved from
          the full app. <b>The camera is not a recording</b> — it counts your
          reps and scores your form as you move, on this phone.</p>
-       ${TEAM_STRIP}
      </div>`,
     { brand: true },
   );
@@ -446,16 +431,12 @@ function firstRunScreen(): void {
     api.useStandalone(true);
     void boot();
   });
-  mountWelcome3D();
 }
 
 function welcomeScreen(): void {
   shell(
     `<div class="welcome">
-       <div class="welcome-art" id="welcome-3d" aria-hidden="true">
-         <span class="glow"></span>
-         ${BRAND_MARK}
-       </div>
+       ${TEAM_HERO}
        <h2>Smarter Rehab<br><em>Stronger Comeback</em></h2>
        <p class="sub">Rehab plans built around your position and your injury —
          with your camera checking every rep.</p>
@@ -463,13 +444,11 @@ function welcomeScreen(): void {
          <button class="primary block" id="start">Get Started</button>
          <button class="linkbtn" id="signin">I already have an account</button>
        </div>
-       ${TEAM_STRIP}
      </div>`,
     { brand: true },
   );
   on("#start", () => signInScreen("", true));
   on("#signin", () => signInScreen());
-  mountWelcome3D();
 }
 
 /** Escape a value going into an attribute. Only the server address needs it. */
@@ -1603,6 +1582,10 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
   let lastTime = -1;
   let cueUntil = 0;
   let shownReps = 0;
+  /** Seconds left on the hold-at-the-top countdown this rep (null: not in one).
+      Only ever goes down, so a wobble that loses a few frames never makes the
+      number jump back up. */
+  let holdLeft: number | null = null;
   const started = performance.now();
 
   function stop(then: () => void): void {
@@ -1833,32 +1816,51 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
         }
 
         const blocker = result.problems.find((p) => p.code !== "warming_up");
-        if (blocker) {
-          setState("bad", "Move the phone");
-          centre.innerHTML = `<div class="blocker">${blocker.message_en}</div>`;
-        } else if (result.activeCues.length) {
-          setState("fix", "Fix your form");
-          centre.innerHTML = `<div class="cue">${result.activeCues[0]!.message_en}</div>`;
-          cueUntil = performance.now() + 900;
-        } else if (performance.now() > cueUntil) {
-          setState("good", "Good form");
-          centre.innerHTML = "";
-        }
 
-        // A rep that needs a hold at the top: count it down while it is held,
-        // so the player knows when they may lower. Outranks "Good form".
+        // A rep that needs a hold at the top (the glute bridge): from the moment
+        // the hips come up until the rep ends, the countdown owns the middle of
+        // the screen. Nothing else writes there meanwhile -- a form cue or a
+        // dropped frame used to swap in for one frame, and every swap back
+        // restarted the number's fade-in, so on a phone the countdown never
+        // showed at all. Cues still show, in the status chip, which does not
+        // animate. Reaching zero says "Down"; lowering before then is refused
+        // ("Not counted" above), holding past it still counts.
         const need = rule.detection?.min_top_hold_s;
-        if (need && result.topHold !== null && !blocker) {
-          const left = need - result.topHold;
-          setState("good", left > 0 ? "Hold" : "Lower slowly");
-          const html =
-            left > 0
-              ? `<div class="countdown">${Math.ceil(left)}</div>`
-              : `<div class="countdown go">Down</div>`;
-          // Only when the number changes. Rewritten every frame, the number's
-          // fade-in restarted every frame too, so on the phone it never showed.
-          if (centre.innerHTML !== html) centre.innerHTML = html;
+        if (need && result.inRep) {
+          const held = result.topHold;
+          if (held !== null) holdLeft = Math.min(holdLeft ?? need, Math.max(0, need - held));
+          const left = holdLeft ?? need;
+          const cue = result.activeCues[0]?.message_en ?? "";
+          if (blocker && held === null) setState("bad", "Stay in view");
+          else if (cue) setState("fix", "Fix your form");
+          else setState("good", left > 0 ? "Hold" : "Lower slowly");
+          // Rebuilt only when the number changes, so its fade-in plays once a
+          // second. The cue underneath is plain text and changes freely.
+          const key = left > 0 ? String(Math.ceil(left)) : "down";
+          if (centre.dataset["hold"] !== key) {
+            centre.dataset["hold"] = key;
+            centre.innerHTML =
+              (left > 0
+                ? `<div class="countdown">${key}</div>`
+                : `<div class="countdown go">Down</div>`) + `<div class="hold-cue"></div>`;
+          }
+          const cueEl = centre.querySelector<HTMLElement>(".hold-cue");
+          if (cueEl && cueEl.textContent !== cue) cueEl.textContent = cue;
           cueUntil = performance.now() + 400;
+        } else {
+          holdLeft = null;
+          delete centre.dataset["hold"];
+          if (blocker) {
+            setState("bad", "Move the phone");
+            centre.innerHTML = `<div class="blocker">${blocker.message_en}</div>`;
+          } else if (result.activeCues.length) {
+            setState("fix", "Fix your form");
+            centre.innerHTML = `<div class="cue">${result.activeCues[0]!.message_en}</div>`;
+            cueUntil = performance.now() + 900;
+          } else if (performance.now() > cueUntil) {
+            setState("good", "Good form");
+            centre.innerHTML = "";
+          }
         }
 
         // Target reached: end the set by itself. Counted reps only -- a refused
