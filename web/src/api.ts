@@ -194,6 +194,11 @@ export interface Gate {
   next_phase: string | null;
   criteria: CriterionResult[];
   blocking: string[];
+  /** Which set the counts describe. Either set (plus the time in phase) clears
+   *  the gate. Absent on gates recorded before this existed. */
+  route?: "ours" | "yours";
+  routes?: Record<"ours" | "yours", { total: number; passed: number; progress: number; done: boolean }>;
+  own_keys?: string[];
 }
 
 export interface SetUpload {

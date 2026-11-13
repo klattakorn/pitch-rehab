@@ -532,7 +532,10 @@ def test_a_custom_criterion_joins_the_gate(db, episode) -> None:
     add_custom(db, episode, metric="test.yo_yo_ir1", value=1200)
     after = evaluate_phase(db, episode)
 
-    assert after.required_total == before.required_total + 1
+    # It becomes a second way out of the phase, not one more test on top.
+    assert after.routes["ours"]["total"] == before.routes["ours"]["total"]
+    assert after.routes["yours"]["total"] == 1
+    assert after.own_keys == ["custom_test_yo_yo_ir1"]
     mine = find(after, "custom_test_yo_yo_ir1")
     assert mine.label_en == "Cover at least 1200 metres"
     assert mine.status is CriterionStatus.NO_DATA
@@ -542,6 +545,38 @@ def test_a_custom_criterion_joins_the_gate(db, episode) -> None:
         source=CriterionSource.TEST, unit="m",
     )
     assert find(evaluate_phase(db, episode), "custom_test_yo_yo_ir1").passed
+
+
+def test_either_set_of_tests_clears_the_gate(db, episode) -> None:
+    """The player picks: every phase test, or every target they wrote. Not both."""
+    add_custom(db, episode, metric="test.yo_yo_ir1", value=1200)
+    gate = evaluate_phase(db, episode)
+    assert not gate.passed
+    assert not gate.routes["ours"]["done"]
+
+    add_metric(
+        db, episode, "test.yo_yo_ir1", 1400.0,
+        source=CriterionSource.TEST, unit="m",
+    )
+    gate = evaluate_phase(db, episode)
+    assert gate.routes["yours"]["done"]
+    assert not gate.routes["ours"]["done"]
+    # Their own set is done, so the counts describe it -- but the healing clock
+    # still has to run whichever set they chose.
+    assert gate.route == "yours"
+    clock = [e for e in gate.criteria if e.key == "min_days_in_phase"]
+    if clock and not clock[0].passed:
+        assert not gate.passed
+        assert gate.blocking == ["min_days_in_phase"]
+    else:
+        assert gate.passed
+
+
+def test_without_own_targets_only_the_phase_tests_count(db, episode) -> None:
+    gate = evaluate_phase(db, episode)
+    assert gate.routes["yours"]["total"] == 0
+    assert gate.route == "ours"
+    assert not gate.passed
 
 
 def test_reps_of_an_exercise_read_the_best_single_set(db, episode) -> None:
@@ -614,8 +649,12 @@ def test_one_players_custom_criterion_stays_theirs(db) -> None:
     assert not any(c.key.startswith("custom") for c in evaluate_phase(db, theirs).criteria)
 
 
-def test_a_custom_criterion_can_block_a_phase_that_would_otherwise_pass(db, episode) -> None:
-    """The point of letting a player set their own bar is that it holds them."""
+def test_an_unmet_own_target_does_not_block_passed_phase_tests(db, episode) -> None:
+    """Their own targets are an alternative to the phase tests, not an extra.
+
+    It used to be both: a player who cleared every phase test could still be
+    held by a target they had written. Now either set is enough.
+    """
     # A hamstring in phase 1: no pain, the work done, sessions actually logged.
     _clear_phase_one(db, episode)
     assert evaluate_phase(db, episode).passed, evaluate_phase(db, episode).blocking
@@ -627,8 +666,9 @@ def test_a_custom_criterion_can_block_a_phase_that_would_otherwise_pass(db, epis
         value=25,
     )
     gate = evaluate_phase(db, episode)
-    assert not gate.passed
-    assert "custom_session_reps_single_leg_calf_raise" in gate.blocking
+    assert gate.passed
+    assert gate.route == "ours"
+    assert "custom_session_reps_single_leg_calf_raise" not in gate.blocking
 
 
 def test_the_builder_refuses_a_metric_nothing_ever_writes(db, episode) -> None:

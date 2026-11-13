@@ -394,10 +394,25 @@ function fail(error: unknown, back?: () => void): void {
  * because a demo presented as the real thing is worse than no demo.
  */
 /**
- * The three of us in the kit, standing where the welcome artwork goes. They
- * rise in one after another, then breathe gently on a lit floor ring. Purely
- * decorative: a photo that fails to load drops out instead of showing a broken
- * image.
+ * Put the 3D skeleton into the welcome artwork. three.js is fetched only here,
+ * so it never weighs down the camera screen; until it arrives (or if the phone
+ * has no WebGL) the logo stays where it was.
+ */
+function mountWelcome3D(): void {
+  const host = app.querySelector<HTMLElement>("#welcome-3d");
+  if (!host) return;
+  void import("./fx/skeleton3d")
+    .then(({ mountSkeleton3D }) => {
+      if (host.isConnected) mountSkeleton3D(host);
+    })
+    .catch(() => {});
+}
+
+/**
+ * The three of us in the kit. Shown by `playTeamSplash` as the way into the
+ * app: they rise in one after another and breathe gently on a lit floor ring.
+ * Purely decorative: a photo that fails to load drops out instead of showing a
+ * broken image.
  */
 const TEAM_HERO = `<figure class="team-hero" aria-label="The RTP team">
          <span class="team-glow"></span>
@@ -411,10 +426,44 @@ const TEAM_HERO = `<figure class="team-hero" aria-label="The RTP team">
          <figcaption class="team-chip">BUILT BY <b>PLAYERS</b> · FOR <b>PLAYERS</b></figcaption>
        </figure>`;
 
+/**
+ * The team, with the slogan, laid over the screen for a few seconds on the way
+ * in: after the intro's button, and every time a signed-in player opens the
+ * app. The real screen loads underneath meanwhile, so this costs no waiting.
+ * A tap skips it.
+ */
+let splashOpen = false;
+function playTeamSplash(): void {
+  if (splashOpen) return;
+  splashOpen = true;
+  const calm = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const el = document.createElement("div");
+  el.className = "team-splash";
+  el.setAttribute("aria-hidden", "true");
+  el.innerHTML = `<div class="welcome team-splash-inner">
+       ${TEAM_HERO}
+       <h2>Smarter Rehab<br><em>Stronger Comeback</em></h2>
+     </div>`;
+  document.body.appendChild(el);
+  const close = (): void => {
+    if (el.classList.contains("out")) return;
+    el.classList.add("out");
+    window.setTimeout(() => {
+      el.remove();
+      splashOpen = false;
+    }, calm ? 0 : 450);
+  };
+  el.addEventListener("click", close);
+  window.setTimeout(close, calm ? 1800 : 3600);
+}
+
 function firstRunScreen(): void {
   shell(
     `<div class="welcome">
-       ${TEAM_HERO}
+       <div class="welcome-art" id="welcome-3d" aria-hidden="true">
+         <span class="glow"></span>
+         ${BRAND_MARK}
+       </div>
        <h2>Smarter Rehab<br><em>Stronger Comeback</em></h2>
        <p class="sub">Rehab plans built around your position and your injury —
          with your camera checking every rep.</p>
@@ -428,15 +477,20 @@ function firstRunScreen(): void {
     { brand: true },
   );
   on("#demo", () => {
+    playTeamSplash();
     api.useStandalone(true);
     void boot();
   });
+  mountWelcome3D();
 }
 
 function welcomeScreen(): void {
   shell(
     `<div class="welcome">
-       ${TEAM_HERO}
+       <div class="welcome-art" id="welcome-3d" aria-hidden="true">
+         <span class="glow"></span>
+         ${BRAND_MARK}
+       </div>
        <h2>Smarter Rehab<br><em>Stronger Comeback</em></h2>
        <p class="sub">Rehab plans built around your position and your injury —
          with your camera checking every rep.</p>
@@ -447,8 +501,15 @@ function welcomeScreen(): void {
      </div>`,
     { brand: true },
   );
-  on("#start", () => signInScreen("", true));
-  on("#signin", () => signInScreen());
+  on("#start", () => {
+    playTeamSplash();
+    signInScreen("", true);
+  });
+  on("#signin", () => {
+    playTeamSplash();
+    signInScreen();
+  });
+  mountWelcome3D();
 }
 
 /** Escape a value going into an attribute. Only the server address needs it. */
@@ -2207,10 +2268,11 @@ async function progressScreen(): Promise<void> {
 
 // -------------------------------------------------------------------- test
 /**
- * Two tabs. "Phase tests" are the ones the programme sets -- they decide when
- * the player moves on, so every one of them says how to pass it and has a
- * button that does it. "Your targets" are the ones the player wrote. Both
- * count; they are kept apart so a player can always tell which is which.
+ * Two tabs, and two ways out of the phase: pass every "Phase test" (the ones
+ * the programme sets, each saying how to pass it with a button that does it),
+ * or pass every one of "Your targets" (the ones the player wrote). Either is
+ * enough -- the player does not have to do both. The time in phase applies
+ * whichever they choose, so it sits in the panel above the tabs.
  */
 type TestTab = "phase" | "mine";
 let testTab: TestTab = "phase";
@@ -2432,27 +2494,61 @@ function testScreen(tab?: TestTab): void {
     ),
   );
   const isOwn = (c: api.CriterionResult) => yours.has(c.key) && !libraryKeys.has(c.key);
-  const phaseTests = gate.criteria.filter((c) => !isOwn(c));
+  const CLOCK = "min_days_in_phase";
+  const clock = gate.criteria.find((c) => c.key === CLOCK);
+  const phaseTests = gate.criteria.filter((c) => !isOwn(c) && c.key !== CLOCK);
   const mine = gate.criteria.filter(isOwn);
-  const required = gate.criteria.filter((c) => c.required);
-  const passedCount = required.filter((c) => c.status === "pass").length;
   const nextName = gate.next_phase ? phaseName(gate.next_phase) : null;
 
-  // The one button this whole tab exists for. Lit only when every required
-  // test -- the programme's and the player's -- is passed; the server re-checks.
+  // Either set clears the phase: every phase test, or every target of their own.
+  // Counted here from the rows, so a gate recorded before the server reported
+  // `routes` reads the same way.
+  const tally = (list: api.CriterionResult[]) => {
+    const req = list.filter((c) => c.required);
+    const passed = req.filter((c) => c.status === "pass").length;
+    return { total: req.length, passed, done: passed === req.length };
+  };
+  const oursT = tally(phaseTests);
+  const yoursT = tally(mine);
+  const hasOwn = yoursT.total > 0;
+  const pct = (t: { total: number; passed: number }) =>
+    Math.round((t.passed / Math.max(1, t.total)) * 100);
+  const best = Math.max(pct(oursT), hasOwn ? pct(yoursT) : 0);
+  const clockLeft = clock && clock.status !== "pass";
+  const setDone = oursT.done || (hasOwn && yoursT.done);
+
+  // The one button this whole tab exists for. Lit when either set is passed and
+  // the time in phase is up; the server re-checks.
   const advanceHtml = `<section class="panel advance${gate.passed ? " ready" : ""}">
       <div class="row-between">
         <div>
-          <span class="label">${passedCount} of ${required.length} required tests passed</span>
+          <span class="label">${
+            hasOwn
+              ? `Phase tests ${oursT.passed}/${oursT.total} · Your targets ${yoursT.passed}/${yoursT.total}`
+              : `${oursT.passed} of ${oursT.total} phase tests passed`
+          }</span>
           <div class="headline">${
             gate.passed
               ? nextName
                 ? `Ready for ${nextName}`
                 : "Ready to finish your rehab"
-              : "Pass every required test to move on"
+              : setDone && clockLeft
+                ? "Tests done — just the time in this phase left"
+                : hasOwn
+                  ? "Pass all the phase tests or all your targets"
+                  : "Pass every phase test to move on"
           }</div>
+          <p class="caption either">${
+            hasOwn
+              ? "You only need one of the two sets."
+              : "Or set your own targets and pass those instead."
+          }${
+            clockLeft && clock
+              ? ` Either way, at least ${round(clock.target ?? 0)} days in this phase (${round(clock.observed ?? 0)} so far).`
+              : ""
+          }</p>
         </div>
-        ${progressRing(Math.round((passedCount / Math.max(1, required.length)) * 100), "passed", "sm")}
+        ${progressRing(best, "passed", "sm")}
       </div>
       <button class="primary block" id="advance" ${gate.passed ? "" : "disabled"}>${
         nextName ? `Advance to ${nextName}` : "Finish rehab"
@@ -2487,8 +2583,8 @@ function testScreen(tab?: TestTab): void {
                return row(c, how);
              })
              .join("")}</ul>`
-         : `<p class="sub tiny">Nothing yet. Pick an exercise and a number — it counts
-              toward this phase like the phase tests do.</p>`
+         : `<p class="sub tiny">Nothing yet. Pick an exercise and a number. Pass
+              every target you set and you can move on without the phase tests.</p>`
      }
      <button class="addbtn" id="add-test">
        <span class="plus" aria-hidden="true">+</span>
@@ -2510,11 +2606,11 @@ function testScreen(tab?: TestTab): void {
      ${advanceHtml}
      <div class="phasetabs two" role="tablist">
        <button class="phasetab${testTab === "phase" ? " on" : ""}" data-testtab="phase"
-         role="tab" aria-selected="${testTab === "phase"}">Phase tests</button>
+         role="tab" aria-selected="${testTab === "phase"}">Phase tests${oursT.done ? " ✓" : ""}</button>
        <button class="phasetab${testTab === "mine" ? " on" : ""}" data-testtab="mine"
          role="tab" aria-selected="${testTab === "mine"}">Your targets${
            mine.length ? ` (${mine.length})` : ""
-         }</button>
+         }${hasOwn && yoursT.done ? " ✓" : ""}</button>
      </div>
      ${testTab === "phase" ? phaseHtml || `<p class="sub tiny">This phase has no tests.</p>` : mineHtml}`,
     { tab: "test", title: "Your tests", back: () => homeScreen() },
@@ -3384,4 +3480,7 @@ async function boot(): Promise<void> {
   }
 }
 
+// Opening the app signed in: the team first, the home screen loading under it.
+// Not signed in, the skeleton intro is the welcome and the team follows its button.
+if (api.isSignedIn()) playTeamSplash();
 void boot();

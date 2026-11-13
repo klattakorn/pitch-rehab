@@ -387,23 +387,29 @@ describe("moving to the next phase", () => {
   const advance = (id: number) =>
     standalone.handle(`/injuries/${id}/advance`, { method: "POST", body: "{}" });
 
-  /** Make the recorded gate say it passed, and put it back afterwards. */
-  const withPassingGate = (id: number, run: () => void) => {
+  /** Make the recorded gate say it passed (or not), and put it back afterwards. */
+  const withGate = (id: number, passed: boolean, run: () => void) => {
     const gate = (snapshot as any).responses[`/injuries/${id}/exit-criteria`];
     const was = gate.passed;
-    gate.passed = true;
+    gate.passed = passed;
     try {
       run();
     } finally {
       gate.passed = was;
     }
   };
+  const withPassingGate = (id: number, run: () => void) => withGate(id, true, run);
 
   it("is refused while the gate has not been cleared", () => {
-    const reply = advance(episodeId());
-    expect(reply.ok).toBe(false);
-    expect(reply.ok === false && reply.status).toBe(503);
-    expect(reply.ok === false && reply.detail).toMatch(/exit criteria|laptop/i);
+    // Set here rather than read off the recording: the demo player may well
+    // have cleared their phase by the time the snapshot was taken.
+    const id = episodeId();
+    withGate(id, false, () => {
+      const reply = advance(id);
+      expect(reply.ok).toBe(false);
+      expect(reply.ok === false && reply.status).toBe(503);
+      expect(reply.ok === false && reply.detail).toMatch(/exit criteria|laptop/i);
+    });
   });
 
   it("goes through when the recorded gate says every test was passed", () => {

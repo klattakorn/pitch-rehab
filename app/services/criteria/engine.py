@@ -90,6 +90,16 @@ class PhaseGateResult:
     criteria: list[CriterionEvaluation] = field(default_factory=list)
     blocking: list[str] = field(default_factory=list)
     evaluated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    #: Which set of tests the counts above describe: "ours" (the programme's
+    #: phase tests) or "yours" (the targets the player wrote). Passing either
+    #: set -- plus the time in phase -- clears the gate. See `evaluate_phase`.
+    route: str = "ours"
+    #: Both sets, side by side: {"ours": {...}, "yours": {...}}, each with
+    #: total, passed, progress and done. `yours.total` is 0 when the player has
+    #: written no required target of their own.
+    routes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: Keys of the player's own targets (new keys, not tweaks of a phase test).
+    own_keys: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -103,6 +113,9 @@ class PhaseGateResult:
             "criteria": [c.to_dict() for c in self.criteria],
             "blocking": self.blocking,
             "evaluated_at": self.evaluated_at.isoformat(),
+            "route": self.route,
+            "routes": self.routes,
+            "own_keys": self.own_keys,
         }
 
 
@@ -450,24 +463,53 @@ def evaluate_phase(
     )
     signoffs: dict[str | None, ClinicianSignoff] = {s.criterion_key: s for s in signoff_rows}
 
-    evaluations = [
-        evaluate_criterion(resolver, c, signoffs)
-        for c in merge_criteria(db, episode, phase_key, phase.exit_criteria)
+    merged = merge_criteria(db, episode, phase_key, phase.exit_criteria)
+    evaluations = [evaluate_criterion(resolver, c, signoffs) for c in merged]
+    # The player's own targets: ones they wrote under a key the programme does
+    # not use here. A tweak of a phase test ("the hop test, but 95%") keeps the
+    # library's key and stays one of the phase tests.
+    library_keys = {c.key for c in phase.exit_criteria}
+    own_keys = [
+        c.key for c in merged if isinstance(c, EpisodeCriterion) and c.key not in library_keys
     ]
     # A minimum time in phase is a tissue-healing constraint, not a metric --
-    # it holds regardless of how good the numbers look. It used to be appended
-    # straight to `blocking`, which meant a player who had cleared every test
-    # but was three days early saw a full ring, every row ticked, and a footer
-    # telling them to pass tests they had already passed. The reason was in the
-    # payload and on no screen.
-    #
-    # It is a required condition for leaving the phase, so it belongs with the
-    # other required conditions, where anything rendering the gate will find it.
+    # it holds regardless of how good the numbers look, and whichever set of
+    # tests the player goes for. It sits with the other required conditions so
+    # anything rendering the gate finds it.
     time_in_phase = _time_in_phase(phase, resolver)
     if time_in_phase is not None:
         evaluations.append(time_in_phase)
 
-    required = [e for e in evaluations if e.required]
+    # Two ways out of a phase, and the player needs only one: every phase test
+    # the programme sets ("ours"), or every target they wrote themselves
+    # ("yours"). The time in phase counts toward both. A player with no
+    # required target of their own has only the first.
+    own = set(own_keys)
+    clock = [e for e in evaluations if e.key == TIME_IN_PHASE_KEY]
+    ours = [e for e in evaluations if e.required and e.key not in own and e.key != TIME_IN_PHASE_KEY]
+    yours = [e for e in evaluations if e.required and e.key in own]
+
+    def summary(items: list[CriterionEvaluation]) -> dict[str, Any]:
+        done = all(e.passed for e in items)
+        return {
+            "total": len(items),
+            "passed": sum(e.passed for e in items),
+            "progress": round(sum(e.progress for e in items) / len(items), 3) if items else (1.0 if done else 0.0),
+            "done": done,
+        }
+
+    routes = {"ours": summary(ours), "yours": summary(yours) if yours else {"total": 0, "passed": 0, "progress": 0.0, "done": False}}
+    ours_done = routes["ours"]["done"]
+    yours_done = bool(yours) and routes["yours"]["done"]
+    # The counts describe the set the player is closest to clearing.
+    if yours_done and not ours_done:
+        route = "yours"
+    elif ours_done or not yours:
+        route = "ours"
+    else:
+        route = "yours" if routes["yours"]["progress"] > routes["ours"]["progress"] else "ours"
+
+    required = (yours if route == "yours" else ours) + clock
     required_passed = [e for e in required if e.passed]
     blocking = [e.key for e in required if not e.passed]
 
@@ -486,4 +528,7 @@ def evaluate_phase(
         next_phase=next_phase,
         criteria=evaluations,
         blocking=blocking,
+        route=route,
+        routes=routes,
+        own_keys=own_keys,
     )

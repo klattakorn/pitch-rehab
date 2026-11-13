@@ -106,6 +106,10 @@ class PhaseGateOut(BaseModel):
     criteria: list[CriterionEvaluationOut]
     blocking: list[str]
     evaluated_at: datetime
+    #: "ours" or "yours": which set the counts describe. Either set clears the gate.
+    route: str = "ours"
+    routes: dict[str, dict[str, Any]] = {}
+    own_keys: list[str] = []
 
 
 class AdvanceOut(BaseModel):
