@@ -1811,12 +1811,17 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
             reptrack.style.width = `${Math.min(100, (100 * held) / Math.max(1, target))}%`;
             if (held > 0) pulse(countEl, "tick-up");
           }
-        } else if (result.repCount !== shownReps) {
+        } else if (
+          (rule.detection?.min_top_hold_s ? result.validRepCount : result.repCount) !== shownReps
+        ) {
           // The big number is reps *done*, so it moves every time the player
           // does one. It used to show valid reps only, which meant a rep the
           // camera had measured and then refused looked exactly like a rep it
           // had never seen -- you move, and nothing on screen moves back.
-          shownReps = result.repCount;
+          // Except a hold-at-top rep (glute bridge): there the hold IS the rep,
+          // so lowering early must not move the counter. "Not counted" and the
+          // "N did not count" line say what happened instead.
+          shownReps = rule.detection?.min_top_hold_s ? result.validRepCount : result.repCount;
           countEl.textContent = String(shownReps);
           // The bar fills with the reps that actually count toward the target,
           // because that is what the set is finally scored on. When the two
@@ -1826,9 +1831,12 @@ async function cameraScreen(rx: Prescription, facing: Facing = "user"): Promise<
           // The rep landing is the moment the camera proves itself. Give it one.
           pulse(countEl, "tick-up");
 
+        }
+        if (!isHold) {
           // Only say this when it is true. A count that says "3" while the set
-          // is scoring 1 is worse than either number on its own.
-          const lost = shownReps - counted;
+          // is scoring 1 is worse than either number on its own. Outside the
+          // block above: a refused glute bridge leaves the counter where it is.
+          const lost = result.repCount - result.validRepCount;
           refusedEl.hidden = lost === 0;
           refusedEl.textContent =
             lost === 1 ? "1 did not count" : `${lost} did not count`;
